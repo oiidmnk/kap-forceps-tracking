@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+
+# Build output (produced by Vite / Docker image build)
+microforceps-viz/dist/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.code-workspace
+.claude
+
+# Local AI / tool config
+.claude/settings.local.json
+
+# Archives (source drops — not part of the repo)
+*.zip
+
+# Logs & temp
+*.log
+npm-debug.log*
+.cache/
+tmp/
+temp/

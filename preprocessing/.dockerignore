@@ -1,0 +1,6 @@
+__pycache__
+*.pyc
+.git
+venv
+ws_client_test.py
+viewer.html

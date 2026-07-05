@@ -1,0 +1,15 @@
+{
+  "light_rot_up": 0.2,
+  "light_rot_clock": 0.4,
+  "light_depth_mm": 10.8,
+  "forceps_rot_up": 0.3,
+  "forceps_rot_clock": -1.2,
+  "left_tip_px": [133.4, 112.9],
+  "left_shadow_px": [209.2, 45.1],
+  "right_tip_px": [157.2, 99.5],
+  "right_shadow_px": [227.7, 44.9],
+  "eye_center_px": [120.0, 120.0],
+  "eye_radius_px": 138.0,
+  "eye_radius_mm": 12.0,
+  "jaw_length_mm": 3.6
+}

@@ -1,0 +1,19 @@
+services:
+  stream:
+    build: ./preprocessing
+    ports:
+      - "8765:8765"
+    volumes:
+      - ./preprocessing/input_example.json:/app/input_example.json:ro
+    restart: unless-stopped
+
+  viz:
+    build:
+      context: ./microforceps-viz
+      args:
+        VITE_DEFAULT_SOURCE: live
+    ports:
+      - "8080:80"
+    depends_on:
+      - stream
+    restart: unless-stopped

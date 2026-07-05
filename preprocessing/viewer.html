@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tool Positions Stream</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      margin: 0;
+      padding: 1.5rem;
+      background: #0f1117;
+      color: #e6edf3;
+    }
+    h1 { font-size: 1.1rem; font-weight: 600; margin: 0 0 1rem; }
+    .stats {
+      display: flex;
+      gap: 1.5rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+    .stat { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 0.75rem 1rem; }
+    .stat label { display: block; font-size: 0.75rem; color: #8b949e; margin-bottom: 0.25rem; }
+    .stat span { font-size: 1.25rem; font-weight: 600; }
+    .connected { color: #3fb950; }
+    .disconnected { color: #f85149; }
+    .error-box {
+      background: #2d1214;
+      border: 1px solid #f85149;
+      color: #ffa198;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+      display: none;
+    }
+    table { width: 100%; border-collapse: collapse; background: #161b22; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; }
+    th, td { text-align: left; padding: 0.6rem 0.9rem; border-bottom: 1px solid #21262d; }
+    th { background: #21262d; color: #8b949e; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    tr:last-child td { border-bottom: none; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+  <h1>Tool Positions Stream</h1>
+
+  <div class="stats">
+    <div class="stat">
+      <label>Status</label>
+      <span id="status" class="disconnected">disconnected</span>
+    </div>
+    <div class="stat">
+      <label>Receive FPS</label>
+      <span id="fps">—</span>
+    </div>
+    <div class="stat">
+      <label>Frame</label>
+      <span id="frame">—</span>
+    </div>
+  </div>
+
+  <div id="error" class="error-box"></div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Point</th>
+        <th class="num">x</th>
+        <th class="num">y</th>
+        <th class="num">z</th>
+      </tr>
+    </thead>
+    <tbody id="positions"></tbody>
+  </table>
+
+  <script>
+    const statusEl = document.getElementById("status");
+    const fpsEl = document.getElementById("fps");
+    const frameEl = document.getElementById("frame");
+    const errorEl = document.getElementById("error");
+    const positionsEl = document.getElementById("positions");
+
+    const wsUrl = `ws://${location.hostname}:8765`;
+    let framesSinceUpdate = 0;
+    let lastFpsTick = performance.now();
+
+    function setStatus(connected) {
+      statusEl.textContent = connected ? "connected" : "disconnected";
+      statusEl.className = connected ? "connected" : "disconnected";
+    }
+
+    function updateFps() {
+      const now = performance.now();
+      const elapsed = (now - lastFpsTick) / 1000;
+      if (elapsed >= 0.5) {
+        fpsEl.textContent = (framesSinceUpdate / elapsed).toFixed(1);
+        framesSinceUpdate = 0;
+        lastFpsTick = now;
+      }
+      requestAnimationFrame(updateFps);
+    }
+
+    function renderPositions(positions) {
+      positionsEl.innerHTML = "";
+      if (!positions) return;
+
+      for (const [name, coords] of Object.entries(positions)) {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${name}</td>
+          <td class="num">${coords[0].toFixed(4)}</td>
+          <td class="num">${coords[1].toFixed(4)}</td>
+          <td class="num">${coords[2].toFixed(4)}</td>
+        `;
+        positionsEl.appendChild(row);
+      }
+    }
+
+    function connect() {
+      const ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => setStatus(true);
+
+      ws.onclose = () => {
+        setStatus(false);
+        setTimeout(connect, 1000);
+      };
+
+      ws.onerror = () => ws.close();
+
+      ws.onmessage = (event) => {
+        framesSinceUpdate++;
+        const msg = JSON.parse(event.data);
+        frameEl.textContent = msg.frame;
+
+        if (msg.error) {
+          errorEl.style.display = "block";
+          errorEl.textContent = msg.error;
+          renderPositions(null);
+        } else {
+          errorEl.style.display = "none";
+          renderPositions(msg.positions);
+        }
+      };
+    }
+
+    requestAnimationFrame(updateFps);
+    connect();
+  </script>
+</body>
+</html>
