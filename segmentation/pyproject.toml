@@ -1,0 +1,28 @@
+[project]
+name = "auge-segment"
+version = "0.1.0"
+description = "YOLO segmentation training pipeline for forceps tips and shadows in eyeball imagery"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "ultralytics>=8.3.0",
+    "opencv-python-headless>=4.8.0",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+auge-train = "scripts.train:main"
+auge-validate = "scripts.validate:main"
+auge-predict = "scripts.predict:main"
+auge-benchmark = "scripts.benchmark:main"
+auge-preview-preprocessing = "scripts.preview_preprocessing:main"
+auge-prepare-preprocessing = "scripts.prepare_preprocessed_dataset:main"
+auge-check-labels = "scripts.check_labels:main"
+auge-split-dataset = "scripts.split_dataset:main"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["scripts"]

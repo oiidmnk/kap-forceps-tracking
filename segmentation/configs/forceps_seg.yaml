@@ -1,0 +1,11 @@
+# Resolve from this config file so the dataset works after syncing the repo.
+path: ../data
+train: images/train
+val: images/val
+
+nc: 4
+names:
+  0: tip_left
+  1: tip_right
+  2: shadow_left
+  3: shadow_right

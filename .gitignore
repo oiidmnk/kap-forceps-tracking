@@ -40,3 +40,12 @@ npm-debug.log*
 .cache/
 tmp/
 temp/
+
+# Segmentation training artifacts
+segmentation/.venv/
+segmentation/*.egg-info/
+segmentation/data/
+segmentation/data_preprocessed/
+segmentation/configs/generated/
+segmentation/runs/
+segmentation/*.pt

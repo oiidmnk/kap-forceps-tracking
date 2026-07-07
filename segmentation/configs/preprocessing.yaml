@@ -1,0 +1,102 @@
+version: 1
+
+presets:
+  original:
+    roi: {mode: none}
+    clahe: {enabled: false}
+    gamma: 1.0
+    bilateral: {enabled: false}
+    highlight_compression: {enabled: false}
+    sharpen: {enabled: false}
+
+  roi:
+    roi:
+      mode: mask
+      center: [0.5, 0.5]
+      radius: 0.48
+      fill: [0, 0, 0]
+    clahe: {enabled: false}
+    gamma: 1.0
+    bilateral: {enabled: false}
+    highlight_compression: {enabled: false}
+    sharpen: {enabled: false}
+
+  clahe:
+    roi: {mode: none}
+    clahe:
+      enabled: true
+      clip_limit: 2.0
+      tile_grid: [8, 8]
+    gamma: 1.0
+    bilateral: {enabled: false}
+    highlight_compression: {enabled: false}
+    sharpen: {enabled: false}
+
+  roi_clahe:
+    roi:
+      mode: mask
+      center: [0.5, 0.5]
+      radius: 0.48
+      fill: [0, 0, 0]
+    clahe:
+      enabled: true
+      clip_limit: 2.0
+      tile_grid: [8, 8]
+    gamma: 1.0
+    bilateral: {enabled: false}
+    highlight_compression: {enabled: false}
+    sharpen: {enabled: false}
+
+  roi_crop_clahe:
+    roi:
+      mode: crop
+      center: [0.5, 0.5]
+      radius: 0.48
+    clahe:
+      enabled: true
+      clip_limit: 2.0
+      tile_grid: [8, 8]
+    gamma: 1.0
+    bilateral: {enabled: false}
+    highlight_compression: {enabled: false}
+    sharpen: {enabled: false}
+
+  roi_clahe_gamma:
+    roi:
+      mode: mask
+      center: [0.5, 0.5]
+      radius: 0.48
+      fill: [0, 0, 0]
+    clahe:
+      enabled: true
+      clip_limit: 2.0
+      tile_grid: [8, 8]
+    gamma: 0.9
+    bilateral: {enabled: false}
+    highlight_compression: {enabled: false}
+    sharpen: {enabled: false}
+
+  full:
+    roi:
+      mode: mask
+      center: [0.5, 0.5]
+      radius: 0.48
+      fill: [0, 0, 0]
+    clahe:
+      enabled: true
+      clip_limit: 2.0
+      tile_grid: [8, 8]
+    gamma: 0.9
+    bilateral:
+      enabled: true
+      diameter: 5
+      sigma_color: 30
+      sigma_space: 30
+    highlight_compression:
+      enabled: true
+      threshold: 235
+      strength: 0.5
+    sharpen:
+      enabled: true
+      amount: 0.3
+      sigma: 1.0

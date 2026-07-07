@@ -1,0 +1,18 @@
+# YOLO segmentation label format for frame_001.jpg
+# One line per instance: <class_id> <x1> <y1> <x2> <y2> ... <xn> <yn>
+# Coordinates are normalized to [0, 1] relative to image width/height.
+#
+# Class IDs:
+#   0 = tip_left
+#   1 = tip_right
+#   2 = shadow_left
+#   3 = shadow_right
+#
+# Example: left tip as a small quadrilateral near the center-left of the frame
+0 0.42 0.51 0.44 0.49 0.46 0.51 0.44 0.53
+# Example: right tip
+1 0.58 0.51 0.60 0.49 0.62 0.51 0.60 0.53
+# Example: left shadow point (small blob below left tip)
+2 0.43 0.55 0.44 0.54 0.45 0.55 0.44 0.56
+# Example: right shadow point
+3 0.59 0.55 0.60 0.54 0.61 0.55 0.60 0.56
