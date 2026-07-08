@@ -7,6 +7,7 @@ export default function HUD({ frame, status, source, onToggleSource, toggles, on
     { key: 'showShadow', label: 'Shadows' },
     { key: 'showBeam', label: 'Light beam' },
     { key: 'showRetina', label: 'Retina' },
+    { key: 'showReticle', label: 'Reticle' },
   ]
   const tips = frame
     ? [
@@ -58,10 +59,17 @@ export default function HUD({ frame, status, source, onToggleSource, toggles, on
       <div style={styles.panel}>
         <div style={styles.panelTitle}>DISTANCE TO RETINA</div>
         {minStatus ? (
-          <div style={{ ...styles.big, color: minStatus.color }}>
-            {minDist.toFixed(2)}
-            <span style={styles.unit}> mm</span>
-          </div>
+          <>
+            <div style={{ ...styles.big, color: minStatus.color }}>
+              {minDist.toFixed(2)}
+              <span style={styles.unit}> mm</span>
+            </div>
+            {/* Redundant, non-hue safety cue (symbol + word) for CVD legibility */}
+            <div style={{ ...styles.badge, color: minStatus.color, borderColor: minStatus.color }}>
+              <span aria-hidden>{minStatus.symbol}</span>
+              {minStatus.label}
+            </div>
+          </>
         ) : (
           <div style={styles.big}>—</div>
         )}
@@ -72,6 +80,7 @@ export default function HUD({ frame, status, source, onToggleSource, toggles, on
               <div key={t.name} style={styles.tipRow}>
                 <span style={styles.tipName}>Tip {t.name}</span>
                 <span style={{ ...styles.tipVal, color: s.color }}>
+                  <span aria-hidden style={{ marginRight: 5 }}>{s.symbol}</span>
                   {t.dist.toFixed(2)} mm
                 </span>
               </div>
@@ -86,8 +95,6 @@ export default function HUD({ frame, status, source, onToggleSource, toggles, on
           </div>
         )}
       </div>
-
-      <div style={styles.hint}>drag to orbit · scroll to zoom</div>
     </div>
   )
 }
@@ -174,6 +181,18 @@ const styles = {
   panelTitle: { font: '600 11px sans-serif', letterSpacing: '0.14em', color: '#8fa3ba' },
   big: { font: '700 44px sans-serif', lineHeight: 1.1, marginTop: 4 },
   unit: { fontSize: 18, fontWeight: 500, opacity: 0.7 },
+  badge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    padding: '3px 10px',
+    borderRadius: 6,
+    border: '1px solid',
+    font: '700 12px sans-serif',
+    letterSpacing: '0.12em',
+    background: 'rgba(255,255,255,0.04)',
+  },
   tips: { marginTop: 12, display: 'flex', flexDirection: 'column', gap: 4 },
   tipRow: { display: 'flex', justifyContent: 'space-between', font: '500 13px sans-serif' },
   tipName: { color: '#8fa3ba' },
@@ -188,5 +207,4 @@ const styles = {
     flexDirection: 'column',
     gap: 2,
   },
-  hint: { font: '400 11px sans-serif', color: '#5a6b80', alignSelf: 'center' },
 }

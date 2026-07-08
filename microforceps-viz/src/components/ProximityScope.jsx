@@ -58,8 +58,8 @@ export default function ProximityScope({ frame }) {
       onPointerUp={onPointerUp}
       style={{
         position: 'absolute',
-        left: 20,
-        bottom: 20,
+        right: 20,
+        top: 60,
         width: SCOPE_SIZE_PX,
         height: SCOPE_SIZE_PX,
         borderRadius: 12,

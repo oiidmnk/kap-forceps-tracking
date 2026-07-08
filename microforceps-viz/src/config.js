@@ -38,3 +38,15 @@ export const JAW_LENGTH_MM = 1.5
 // legible even when the real forceps is nearly closed. 1 = true opening.
 // Tuned with JAW_LENGTH_MM for a realistic ~15°–37° full opening angle.
 export const VIEW_JAW_SPREAD = 2.4
+
+// --- Clinical view presets --------------------------------------------------
+// Named camera framings for the main overview (+Y up; instruments enter +Y;
+// retina = -Y hemisphere). All look at the globe center, and all keep a common
+// world up (+Y) so preset-to-preset transitions glide without a snap-roll (see
+// CameraRig). Positions are in mm; the surgeon view sits ~10° off straight-down,
+// which needs no gimbal handling. Distances are in mm.
+export const VIEW_PRESETS = {
+  overview: { pos: [EYE_RADIUS_MM * 1.4, EYE_RADIUS_MM * 0.9, EYE_RADIUS_MM * 3.4] },
+  surgeon: { pos: [0, EYE_RADIUS_MM * 3.4, EYE_RADIUS_MM * 0.6] },
+  sagittal: { pos: [EYE_RADIUS_MM * 3.8, EYE_RADIUS_MM * 0.3, 0] },
+}

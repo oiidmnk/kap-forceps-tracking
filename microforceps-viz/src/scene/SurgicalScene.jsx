@@ -3,6 +3,7 @@ import Trocar from './Trocar.jsx'
 import Forceps from './Forceps.jsx'
 import LightPipe from './LightPipe.jsx'
 import Shadow from './Shadow.jsx'
+import LandingReticle from './LandingReticle.jsx'
 import { EYE_RADIUS_MM } from '../config.js'
 
 // The shared 3D content (lights + eye + forceps + light pipe + shadows), reused
@@ -13,6 +14,7 @@ export default function SurgicalScene({
   showRetina = true,
   showShadow = true,
   showBeam = false,
+  showReticle = true,
 }) {
   return (
     <>
@@ -26,6 +28,7 @@ export default function SurgicalScene({
       <Forceps frame={frame} />
       <LightPipe lightTrocar={frame?.light_trocar} lightTip={frame?.light_tip} showBeam={showBeam} />
       {showShadow && <Shadow frame={frame} />}
+      {showReticle && <LandingReticle frame={frame} />}
     </>
   )
 }
