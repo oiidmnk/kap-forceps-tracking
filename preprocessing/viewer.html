@@ -14,6 +14,7 @@
       color: #e6edf3;
     }
     h1 { font-size: 1.1rem; font-weight: 600; margin: 0 0 1rem; }
+    h2 { font-size: 0.75rem; font-weight: 500; color: #8b949e; margin: 0 0 0.5rem; text-transform: uppercase; letter-spacing: 0.04em; }
     .stats {
       display: flex;
       gap: 1.5rem;
@@ -33,6 +34,43 @@
       border-radius: 8px;
       margin-bottom: 1rem;
       display: none;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+    .panel {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 0.75rem;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 4px;
+      background: #0d1117;
+    }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem 1.25rem;
+      margin-bottom: 1rem;
+      font-size: 0.75rem;
+      color: #8b949e;
+    }
+    .legend-item { display: flex; align-items: center; gap: 0.4rem; }
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
     }
     table { width: 100%; border-collapse: collapse; background: #161b22; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; }
     th, td { text-align: left; padding: 0.6rem 0.9rem; border-bottom: 1px solid #21262d; }
@@ -61,6 +99,19 @@
 
   <div id="error" class="error-box"></div>
 
+  <div class="legend" id="legend"></div>
+
+  <div class="layout">
+    <div class="panel">
+      <h2>Top view — x / y (microscope)</h2>
+      <canvas id="canvasTop" width="420" height="420"></canvas>
+    </div>
+    <div class="panel">
+      <h2>Side view — x / z (depth)</h2>
+      <canvas id="canvasSide" width="420" height="420"></canvas>
+    </div>
+  </div>
+
   <table>
     <thead>
       <tr>
@@ -79,10 +130,150 @@
     const frameEl = document.getElementById("frame");
     const errorEl = document.getElementById("error");
     const positionsEl = document.getElementById("positions");
+    const legendEl = document.getElementById("legend");
+    const canvasTop = document.getElementById("canvasTop");
+    const canvasSide = document.getElementById("canvasSide");
+    const ctxTop = canvasTop.getContext("2d");
+    const ctxSide = canvasSide.getContext("2d");
 
     const wsUrl = `ws://${location.hostname}:8765`;
     let framesSinceUpdate = 0;
     let lastFpsTick = performance.now();
+    let lastPositions = null;
+
+    const POINTS = {
+      trocar_light:       { color: "#f0c040", label: "Light trocar" },
+      tip_light:          { color: "#ffe066", label: "Light tip" },
+      trocar_forceps:     { color: "#f0883e", label: "Forceps trocar" },
+      left_tip_forceps:   { color: "#58a6ff", label: "Left tip" },
+      right_tip_forceps:  { color: "#bc8cff", label: "Right tip" },
+      jaw_meet_forceps:   { color: "#3fb950", label: "Jaw meet" },
+    };
+
+    const SEGMENTS = [
+      ["trocar_light", "tip_light", "#f0c040", 2],
+      ["trocar_forceps", "jaw_meet_forceps", "#f0883e", 2],
+      ["jaw_meet_forceps", "left_tip_forceps", "#3fb950", 1.5],
+      ["jaw_meet_forceps", "right_tip_forceps", "#3fb950", 1.5],
+      ["tip_light", "left_tip_forceps", "#ffe06655", 1],
+      ["tip_light", "right_tip_forceps", "#ffe06655", 1],
+    ];
+
+    const SCALE = 0.38;
+    const PAD = 36;
+
+    function buildLegend() {
+      legendEl.innerHTML = Object.entries(POINTS).map(([key, { color, label }]) =>
+        `<span class="legend-item"><span class="legend-dot" style="background:${color}"></span>${label}</span>`
+      ).join("");
+    }
+
+    function toCanvas(x, y, w, h) {
+      const cx = w / 2;
+      const cy = h / 2;
+      const r = Math.min(w, h) * SCALE;
+      return [cx + x * r, cy - y * r];
+    }
+
+    function drawGrid(ctx, w, h) {
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = "#0d1117";
+      ctx.fillRect(0, 0, w, h);
+
+      const [cx, cy] = toCanvas(0, 0, w, h);
+      const r = Math.min(w, h) * SCALE;
+
+      ctx.strokeStyle = "#21262d";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(PAD, cy);
+      ctx.lineTo(w - PAD, cy);
+      ctx.moveTo(cx, PAD);
+      ctx.lineTo(cx, h - PAD);
+      ctx.stroke();
+
+      ctx.strokeStyle = "#30363d";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = "#484f58";
+      ctx.beginPath();
+      ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#484f58";
+      ctx.font = "11px monospace";
+      ctx.fillText("eye center", cx + 6, cy - 6);
+    }
+
+    function drawSegment(ctx, a, b, color, width, w, h, project) {
+      const p1 = project(a, w, h);
+      const p2 = project(b, w, h);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      ctx.moveTo(p1[0], p1[1]);
+      ctx.lineTo(p2[0], p2[1]);
+      ctx.stroke();
+    }
+
+    function drawPoint(ctx, name, coords, w, h, project) {
+      const style = POINTS[name];
+      if (!style) return;
+      const [px, py] = project(coords, w, h);
+      const depth = coords[2];
+      const radius = 5 + Math.max(0, (-depth - 0.5) * 2);
+
+      ctx.fillStyle = style.color;
+      ctx.beginPath();
+      ctx.arc(px, py, radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = "#0d1117";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      ctx.fillStyle = "#c9d1d9";
+      ctx.font = "10px monospace";
+      ctx.fillText(style.label, px + radius + 4, py + 3);
+    }
+
+    function projectTop(coords, w, h) {
+      return toCanvas(coords[0], coords[1], w, h);
+    }
+
+    function projectSide(coords, w, h) {
+      return toCanvas(coords[0], -coords[2], w, h);
+    }
+
+    function drawView(ctx, positions, project, axisLabel) {
+      const w = ctx.canvas.width;
+      const h = ctx.canvas.height;
+      drawGrid(ctx, w, h);
+
+      if (!positions) return;
+
+      for (const [a, b, color, width] of SEGMENTS) {
+        if (positions[a] && positions[b]) {
+          drawSegment(ctx, positions[a], positions[b], color, width, w, h, project);
+        }
+      }
+
+      for (const [name, coords] of Object.entries(positions)) {
+        drawPoint(ctx, name, coords, w, h, project);
+      }
+
+      ctx.fillStyle = "#6e7681";
+      ctx.font = "10px monospace";
+      ctx.fillText(axisLabel, PAD, h - PAD + 14);
+    }
+
+    function drawVisualization(positions) {
+      drawView(ctxTop, positions, projectTop, "z = depth (into page)");
+      drawView(ctxSide, positions, projectSide, "y = into page  ·  z↑ camera  z↓ retina");
+    }
 
     function setStatus(connected) {
       statusEl.textContent = connected ? "connected" : "disconnected";
@@ -100,20 +291,35 @@
       requestAnimationFrame(updateFps);
     }
 
-    function renderPositions(positions) {
-      positionsEl.innerHTML = "";
-      if (!positions) return;
-
-      for (const [name, coords] of Object.entries(positions)) {
+    const rowEls = {};
+    function ensureRows() {
+      if (positionsEl.childElementCount > 0) return;
+      for (const name of Object.keys(POINTS)) {
         const row = document.createElement("tr");
         row.innerHTML = `
           <td>${name}</td>
-          <td class="num">${coords[0].toFixed(4)}</td>
-          <td class="num">${coords[1].toFixed(4)}</td>
-          <td class="num">${coords[2].toFixed(4)}</td>
+          <td class="num" data-coord="x">—</td>
+          <td class="num" data-coord="y">—</td>
+          <td class="num" data-coord="z">—</td>
         `;
         positionsEl.appendChild(row);
+        rowEls[name] = row;
       }
+    }
+
+    function renderPositions(positions) {
+      ensureRows();
+      lastPositions = positions;
+
+      for (const name of Object.keys(POINTS)) {
+        const row = rowEls[name];
+        const coords = positions?.[name];
+        row.querySelector('[data-coord="x"]').textContent = coords ? coords[0].toFixed(4) : "—";
+        row.querySelector('[data-coord="y"]').textContent = coords ? coords[1].toFixed(4) : "—";
+        row.querySelector('[data-coord="z"]').textContent = coords ? coords[2].toFixed(4) : "—";
+      }
+
+      drawVisualization(positions);
     }
 
     function connect() {
@@ -144,6 +350,9 @@
       };
     }
 
+    buildLegend();
+    ensureRows();
+    drawVisualization(null);
     requestAnimationFrame(updateFps);
     connect();
   </script>

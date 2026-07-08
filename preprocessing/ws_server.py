@@ -29,7 +29,12 @@ Vec3 = Tuple[float, float, float]
 DEFAULT_INPUT = Path(__file__).with_name("input_example.json")
 
 def load_inputs(path: Path) -> Dict[str, Any]:
-    """Load and validate the input JSON file."""
+    """Load and validate the input JSON file.
+
+    ``light_aim_tilt``/``light_aim_clock`` are optional and default to
+    ``0.0`` (aiming straight at the eye center) so existing input files
+    keep working unchanged.
+    """
     with path.open(encoding="utf-8") as f:
         data = json.load(f)
 
@@ -52,6 +57,9 @@ def load_inputs(path: Path) -> Dict[str, Any]:
     if missing:
         raise ValueError(f"input file missing keys: {', '.join(missing)}")
 
+    data.setdefault("light_aim_tilt", 0.0)
+    data.setdefault("light_aim_clock", 0.0)
+
     return data
 
 
@@ -69,6 +77,8 @@ def compute_from_file(path: Path) -> Dict[str, Any]:
         light_rot_up=float(data["light_rot_up"]),
         light_rot_clock=float(data["light_rot_clock"]),
         light_depth_mm=float(data["light_depth_mm"]),
+        light_aim_tilt=float(data["light_aim_tilt"]),
+        light_aim_clock=float(data["light_aim_clock"]),
         forceps_rot_up=float(data["forceps_rot_up"]),
         forceps_rot_clock=float(data["forceps_rot_clock"]),
         left_tip_px=_as_vec2(data["left_tip_px"]),

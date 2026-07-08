@@ -19,13 +19,25 @@ by a pair of angles:
     - ``rot_clock`` azimuth (radians), measured clockwise as seen in the
                     microscope image, with ``0`` pointing toward +x.
 
-The light source is modeled as entering its trocar and then travelling
-straight toward the eye center by a given depth to reach its tip, which
-acts as a point light source. A depth of 0 leaves the tip at the trocar
-(the eye's surface); a depth of 1 (one eye radius) would put the tip
-exactly at the eye center. The public API takes this depth (and the jaw
-length, below) in millimeters, together with the eye's radius in
-millimeters, and converts them to the normalized frame internally.
+The light source is modeled as entering its trocar and then travelling in
+some aim direction by a given depth to reach its tip, which acts as a
+point light source. By default that aim direction points straight at the
+eye center, but it can be tilted away from that default using two more
+angles, so the light does not have to be aimed exactly at the center:
+
+    - ``aim_tilt``  angle (radians) between the aim direction and the
+                    default "straight at the eye center" direction. ``0``
+                    (the default) reproduces the original fixed behavior.
+    - ``aim_clock`` azimuth (radians) of that tilt around the default aim
+                    direction, with ``0`` tilting toward increasing
+                    ``rot_up`` and positive values sweeping the same way
+                    ``rot_clock`` does.
+
+A depth of 0 leaves the tip at the trocar (the eye's surface); with no
+tilt, a depth of 1 (one eye radius) would put the tip exactly at the eye
+center. The public API takes this depth (and the jaw length, below) in
+millimeters, together with the eye's radius in millimeters, and converts
+them to the normalized frame internally.
 
 The forceps has its own trocar. Its two jaw tips are not directly visible
 in 3D - only their 2D microscope-image positions and the 2D positions of
@@ -117,17 +129,59 @@ def trocar_position(rot_up: float, rot_clock: float) -> Vec3:
     )
 
 
-def light_tip_position(rot_up: float, rot_clock: float, depth: float) -> Vec3:
-    """Tip of the light probe: its trocar position, then toward the eye center.
+def light_aim_direction(
+    rot_up: float, rot_clock: float, aim_tilt: float = 0.0, aim_clock: float = 0.0
+) -> Vec3:
+    """Direction the light points from its trocar, as a unit vector.
 
-    The eye center is the origin, so the trocar (already a unit vector,
-    since it sits on the unit eye sphere) points straight back at the
-    center; travelling ``depth`` toward it from the trocar gives
-    ``trocar * (1 - depth)``.
+    With ``aim_tilt = 0`` (the default) this is simply the direction
+    straight back to the eye center, matching the light's original,
+    fixed behavior. A nonzero ``aim_tilt`` swings the direction away from
+    that default by ``aim_tilt`` radians, with ``aim_clock`` choosing
+    which way it swings (using the same local tangent frame that
+    ``rot_up``/``rot_clock`` use to place the trocar itself), giving full
+    freedom to aim the light anywhere rather than only at the center.
     """
     trocar = trocar_position(rot_up, rot_clock)
-    direction_to_center = _scale3(trocar, -1.0)
-    return _add3(trocar, _scale3(direction_to_center, depth))
+    default_aim = _scale3(trocar, -1.0)
+
+    # Local tangent frame at the trocar: e_up is the direction of
+    # increasing rot_up, e_clock is the direction of increasing
+    # rot_clock. Together with default_aim they form an orthonormal
+    # basis, so tilting default_aim toward them stays a unit vector.
+    e_up = (
+        math.cos(rot_up) * math.cos(rot_clock),
+        math.cos(rot_up) * math.sin(rot_clock),
+        math.sin(rot_up),
+    )
+    e_clock = (-math.sin(rot_clock), math.cos(rot_clock), 0.0)
+
+    swing = _add3(
+        _scale3(e_up, math.cos(aim_clock)), _scale3(e_clock, math.sin(aim_clock))
+    )
+    return _add3(
+        _scale3(default_aim, math.cos(aim_tilt)), _scale3(swing, math.sin(aim_tilt))
+    )
+
+
+def light_tip_position(
+    rot_up: float,
+    rot_clock: float,
+    depth: float,
+    aim_tilt: float = 0.0,
+    aim_clock: float = 0.0,
+) -> Vec3:
+    """Tip of the light probe: its trocar position, then along its aim direction.
+
+    Travelling ``depth`` along the light's aim direction (see
+    ``light_aim_direction``) from the trocar gives the tip position. With
+    the default ``aim_tilt = 0``, this aims straight back at the eye
+    center, so ``depth = 1`` (one eye radius) puts the tip exactly at the
+    center, matching the original fixed behavior.
+    """
+    trocar = trocar_position(rot_up, rot_clock)
+    direction = light_aim_direction(rot_up, rot_clock, aim_tilt, aim_clock)
+    return _add3(trocar, _scale3(direction, depth))
 
 
 def shadow_point_on_retina(
@@ -215,6 +269,8 @@ def compute_tool_positions(
     eye_radius_px: float,
     eye_radius_mm: float,
     jaw_length_mm: float,
+    light_aim_tilt: float = 0.0,
+    light_aim_clock: float = 0.0,
 ) -> Dict[str, Vec3]:
     """Reconstruct all tool positions in the normalized eye frame.
 
@@ -224,7 +280,11 @@ def compute_tool_positions(
         Orientation (radians) of the light trocar.
     light_depth_mm:
         How far the light is inserted past its trocar, in millimeters,
-        measured straight toward the eye center from the trocar.
+        measured along its aim direction from the trocar.
+    light_aim_tilt, light_aim_clock:
+        Optional angles (radians) tilting the light's aim direction away
+        from the default of pointing straight at the eye center. Both
+        default to ``0``, which reproduces the original fixed behavior.
     forceps_rot_up, forceps_rot_clock:
         Orientation (radians) of the forceps trocar.
     left_tip_px, right_tip_px:
@@ -253,7 +313,9 @@ def compute_tool_positions(
     jaw_length = jaw_length_mm / eye_radius_mm
 
     trocar_light = trocar_position(light_rot_up, light_rot_clock)
-    tip_light = light_tip_position(light_rot_up, light_rot_clock, light_depth)
+    tip_light = light_tip_position(
+        light_rot_up, light_rot_clock, light_depth, light_aim_tilt, light_aim_clock
+    )
 
     trocar_forceps = trocar_position(forceps_rot_up, forceps_rot_clock)
 
@@ -330,6 +392,18 @@ if __name__ == "__main__":
     assert math.isclose(_norm3(tip_at_center), 0.0, abs_tol=1e-9)
     tip_half = light_tip_position(math.pi / 4, math.pi / 3, 0.5)
     assert math.isclose(_norm3(_sub3(tip_half, _scale3(trocar_sample, 0.5))), 0.0, abs_tol=1e-9)
+
+    # aim_tilt=0 must reproduce the original "always toward center" direction.
+    default_aim = light_aim_direction(math.pi / 4, math.pi / 3)
+    assert math.isclose(_norm3(_sub3(default_aim, _scale3(trocar_sample, -1.0))), 0.0, abs_tol=1e-9)
+
+    # A tilted aim direction must still be a unit vector, and must actually
+    # differ from the default once tilted.
+    tilted_aim = light_aim_direction(math.pi / 4, math.pi / 3, aim_tilt=0.3, aim_clock=1.0)
+    assert math.isclose(_norm3(tilted_aim), 1.0, abs_tol=1e-9)
+    assert _norm3(_sub3(tilted_aim, default_aim)) > 1e-6
+    tilted_tip = light_tip_position(math.pi / 4, math.pi / 3, 0.5, aim_tilt=0.3, aim_clock=1.0)
+    assert math.isclose(_norm3(_sub3(tilted_tip, trocar_sample)), 0.5, abs_tol=1e-9)
 
     # End-to-end smoke test with the jaw-meeting-point solve.
     # light_depth_mm/jaw_length_mm are given in mm here and converted
