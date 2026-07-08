@@ -88,7 +88,7 @@ def compute_from_file(path: Path) -> Dict[str, Any]:
 
 
 async def stream_positions(
-    websocket: WebSocketServerProtocol, input_path: Path
+    websocket: WebSocketServerProtocol, input_path: Path, interval: float
 ) -> None:
     """Send one calculation result per frame until the client disconnects."""
     frame = 0
@@ -114,16 +114,16 @@ async def stream_positions(
 
         await websocket.send(json.dumps(payload))
         frame += 1
-        await asyncio.sleep(0)  # yield so new clients can handshake
+        await asyncio.sleep(interval)
 
 
 async def handler(
-    websocket: WebSocketServerProtocol, input_path: Path
+    websocket: WebSocketServerProtocol, input_path: Path, interval: float
 ) -> None:
     client = websocket.remote_address
     print(f"client connected: {client}")
     try:
-        await stream_positions(websocket, input_path)
+        await stream_positions(websocket, input_path, interval)
     except websockets.exceptions.ConnectionClosed:
         print(f"client disconnected: {client}")
 
@@ -147,6 +147,12 @@ def main() -> None:
         default=8765,
         help="bind port (default: 8765)",
     )
+    parser.add_argument(
+        "--interval",
+        type=float,
+        default=1 / 30,
+        help="seconds between streamed frames (default: 1/30)",
+    )
     args = parser.parse_args()
 
     if not args.input.is_file():
@@ -154,13 +160,13 @@ def main() -> None:
 
     async def serve() -> None:
         async with websockets.serve(
-            lambda ws: handler(ws, args.input),
+            lambda ws: handler(ws, args.input, args.interval),
             args.host,
             args.port,
         ):
             print(
-                f"streaming as fast as possible from {args.input.resolve()} "
-                f"on ws://{args.host}:{args.port}"
+                f"streaming from {args.input.resolve()} "
+                f"on ws://{args.host}:{args.port} every {args.interval:.3f}s"
             )
             await asyncio.Future()
 
