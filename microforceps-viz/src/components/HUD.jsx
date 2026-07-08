@@ -89,13 +89,6 @@ export default function HUD({ frame }) {
           )
         })}
       </div>
-      {frame && (
-        <div style={styles.coords}>
-          <div>tipL {fmt(frame.tip_left)}</div>
-          <div>tipR {fmt(frame.tip_right)}</div>
-          <div>troc {fmt(frame.trocar)}</div>
-        </div>
-      )}
     </div>
   )
 }
@@ -144,10 +137,7 @@ const styles = {
 
   // Distance-to-Retina panel — flow layout inside SidePanel
   panel: {
-    background: color.surface,
-    border: `1px solid ${color.border}`,
-    borderRadius: radius.md,
-    padding: space.lg,
+    padding: `${space.md}px ${space.lg}px`,
     pointerEvents: 'auto',
   },
   panelTitle: { font: `600 11px ${font.sans}`, letterSpacing: '0.14em', color: color.textDim },

@@ -14,7 +14,7 @@ export default function EyeGlobe({ showRetina = true }) {
 
   return (
     <group>
-      {/* Glassy wireframe grid sphere — neutral steel instead of neon cyan, with opening at the limbus */}
+      {/* Glassy wireframe grid sphere — with opening at the limbus */}
       <mesh>
         <sphereGeometry args={[R, 64, 32, 0, Math.PI * 2, limbusTheta, Math.PI - limbusTheta]} />
         <meshPhysicalMaterial
@@ -28,16 +28,17 @@ export default function EyeGlobe({ showRetina = true }) {
         />
       </mesh>
 
-      {/* Retina — lower (-Y) hemisphere: muted anatomical rose */}
+      {/* Retina — lower (-Y) hemisphere: smooth, muted anatomical rose */}
       {showRetina && (
         <mesh>
           <sphereGeometry args={[R - 0.08, 64, 28, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2]} />
           <meshStandardMaterial
-            color="#a5455d"
-            emissive="#2a0810"
+            color="#8b3a4a"
+            emissive="#1a060c"
             transparent
-            opacity={0.34}
-            roughness={0.78}
+            opacity={0.22}
+            roughness={0.85}
+            depthWrite={false}
             side={DoubleSide}
           />
         </mesh>

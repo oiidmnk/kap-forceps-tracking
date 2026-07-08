@@ -64,9 +64,6 @@ export default function DepthCrossSection({ frame }) {
 }
 
 const panel = {
-  background: color.surface,
-  border: `1px solid ${color.border}`,
-  borderRadius: radius.md,
   padding: '10px 12px',
   pointerEvents: 'auto',
 }
