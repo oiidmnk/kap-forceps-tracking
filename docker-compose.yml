@@ -7,6 +7,20 @@ services:
       - ./preprocessing/input_example.json:/app/input_example.json:ro
     restart: unless-stopped
 
+  segmentation:
+    build: ./segmentation
+    environment:
+      SEGMENTATION_WEIGHTS: ${SEGMENTATION_WEIGHTS:-runs/segment/forceps/weights/best.pt}
+      SEGMENTATION_CONF: ${SEGMENTATION_CONF:-0.25}
+      SEGMENTATION_IMGSZ: ${SEGMENTATION_IMGSZ:-1024}
+      SEGMENTATION_DEVICE: ${SEGMENTATION_DEVICE:-cpu}
+      SEGMENTATION_PREPROCESS_PRESET: ${SEGMENTATION_PREPROCESS_PRESET:-}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./segmentation/runs:/app/runs:ro
+    restart: unless-stopped
+
   viz:
     build:
       context: ./microforceps-viz

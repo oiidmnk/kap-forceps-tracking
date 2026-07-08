@@ -34,3 +34,18 @@ segmentation/data/
 
 See `segmentation/README.md` for the full workflow, preprocessing presets,
 prediction, benchmarking, and remote GPU training.
+
+## Docker services
+
+The compose stack includes:
+
+- `stream`: websocket preprocessing feed on `ws://localhost:8765`.
+- `viz`: React/Three.js dashboard on `http://localhost:8080`.
+- `segmentation`: HTTP segmentation inference API on `http://localhost:8000`.
+
+Send an image to the segmentation service:
+
+```bash
+docker compose up segmentation
+curl -F image=@segmentation/data/images/val/frame_001.png http://localhost:8000/segment
+```

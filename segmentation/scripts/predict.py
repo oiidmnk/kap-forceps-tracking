@@ -6,14 +6,17 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Any
 
 if __package__ is None or __package__ == "":
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import cv2
+import numpy as np
 from ultralytics import YOLO
 
 from scripts.preprocessing import (
+    CropTransform,
     DEFAULT_PREPROCESS_CONFIG,
     apply_preprocessing,
     find_images,
@@ -37,6 +40,129 @@ def _class_name(names: dict | list, class_id: int) -> str:
     if 0 <= class_id < len(names):
         return str(names[class_id])
     return str(class_id)
+
+
+def _to_numpy(value: Any) -> np.ndarray:
+    if hasattr(value, "cpu"):
+        value = value.cpu()
+    if hasattr(value, "numpy"):
+        value = value.numpy()
+    return np.asarray(value)
+
+
+def _transform_points(points: np.ndarray, transform: CropTransform) -> list[list[float]]:
+    restored = np.asarray(points, dtype=float).reshape(-1, 2).copy()
+    restored[:, 0] += transform.x
+    restored[:, 1] += transform.y
+    return restored.tolist()
+
+
+def _normalize_points(points: list[list[float]], width: int, height: int) -> list[list[float]]:
+    if width <= 0 or height <= 0:
+        return []
+    return [[float(x) / width, float(y) / height] for x, y in points]
+
+
+def _transform_box(box: np.ndarray, transform: CropTransform) -> list[float]:
+    x1, y1, x2, y2 = [float(value) for value in box]
+    return [x1 + transform.x, y1 + transform.y, x2 + transform.x, y2 + transform.y]
+
+
+def _normalize_box(box: list[float], width: int, height: int) -> list[float]:
+    if width <= 0 or height <= 0:
+        return []
+    x1, y1, x2, y2 = box
+    return [x1 / width, y1 / height, x2 / width, y2 / height]
+
+
+def serialize_segmentation_result(
+    result: Any,
+    transform: CropTransform | None = None,
+) -> dict[str, Any]:
+    """Convert one Ultralytics segmentation result into API-friendly JSON data."""
+    image_height, image_width = result.orig_img.shape[:2]
+    transform = transform or CropTransform(
+        source_width=image_width,
+        source_height=image_height,
+        x=0,
+        y=0,
+        width=image_width,
+        height=image_height,
+    )
+    source_width = int(transform.source_width or image_width)
+    source_height = int(transform.source_height or image_height)
+
+    boxes = getattr(result, "boxes", None)
+    box_xyxy = (
+        _to_numpy(boxes.xyxy).astype(float)
+        if boxes is not None and getattr(boxes, "xyxy", None) is not None
+        else np.empty((0, 4), dtype=float)
+    )
+    confidences = (
+        _to_numpy(boxes.conf).astype(float)
+        if boxes is not None and getattr(boxes, "conf", None) is not None
+        else np.full(len(box_xyxy), np.nan, dtype=float)
+    )
+    class_ids = (
+        _to_numpy(boxes.cls).astype(int)
+        if boxes is not None and getattr(boxes, "cls", None) is not None
+        else np.zeros(len(box_xyxy), dtype=int)
+    )
+
+    masks = getattr(result, "masks", None)
+    mask_polygons = getattr(masks, "xy", None) or []
+    instance_count = max(len(box_xyxy), len(mask_polygons))
+
+    instances = []
+    for index in range(instance_count):
+        class_id = int(class_ids[index]) if index < len(class_ids) else 0
+        confidence = float(confidences[index]) if index < len(confidences) else None
+        box = _transform_box(box_xyxy[index], transform) if index < len(box_xyxy) else None
+        points = (
+            _transform_points(np.asarray(mask_polygons[index]), transform)
+            if index < len(mask_polygons)
+            else []
+        )
+        instances.append(
+            {
+                "class_id": class_id,
+                "class_name": _class_name(result.names, class_id),
+                "confidence": None if confidence is None or np.isnan(confidence) else confidence,
+                "box": None
+                if box is None
+                else {
+                    "xyxy": box,
+                    "normalized_xyxy": _normalize_box(box, source_width, source_height),
+                },
+                "segments": [
+                    {
+                        "points": points,
+                        "normalized_points": _normalize_points(
+                            points, source_width, source_height
+                        ),
+                    }
+                ]
+                if points
+                else [],
+            }
+        )
+
+    return {
+        "image": {
+            "width": source_width,
+            "height": source_height,
+            "inference_width": int(image_width),
+            "inference_height": int(image_height),
+        },
+        "transform": {
+            "x": int(transform.x),
+            "y": int(transform.y),
+            "width": int(transform.width),
+            "height": int(transform.height),
+            "is_identity": transform.is_identity,
+        },
+        "instances": instances,
+    }
 
 
 def render_box_result(result) -> object:

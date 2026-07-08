@@ -1,0 +1,30 @@
+{
+  "light_rot_up": 0.4,
+  "light_rot_clock": 4.3,
+  "light_depth_mm": 12.0,
+  "forceps_rot_up": 0.8,
+  "forceps_rot_clock": 1.5,
+  "left_tip_px": [
+    180.44027709960938,
+    72.85189056396484
+  ],
+  "left_shadow_px": [
+    190.8774871826172,
+    86.11113739013672
+  ],
+  "right_tip_px": [
+    181.22958374023438,
+    55.238704681396484
+  ],
+  "right_shadow_px": [
+    196.34005737304688,
+    71.00608825683594
+  ],
+  "eye_center_px": [
+    95.0,
+    95.0
+  ],
+  "eye_radius_px": 210.0,
+  "eye_radius_mm": 24.0,
+  "jaw_length_mm": 3.0
+}

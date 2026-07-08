@@ -110,6 +110,28 @@ python scripts/predict.py --source data/images/val/
 
 Outputs land in `runs/segment/predict/`.
 
+### 6. Serve predictions over HTTP
+
+The Docker Compose stack includes a `segmentation` service exposing
+`POST /segment` on port `8000`. It accepts a multipart image upload and returns
+JSON with image dimensions, preprocessing transform metadata, and detected
+instances with class names, confidences, boxes, and segmentation polygons.
+
+```bash
+docker compose up segmentation
+curl -F image=@data/images/val/frame_001.png http://localhost:8000/segment
+```
+
+By default, the container looks for weights at
+`runs/segment/forceps/weights/best.pt` inside `segmentation/`. Override runtime
+settings with environment variables:
+
+```bash
+SEGMENTATION_WEIGHTS=runs/segment/forceps/weights/best.pt \
+SEGMENTATION_PREPROCESS_PRESET=roi_clahe \
+docker compose up segmentation
+```
+
 ## Train on a remote GPU server
 
 Configure the server in `~/.ssh/config`, then sync the project and launch a
@@ -186,6 +208,39 @@ python scripts/benchmark.py \
   --preprocess-preset roi_clahe
 ```
 
+## Send one prediction to the 3D preprocessor
+
+The single-image bridge reads the four pose keypoints in order
+`tip_left`, `tip_right`, `shadow_left`, `shadow_right`, merges those pixel
+coordinates into calibrated geometry values, and writes the JSON file that
+`preprocessing/ws_server.py` already knows how to stream.
+
+Start the websocket preprocessor from the workspace root:
+
+```bash
+cd ../preprocessing
+python3 ws_server.py --input predicted_input.json
+```
+
+Run the React dashboard in live mode, then update the watched JSON whenever you
+want to visualize a new image:
+
+```bash
+cd ../segmentation
+python3 scripts/predict_preprocessor.py \
+  --weights /Users/luis.carilla/uni/kap/auge_segment/runs/remote/forceps_remote/runs/pose/forceps_remote/weights/best.pt \
+  --source data/testing/frame_001.png \
+  --preprocess-preset roi_clahe \
+  --base-input ../preprocessing/input_example.json \
+  --sidecar ../preprocessing/geometry_sidecar_example.json \
+  --output ../preprocessing/predicted_input.json
+```
+
+`--sidecar` is optional and should contain only non-predicted calibration values
+such as trocar angles, light depth, eye center/radius, and jaw length. Predicted
+pixel fields always come from the pose keypoints. Use the same
+`--preprocess-preset` that the pose model was trained with.
+
 ## CLI entry points
 
 After `pip install -e .`:
@@ -196,6 +251,7 @@ auge-split-dataset
 auge-train
 auge-validate
 auge-predict --source data/images/val/
+auge-predict-preprocessor --source data/testing/frame_001.png
 auge-benchmark --source data/images/val/
 auge-preview-preprocessing --source data/testing
 auge-prepare-preprocessing --preset roi_clahe
@@ -229,6 +285,7 @@ scripts/
   train.py                          # training
   validate.py                       # evaluation
   predict.py                        # inference
+  predict_preprocessor.py           # single-image inference -> preprocessor JSON
   benchmark.py                      # preprocessing + inference latency
   preprocessing.py                  # shared image transforms
   preview_preprocessing.py          # side-by-side preset previews

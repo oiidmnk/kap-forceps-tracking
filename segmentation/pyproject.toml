@@ -5,15 +5,21 @@ description = "YOLO segmentation training pipeline for forceps tips and shadows 
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "numpy>=1.23",
     "ultralytics>=8.3.0",
     "opencv-python-headless>=4.8.0",
     "pyyaml>=6.0",
+    "fastapi>=0.115.0",
+    "python-multipart>=0.0.9",
+    "uvicorn[standard]>=0.30.0",
 ]
 
 [project.scripts]
 auge-train = "scripts.train:main"
 auge-validate = "scripts.validate:main"
 auge-predict = "scripts.predict:main"
+auge-predict-preprocessor = "scripts.predict_preprocessor:main"
+auge-segment-service = "scripts.service:main"
 auge-benchmark = "scripts.benchmark:main"
 auge-preview-preprocessing = "scripts.preview_preprocessing:main"
 auge-prepare-preprocessing = "scripts.prepare_preprocessed_dataset:main"
