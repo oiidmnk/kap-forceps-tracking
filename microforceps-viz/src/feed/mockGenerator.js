@@ -80,11 +80,12 @@ const SPEED = 0.35
 
 export function sampleFrame(t) {
   const s = t * SPEED
-  const wobbleU = 0.35 * Math.sin(s * 0.7)
-  const wobbleV = 0.35 * Math.cos(s * 0.5)
-  // Insertion depth sweeps from mid-vitreous to near the retina, exercising the
-  // Distance-to-Retina safety states while keeping the tips inside the globe.
-  const depth = 12.5 + 8.0 * Math.sin(s * 0.4)
+  const wobbleU = 0.25 * Math.sin(s * 0.7)
+  const wobbleV = 0.25 * Math.cos(s * 0.5)
+  // Insertion depth keeps the tips in the lower (-Y) hemisphere (retina side).
+  // ~16 mm puts tips just below the equator; ~22 mm brings them near the retina
+  // wall, exercising the Distance-to-Retina safety states.
+  const depth = 19.0 + 3.0 * Math.sin(s * 0.4)
   // Jaws open/close within a realistic microforceps range (~7°–18° full angle).
   const half = 0.06 + 0.1 * (0.5 + 0.5 * Math.sin(s * 1.3)) // radians (half-angle)
 

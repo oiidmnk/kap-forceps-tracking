@@ -5,7 +5,8 @@ import ProximityWall from '../scene/ProximityWall.jsx'
 import ScopeCamera, { ELEV_DEFAULT, ELEV_MIN, ELEV_MAX } from '../scene/ScopeCamera.jsx'
 import { nearestTip } from '../geometry.js'
 import { distanceStatus } from '../ui.js'
-import { DIST_SAFE_MM, DIST_SCOPE_SHOW_MM } from '../config.js'
+import { DIST_SCOPE_SHOW_MM } from '../config.js'
+import { color, font, radius, tnum, HEADER_H } from '../theme.js'
 
 const DRAG_SENSITIVITY = 0.006
 const SCOPE_SIZE_PX = 300
@@ -49,7 +50,8 @@ export default function ProximityScope({ frame }) {
   if (!info || info.dist >= DIST_SCOPE_SHOW_MM) return null
 
   const status = distanceStatus(info.dist)
-  const active = info.dist < DIST_SAFE_MM // glow/pulse harder when getting close (size no longer changes)
+  // Ambient look stays matte; a glow is reserved as a DANGER alarm only.
+  const danger = status?.level === 'danger'
 
   return (
     <div
@@ -57,28 +59,27 @@ export default function ProximityScope({ frame }) {
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       style={{
-        position: 'absolute',
-        right: 20,
-        top: 60,
-        width: SCOPE_SIZE_PX,
-        height: SCOPE_SIZE_PX,
-        borderRadius: 12,
+        position: 'relative',
+        width: '100%',
+        flex: 1,
+        minHeight: 180,
+        borderRadius: radius.md,
         overflow: 'hidden',
-        border: `2px solid ${status ? status.color : 'rgba(255,255,255,0.15)'}`,
-        boxShadow: active ? `0 0 18px ${status.color}` : '0 4px 18px rgba(0,0,0,0.5)',
-        background: 'rgba(6,9,16,0.85)',
-        transition: 'box-shadow 0.25s',
-        animation: status?.level === 'danger' ? 'scopePulse 0.8s ease-in-out infinite' : 'none',
+        border: `2px solid ${status ? status.color : color.border}`,
+        boxShadow: '0 6px 20px rgba(0,0,0,0.55)',
+        background: color.surface,
+        animation: danger ? 'scopePulse 0.8s ease-in-out infinite' : 'none',
         cursor: 'grab',
         touchAction: 'none',
+        pointerEvents: 'auto',
       }}
     >
-      <style>{`@keyframes scopePulse { 0%,100%{box-shadow:0 0 8px ${status?.color}} 50%{box-shadow:0 0 26px ${status?.color}} }`}</style>
+      <style>{`@keyframes scopePulse { 0%,100%{box-shadow:0 6px 20px rgba(0,0,0,0.55)} 50%{box-shadow:0 0 24px ${status?.color}} }`}</style>
 
       <div style={header}>
         <span>PROXIMITY SCOPE</span>
         {info && (
-          <span style={{ color: status.color, fontVariantNumeric: 'tabular-nums' }}>
+          <span style={{ color: status.color, ...tnum }}>
             {info.dist.toFixed(2)} mm
           </span>
         )}
@@ -108,10 +109,10 @@ const header = {
   display: 'flex',
   justifyContent: 'space-between',
   padding: '6px 10px',
-  font: '600 10px sans-serif',
+  font: `600 10px ${font.sans}`,
   letterSpacing: '0.1em',
-  color: '#9fb0c4',
-  background: 'linear-gradient(rgba(6,9,16,0.9), rgba(6,9,16,0))',
+  color: color.textDim,
+  background: 'linear-gradient(rgba(10,14,22,0.92), rgba(10,14,22,0))',
   pointerEvents: 'none',
 }
 
@@ -121,8 +122,8 @@ const hint = {
   left: 0,
   right: 0,
   textAlign: 'center',
-  font: '500 9px sans-serif',
+  font: `500 9px ${font.sans}`,
   letterSpacing: '0.06em',
-  color: 'rgba(159,176,196,0.6)',
+  color: color.textFaint,
   pointerEvents: 'none',
 }

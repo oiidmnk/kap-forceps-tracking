@@ -1,5 +1,6 @@
 import { distanceToRetina } from '../geometry.js'
 import { distanceStatus } from '../ui.js'
+import { color, font, radius, space, tnum } from '../theme.js'
 
 // 2D side-profile of the forceps tips approaching the retina wall, isolating the
 // depth (Z) axis the operator can't perceive from the 2D microscope feed.
@@ -24,12 +25,12 @@ export default function DepthCrossSection({ frame }) {
   return (
     <div style={panel}>
       <div style={title}>DEPTH TO RETINA — SIDE VIEW</div>
-      <svg width={W} height={H}>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block' }}>
         {/* depth gridlines */}
         {[2, 4, 6, 8].map((mm) => (
           <g key={mm}>
-            <line x1={30} y1={yFor(mm)} x2={W - 10} y2={yFor(mm)} stroke="rgba(255,255,255,0.08)" />
-            <text x={8} y={yFor(mm) + 3} fill="#5f7085" fontSize="9">{mm}</text>
+            <line x1={30} y1={yFor(mm)} x2={W - 10} y2={yFor(mm)} stroke={color.border} />
+            <text x={8} y={yFor(mm) + 3} fill={color.textFaint} fontSize="9" style={tnum}>{mm}</text>
           </g>
         ))}
 
@@ -37,10 +38,10 @@ export default function DepthCrossSection({ frame }) {
         <path
           d={`M 20 ${wallY} Q ${W / 2} ${wallY + 16} ${W - 20} ${wallY}`}
           fill="none"
-          stroke="#7fd1ff"
-          strokeWidth="3"
+          stroke={color.accent}
+          strokeWidth="2.5"
         />
-        <text x={W - 20} y={wallY + 28} fill="#7fd1ff" fontSize="10" textAnchor="end">RETINA</text>
+        <text x={W - 20} y={wallY + 28} fill={color.accent} fontSize="10" textAnchor="end" letterSpacing="0.1em">RETINA</text>
 
         {/* tips + gap lines */}
         {tips.map((t) => {
@@ -50,10 +51,10 @@ export default function DepthCrossSection({ frame }) {
             <g key={t.name}>
               <line x1={t.x} y1={y} x2={t.x} y2={wallY} stroke={s.color} strokeWidth="1" strokeDasharray="3 2" opacity="0.7" />
               <circle cx={t.x} cy={y} r="5" fill={s.color} />
-              <text x={t.x} y={y - 9} fill={s.color} fontSize="11" textAnchor="middle" fontWeight="600">
+              <text x={t.x} y={y - 9} fill={s.color} fontSize="11" textAnchor="middle" fontWeight="600" style={tnum}>
                 {t.dist.toFixed(2)}
               </text>
-              <text x={t.x} y={y + 4} fill="#0b1120" fontSize="8" textAnchor="middle" fontWeight="700">{t.name}</text>
+              <text x={t.x} y={y + 4} fill="#0a0f1a" fontSize="8" textAnchor="middle" fontWeight="700">{t.name}</text>
             </g>
           )
         })}
@@ -63,13 +64,10 @@ export default function DepthCrossSection({ frame }) {
 }
 
 const panel = {
-  position: 'absolute',
-  left: 20,
-  bottom: 20,
-  background: 'rgba(10,14,22,0.72)',
-  border: '1px solid rgba(255,255,255,0.1)',
-  borderRadius: 12,
+  background: color.surface,
+  border: `1px solid ${color.border}`,
+  borderRadius: radius.md,
   padding: '10px 12px',
-  backdropFilter: 'blur(8px)',
+  pointerEvents: 'auto',
 }
-const title = { font: '600 10px sans-serif', letterSpacing: '0.12em', color: '#8fa3ba', marginBottom: 6 }
+const title = { font: `600 10px ${font.sans}`, letterSpacing: '0.12em', color: color.textDim, marginBottom: space.sm - 2 }

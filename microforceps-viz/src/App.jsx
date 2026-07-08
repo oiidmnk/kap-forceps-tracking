@@ -5,10 +5,12 @@ import { useTrackingFeed } from './hooks/useTrackingFeed.js'
 import { useDebugPose } from './hooks/useDebugPose.js'
 import SurgicalScene from './scene/SurgicalScene.jsx'
 import CameraRig from './scene/CameraRig.jsx'
-import HUD from './components/HUD.jsx'
+import HUD, { ToggleBar } from './components/HUD.jsx'
+import DeviceHeader from './components/DeviceHeader.jsx'
 import ProximityScope from './components/ProximityScope.jsx'
 import DepthCrossSection from './components/DepthCrossSection.jsx'
 import ViewPresets from './components/ViewPresets.jsx'
+import SidePanel, { SIDE_PANEL_W } from './components/SidePanel.jsx'
 import { EYE_RADIUS_MM } from './config.js'
 
 const SOURCES = ['mock', 'live', 'debug']
@@ -38,28 +40,29 @@ export default function App() {
   return (
     <>
       {/* Main overview (+Y up: instruments enter at top, retina at bottom) */}
-      <Canvas
-        gl={{ alpha: true }}
-        camera={{ position: [EYE_RADIUS_MM * 1.4, EYE_RADIUS_MM * 0.9, EYE_RADIUS_MM * 3.4], fov: 45, near: 0.1, far: 1000 }}
-      >
-        <SurgicalScene frame={frame} {...toggles} />
-        <CameraRig view={view} snapNonce={snapNonce} />
-        <GizmoHelper alignment="bottom-right" margin={[70, 70]}>
-          <GizmoViewport axisColors={['#e05555', '#55e055', '#5577e0']} labelColor="#fff" />
-        </GizmoHelper>
-      </Canvas>
+      <div style={{ position: 'absolute', top: 0, bottom: 0, right: 0, left: SIDE_PANEL_W + 24 }}>
+        <Canvas
+          gl={{ alpha: true }}
+          camera={{ position: [EYE_RADIUS_MM * 1.4, EYE_RADIUS_MM * 0.9, EYE_RADIUS_MM * 3.4], fov: 45, near: 0.1, far: 1000 }}
+        >
+          <SurgicalScene frame={frame} {...toggles} />
+          <CameraRig view={view} snapNonce={snapNonce} />
+          <GizmoHelper alignment="bottom-right" margin={[70, 70]}>
+            <GizmoViewport axisColors={['#e05555', '#55e055', '#5577e0']} labelColor="#fff" />
+          </GizmoHelper>
+        </Canvas>
+        <ViewPresets view={view} onSelect={selectView} />
+      </div>
 
-      <HUD
-        frame={frame}
-        status={status}
-        source={source}
-        onToggleSource={cycleSource}
-        toggles={toggles}
-        onToggle={onToggle}
-      />
-      <DepthCrossSection frame={frame} />
-      <ProximityScope frame={frame} />
-      <ViewPresets view={view} onSelect={selectView} />
+      <DeviceHeader frame={frame} status={status} source={source} onToggleSource={cycleSource} />
+      <ToggleBar toggles={toggles} onToggle={onToggle} source={source} />
+
+      {/* Left sidebar: Distance to Retina → Side View → Proximity Scope */}
+      <SidePanel>
+        <HUD frame={frame} />
+        <DepthCrossSection frame={frame} />
+        <ProximityScope frame={frame} />
+      </SidePanel>
     </>
   )
 }

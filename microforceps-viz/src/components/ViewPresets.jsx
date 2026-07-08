@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { color, font, radius } from '../theme.js'
 
 // Bottom-center segmented control for the main-camera view presets. Free orbit
 // stays available; these just snap the camera to a standardized clinical frame.
@@ -29,9 +30,9 @@ export default function ViewPresets({ view, onSelect }) {
             onClick={() => onSelect(key)}
             style={{
               ...btn,
-              background: on ? 'rgba(127,209,255,0.18)' : 'transparent',
-              borderColor: on ? '#7fd1ff' : 'transparent',
-              color: on ? '#dff1ff' : '#8fa3ba',
+              background: on ? color.accentSoft : 'transparent',
+              borderColor: on ? color.accentBorder : 'transparent',
+              color: on ? color.text : color.textDim,
             }}
           >
             {label}
@@ -52,23 +53,22 @@ const bar = {
   alignItems: 'center',
   gap: 4,
   padding: 5,
-  borderRadius: 12,
-  background: 'rgba(10,14,22,0.72)',
-  border: '1px solid rgba(255,255,255,0.1)',
-  backdropFilter: 'blur(8px)',
+  borderRadius: radius.md,
+  background: color.surface,
+  border: `1px solid ${color.border}`,
   pointerEvents: 'auto',
 }
 const btn = {
   padding: '6px 14px',
-  borderRadius: 8,
+  borderRadius: radius.sm,
   border: '1px solid',
-  font: '600 12px sans-serif',
+  font: `600 12px ${font.sans}`,
   letterSpacing: '0.04em',
   cursor: 'pointer',
 }
 const hint = {
   padding: '0 10px 0 6px',
-  font: '400 10px sans-serif',
-  color: '#5a6b80',
+  font: `400 10px ${font.sans}`,
+  color: color.textFaint,
   whiteSpace: 'nowrap',
 }
