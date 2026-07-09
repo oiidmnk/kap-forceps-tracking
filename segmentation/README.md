@@ -56,6 +56,32 @@ See [`examples/sample_label.txt`](examples/sample_label.txt) for a documented ex
 - If tips overlap, annotate two separate polygons.
 - Omit lines for parts that are not visible in a frame.
 
+## Synthetic pose training data
+
+Generate retinal-style frames with randomized forceps and shadow positions:
+
+```bash
+python scripts/generate_synthetic_dataset.py --count 500 --preview 10
+```
+
+This writes paired images and YOLO pose labels into `data/images/{train,val}` and
+`data/labels/{train,val}`. Each label has one forceps object with four keypoints
+in this order: `tip_left`, `tip_right`, `shadow_left`, `shadow_right`.
+
+Use `--background path/to/clean_background.png` if you have a clean microscope
+background to composite onto; otherwise the script creates a procedural
+retina-like background.
+
+By default, each retina/background is randomly rotated before the forceps are
+drawn. Use `--background-rotation 0` to disable it, or pass a smaller value such
+as `--background-rotation 30` for mild rotation variants.
+
+Train with a pose checkpoint and the pose config:
+
+```bash
+yolo pose train model=yolo11n-pose.pt data=configs/forceps_pose.yaml imgsz=1024
+```
+
 ## Workflow
 
 ### 1. Split raw data (optional)

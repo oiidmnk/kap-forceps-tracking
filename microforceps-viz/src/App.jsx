@@ -25,6 +25,7 @@ export default function App() {
     showBeam: false,
     showRetina: true,
     showReticle: true,
+    showProximityScope: true,
   })
   const onToggle = (key) => setToggles((t) => ({ ...t, [key]: !t[key] }))
   const cycleSource = () => setSource((s) => SOURCES[(SOURCES.indexOf(s) + 1) % SOURCES.length])
@@ -61,7 +62,7 @@ export default function App() {
       <SidePanel>
         <HUD frame={frame} />
         <DepthCrossSection frame={frame} />
-        <ProximityScope frame={frame} />
+        {toggles.showProximityScope && <ProximityScope frame={frame} />}
       </SidePanel>
     </>
   )

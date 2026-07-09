@@ -41,6 +41,9 @@ npm-debug.log*
 tmp/
 temp/
 
+# Local orchestrator state
+orchestrator/data/
+
 # Segmentation training artifacts
 segmentation/.venv/
 segmentation/*.egg-info/

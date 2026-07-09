@@ -10,6 +10,7 @@ export function ToggleBar({ toggles, onToggle, source }) {
     { key: 'showBeam', label: 'Light beam' },
     { key: 'showRetina', label: 'Retina' },
     { key: 'showReticle', label: 'Reticle' },
+    { key: 'showProximityScope', label: 'Proximity scope' },
   ]
 
   return (

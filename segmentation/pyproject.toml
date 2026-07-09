@@ -25,6 +25,7 @@ auge-preview-preprocessing = "scripts.preview_preprocessing:main"
 auge-prepare-preprocessing = "scripts.prepare_preprocessed_dataset:main"
 auge-check-labels = "scripts.check_labels:main"
 auge-split-dataset = "scripts.split_dataset:main"
+auge-generate-synthetic = "scripts.generate_synthetic_dataset:main"
 
 [build-system]
 requires = ["setuptools>=68.0"]

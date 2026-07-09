@@ -18,6 +18,23 @@ services:
       - /app/predicted_input.json
     restart: unless-stopped
 
+  orchestrator:
+    build: ./orchestrator
+    environment:
+      SEGMENTATION_URL: http://segmentation:8000
+      STREAM_URL: http://stream:8765
+      ORCHESTRATOR_CALIBRATION_PATH: /data/calibration.json
+      ORCHESTRATOR_DEFAULT_CALIBRATION: /app/default_calibration.json
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./preprocessing/geometry_sidecar_example.json:/app/default_calibration.json:ro
+      - ./orchestrator/data:/data
+    depends_on:
+      - segmentation
+      - stream
+    restart: unless-stopped
+
   segmentation:
     build: ./segmentation
     environment:

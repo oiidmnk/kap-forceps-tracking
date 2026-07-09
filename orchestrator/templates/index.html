@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}">
+</head>
+<body>
+  <main>
+    <header class="page-header">
+      <h1>{{ title }}</h1>
+      <p>Upload an image or select a video frame, segment the forceps points, and update the live stream.</p>
+    </header>
+
+    <div class="layout">
+      <section class="panel">
+        <h2>Upload</h2>
+        <div id="service-status" class="service-status">Checking services...</div>
+        <form id="process-form">
+          <div class="grid">
+            <label class="wide">Image or video
+              <input id="file" name="file" type="file" accept="image/*,video/*" required>
+            </label>
+            <label>Video frame time (seconds)
+              <input id="frame_time_s" name="frame_time_s" type="number" min="0" step="0.001" value="0">
+            </label>
+          </div>
+          <div class="actions">
+            <button id="process-button" type="submit">Process and update stream</button>
+          </div>
+        </form>
+        <div id="process-status" class="status"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Result</h2>
+        <pre id="result">{}</pre>
+      </section>
+    </div>
+
+    <section class="panel calibration-panel">
+      <h2>Calibration</h2>
+      <form id="calibration-form">
+        <fieldset>
+          <legend>Light</legend>
+          <div class="grid">
+            <label>Rotation up (rad)<input name="light_rot_up" type="number" step="any"></label>
+            <label>Rotation clock (rad)<input name="light_rot_clock" type="number" step="any"></label>
+            <label>Depth (mm)<input name="light_depth_mm" type="number" step="any"></label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Forceps</legend>
+          <div class="grid">
+            <label>Rotation up (rad)<input name="forceps_rot_up" type="number" step="any"></label>
+            <label>Rotation clock (rad)<input name="forceps_rot_clock" type="number" step="any"></label>
+            <label>Jaw length (mm)<input name="jaw_length_mm" type="number" step="any"></label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Eye</legend>
+          <div class="grid">
+            <label>Center X (px)<input name="eye_center_px_0" type="number" step="any"></label>
+            <label>Center Y (px)<input name="eye_center_px_1" type="number" step="any"></label>
+            <label>Radius (px)<input name="eye_radius_px" type="number" step="any"></label>
+            <label>Radius (mm)<input name="eye_radius_mm" type="number" step="any"></label>
+          </div>
+        </fieldset>
+
+        <div class="actions">
+          <button type="submit">Save calibration</button>
+          <button class="secondary" id="reload-calibration" type="button">Reload</button>
+        </div>
+        <div id="calibration-status" class="status"></div>
+      </form>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', path='app.js') }}" defer></script>
+</body>
+</html>
