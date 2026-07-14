@@ -30,12 +30,10 @@ DEFAULT_WEIGHTS = Path("runs/pose/forceps/weights/best.pt")
 DEFAULT_BASE_INPUT = WORKSPACE_ROOT / "preprocessing" / "input_example.json"
 DEFAULT_OUTPUT = WORKSPACE_ROOT / "preprocessing" / "predicted_input.json"
 
-KEYPOINT_TO_INPUT = [
-    "left_tip_px",
-    "right_tip_px",
-    "left_shadow_px",
-    "right_shadow_px",
-]
+POSE_OBJECTS = {
+    0: ("forceps", ("left_tip_px", "right_tip_px")),
+    1: ("shadow", ("left_shadow_px", "right_shadow_px")),
+}
 
 
 class PredictionExtractionError(ValueError):
@@ -62,28 +60,34 @@ def extract_preprocessor_points(
     transform: CropTransform | None = None,
     kpt_conf: float = 0.0,
 ) -> dict[str, list[float]]:
-    """Extract preprocessor pixel fields from the highest-confidence pose detection."""
+    """Extract preprocessor pixel fields from forceps and shadow pose detections."""
     keypoints = getattr(result, "keypoints", None)
     if keypoints is None or getattr(keypoints, "xy", None) is None:
         raise PredictionExtractionError("prediction result does not contain pose keypoints")
 
     keypoint_xy = _to_numpy(keypoints.xy)
-    if keypoint_xy.ndim != 3 or keypoint_xy.shape[1] < len(KEYPOINT_TO_INPUT):
+    if keypoint_xy.ndim != 3 or keypoint_xy.shape[1] < 2:
         raise PredictionExtractionError(
-            f"prediction result must contain at least {len(KEYPOINT_TO_INPUT)} keypoints"
+            "prediction result must contain at least 2 keypoints per detection"
         )
 
     boxes = getattr(result, "boxes", None)
-    if boxes is not None and getattr(boxes, "conf", None) is not None:
-        box_conf = _to_numpy(boxes.conf).astype(float)
-        if len(box_conf) != len(keypoint_xy):
-            raise PredictionExtractionError("prediction boxes and keypoints differ in length")
-        detection_index = int(box_conf.argmax()) if len(box_conf) else 0
-    else:
-        detection_index = 0
-
     if len(keypoint_xy) == 0:
         raise PredictionExtractionError("model returned no pose detections")
+    if boxes is None or getattr(boxes, "cls", None) is None:
+        raise PredictionExtractionError("prediction result does not contain pose class IDs")
+
+    class_ids = _to_numpy(boxes.cls).astype(int)
+    if len(class_ids) != len(keypoint_xy):
+        raise PredictionExtractionError("prediction boxes and keypoints differ in length")
+
+    box_conf = (
+        _to_numpy(boxes.conf).astype(float)
+        if getattr(boxes, "conf", None) is not None
+        else np.ones(len(keypoint_xy), dtype=float)
+    )
+    if len(box_conf) != len(keypoint_xy):
+        raise PredictionExtractionError("prediction confidences and keypoints differ in length")
 
     keypoint_conf = (
         _to_numpy(keypoints.conf).astype(float)
@@ -92,6 +96,10 @@ def extract_preprocessor_points(
     )
     if keypoint_conf.shape[0] != keypoint_xy.shape[0]:
         raise PredictionExtractionError("keypoint coordinates and confidences differ in length")
+    if keypoint_conf.shape[1] < 2:
+        raise PredictionExtractionError(
+            "prediction result must contain at least 2 keypoint confidences per detection"
+        )
 
     missing = []
     extracted: dict[str, list[float]] = {}
@@ -104,18 +112,23 @@ def extract_preprocessor_points(
         height=0,
     )
 
-    for keypoint_index, input_key in enumerate(KEYPOINT_TO_INPUT):
-        x, y = [float(value) for value in keypoint_xy[detection_index][keypoint_index]]
-        confidence = float(keypoint_conf[detection_index][keypoint_index])
-        if confidence < kpt_conf or (x == 0.0 and y == 0.0):
-            missing.append(input_key)
+    for class_id, (class_name, input_keys) in POSE_OBJECTS.items():
+        candidate_indices = np.flatnonzero(class_ids == class_id)
+        if len(candidate_indices) == 0:
+            missing.append(class_name)
             continue
-        extracted[input_key] = restore_original_point((x, y), transform)
+
+        detection_index = int(candidate_indices[np.argmax(box_conf[candidate_indices])])
+        for keypoint_index, input_key in enumerate(input_keys):
+            x, y = [float(value) for value in keypoint_xy[detection_index][keypoint_index]]
+            confidence = float(keypoint_conf[detection_index][keypoint_index])
+            if confidence < kpt_conf or (x == 0.0 and y == 0.0):
+                missing.append(input_key)
+                continue
+            extracted[input_key] = restore_original_point((x, y), transform)
 
     if missing:
-        raise PredictionExtractionError(
-            "missing required pose keypoints for: " + ", ".join(missing)
-        )
+        raise PredictionExtractionError("missing required pose data for: " + ", ".join(missing))
     return extracted
 
 

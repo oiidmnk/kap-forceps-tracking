@@ -65,8 +65,15 @@ python scripts/generate_synthetic_dataset.py --count 500 --preview 10
 ```
 
 This writes paired images and YOLO pose labels into `data/images/{train,val}` and
-`data/labels/{train,val}`. Each label has one forceps object with four keypoints
-in this order: `tip_left`, `tip_right`, `shadow_left`, `shadow_right`.
+`data/labels/{train,val}`. Each label has two objects:
+
+```text
+0 <forceps_bbox> <tip_left_x> <tip_left_y> 2 <tip_right_x> <tip_right_y> 2
+1 <shadow_bbox> <shadow_left_x> <shadow_left_y> 2 <shadow_right_x> <shadow_right_y> 2
+```
+
+The forceps and shadow are trained as separate pose detections, each with two
+keypoints.
 
 Use `--background path/to/clean_background.png` if you have a clean microscope
 background to composite onto; otherwise the script creates a procedural
@@ -75,6 +82,10 @@ retina-like background.
 By default, each retina/background is randomly rotated before the forceps are
 drawn. Use `--background-rotation 0` to disable it, or pass a smaller value such
 as `--background-rotation 30` for mild rotation variants.
+
+The forceps/shadow pair also gets a random shaft-axis roll by default, changing
+the apparent jaw opening and shadow geometry. Use `--axis-roll 0` to disable it,
+or pass a smaller value such as `--axis-roll 45` for milder roll variants.
 
 Train with a pose checkpoint and the pose config:
 

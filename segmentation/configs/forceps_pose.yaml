@@ -1,16 +1,15 @@
-# YOLO pose dataset config for forceps tips and shadow keypoints.
-path: ../data
+# YOLO pose dataset config for forceps and shadow keypoints.
+path: ./data
 train: images/train
 val: images/val
 
-nc: 1
+nc: 2
 names:
   0: forceps
+  1: shadow
 
 # Keypoint order:
-#   0 = tip_left
-#   1 = tip_right
-#   2 = shadow_left
-#   3 = shadow_right
-kpt_shape: [4, 3]
-flip_idx: [1, 0, 3, 2]
+#   forceps: 0 = tip_left, 1 = tip_right
+#   shadow:  0 = shadow_left, 1 = shadow_right
+kpt_shape: [2, 3]
+flip_idx: [1, 0]

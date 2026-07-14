@@ -32,6 +32,10 @@ CLASS_COLORS = [
     (180, 80, 255),
     (255, 180, 0),
 ]
+POSE_KEYPOINT_NAMES = {
+    0: ("tip_left", "tip_right"),
+    1: ("shadow_left", "shadow_right"),
+}
 
 
 def _class_name(names: dict | list, class_id: int) -> str:
@@ -249,6 +253,93 @@ def save_box_result(result, output_path: Path) -> bool:
     return cv2.imwrite(str(output_path), render_box_result(result))
 
 
+def render_pose_result(result) -> object:
+    """Render pose keypoints with compact labels."""
+    image = result.orig_img.copy()
+    image_height, image_width = image.shape[:2]
+    thickness = max(2, round(min(image_height, image_width) / 500))
+
+    boxes = result.boxes
+    keypoints = result.keypoints
+    class_ids = np.empty((0,), dtype=int)
+    if boxes is not None and boxes.xyxy is not None:
+        coordinates = boxes.xyxy.cpu().numpy()
+        class_ids = (
+            boxes.cls.cpu().numpy().astype(int)
+            if boxes.cls is not None
+            else np.zeros(len(coordinates), dtype=int)
+        )
+        for (x1, y1, x2, y2), class_id in zip(coordinates, class_ids, strict=True):
+            color = CLASS_COLORS[int(class_id) % len(CLASS_COLORS)]
+            cv2.rectangle(
+                image,
+                (max(0, round(float(x1))), max(0, round(float(y1)))),
+                (min(image_width - 1, round(float(x2))), min(image_height - 1, round(float(y2)))),
+                color,
+                thickness,
+                lineType=cv2.LINE_AA,
+            )
+            cv2.putText(
+                image,
+                _class_name(result.names, int(class_id)),
+                (max(0, round(float(x1))), max(14, round(float(y1)) - 6)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                color,
+                1,
+                cv2.LINE_AA,
+            )
+
+    if keypoints is None or keypoints.xy is None:
+        return image
+
+    coordinates = keypoints.xy.cpu().numpy()
+    confidences = (
+        keypoints.conf.cpu().numpy()
+        if keypoints.conf is not None
+        else np.ones(coordinates.shape[:2], dtype=float)
+    )
+    if len(class_ids) != len(coordinates):
+        class_ids = np.zeros(len(coordinates), dtype=int)
+    for detection_points, detection_confidences, class_id in zip(
+        coordinates,
+        confidences,
+        class_ids,
+        strict=True,
+    ):
+        keypoint_names = POSE_KEYPOINT_NAMES.get(int(class_id), ("kp0", "kp1"))
+        for keypoint_index, (x, y) in enumerate(detection_points[: len(keypoint_names)]):
+            if detection_confidences[keypoint_index] <= 0 or (x == 0 and y == 0):
+                continue
+            point = (
+                max(0, min(image_width - 1, round(float(x)))),
+                max(0, min(image_height - 1, round(float(y)))),
+            )
+            color = CLASS_COLORS[int(class_id) % len(CLASS_COLORS)]
+            cv2.circle(image, point, radius=7, color=(0, 0, 0), thickness=-1, lineType=cv2.LINE_AA)
+            cv2.circle(image, point, radius=5, color=color, thickness=-1, lineType=cv2.LINE_AA)
+            cv2.putText(
+                image,
+                keypoint_names[keypoint_index],
+                (point[0] + 8, point[1] - 8),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                color,
+                1,
+                cv2.LINE_AA,
+            )
+    return image
+
+
+def save_prediction_result(result, output_path: Path) -> bool:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if getattr(result, "keypoints", None) is not None:
+        rendered = render_pose_result(result)
+    else:
+        rendered = render_box_result(result)
+    return cv2.imwrite(str(output_path), rendered)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Predict with YOLO segmentation model.")
     parser.add_argument(
@@ -304,10 +395,10 @@ def main() -> int:
             output_dir = Path(args.project) / args.name
             for result in results:
                 output_path = output_dir / Path(result.path).name
-                if not save_box_result(result, output_path):
+                if not save_prediction_result(result, output_path):
                     print(f"Failed to write prediction: {output_path}")
                     return 1
-                print(f"Wrote box prediction: {output_path}")
+                print(f"Wrote prediction: {output_path}")
         return 0
 
     try:
@@ -340,10 +431,10 @@ def main() -> int:
         if not args.no_save:
             for result in results:
                 output_path = output_dir / source_path.name
-                if not save_box_result(result, output_path):
+                if not save_prediction_result(result, output_path):
                     print(f"Failed to write prediction: {output_path}")
                     return 1
-                print(f"Wrote box prediction: {output_path}")
+                print(f"Wrote prediction: {output_path}")
     return 0
 
 

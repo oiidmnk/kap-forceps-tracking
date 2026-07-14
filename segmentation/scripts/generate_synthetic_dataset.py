@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Generate synthetic forceps pose training data.
 
-The generated labels follow YOLO pose format:
+The generated labels follow YOLO pose format with two objects per image:
 
-    class cx cy w h tip_left_x tip_left_y v tip_right_x tip_right_y v ...
+    0 cx cy w h tip_left_x tip_left_y v tip_right_x tip_right_y v
+    1 cx cy w h shadow_left_x shadow_left_y v shadow_right_x shadow_right_y v
 """
 
 from __future__ import annotations
@@ -22,8 +23,10 @@ if __package__ is None or __package__ == "":
 
 from scripts.check_labels import CLASS_COLORS
 
-KEYPOINT_NAMES = ("tip_left", "tip_right", "shadow_left", "shadow_right")
+FORCEPS_KEYPOINT_NAMES = ("tip_left", "tip_right")
+SHADOW_KEYPOINT_NAMES = ("shadow_left", "shadow_right")
 FORCEPS_CLASS_ID = 0
+SHADOW_CLASS_ID = 1
 
 
 @dataclass(frozen=True)
@@ -282,7 +285,7 @@ def rotate_background(image: np.ndarray, angle_degrees: float) -> np.ndarray:
     )
 
 
-def render_forceps(image: np.ndarray, rng: np.random.Generator) -> Pose:
+def render_forceps(image: np.ndarray, rng: np.random.Generator, axis_roll: float) -> Pose:
     height, width = image.shape[:2]
     for _ in range(200):
         tip_center = np.array(
@@ -296,15 +299,38 @@ def render_forceps(image: np.ndarray, rng: np.random.Generator) -> Pose:
         normal = np.array([-direction[1], direction[0]], dtype=np.float32)
         jaw_len = rng.uniform(width * 0.105, width * 0.18)
         jaw_open = rng.uniform(width * 0.045, width * 0.095)
+        roll_angle = math.radians(rng.uniform(-axis_roll, axis_roll)) if axis_roll > 0 else 0.0
+        roll_projection = 0.18 + 0.82 * abs(math.cos(roll_angle))
+        shadow_roll_projection = 0.06 + 0.94 * abs(math.cos(roll_angle))
+        projected_open = jaw_open * roll_projection
+        projected_shadow_open = jaw_open * shadow_roll_projection
+        roll_depth_shift = math.sin(roll_angle) * jaw_open * 0.22
         base = tip_center - direction * jaw_len
-        tip_a = base + direction * jaw_len + normal * jaw_open / 2.0
-        tip_b = base + direction * jaw_len - normal * jaw_open / 2.0
+        tip_a = (
+            base
+            + direction * (jaw_len + roll_depth_shift / 2.0)
+            + normal * projected_open / 2.0
+        )
+        tip_b = (
+            base
+            + direction * (jaw_len - roll_depth_shift / 2.0)
+            - normal * projected_open / 2.0
+        )
         shadow_offset = np.array(
             [rng.uniform(width * 0.05, width * 0.20), rng.uniform(-height * 0.11, height * 0.04)],
             dtype=np.float32,
         )
-        shadow_a = tip_a + shadow_offset
-        shadow_b = tip_b + shadow_offset
+        shadow_center = base + direction * jaw_len + shadow_offset
+        shadow_a = (
+            shadow_center
+            + direction * (roll_depth_shift / 2.0)
+            + normal * projected_shadow_open / 2.0
+        )
+        shadow_b = (
+            shadow_center
+            - direction * (roll_depth_shift / 2.0)
+            - normal * projected_shadow_open / 2.0
+        )
         all_centers = np.vstack([tip_a, tip_b, shadow_a, shadow_b])
         if np.all((all_centers[:, 0] > 8) & (all_centers[:, 0] < width - 8) & (all_centers[:, 1] > 8) & (all_centers[:, 1] < height - 8)):
             break
@@ -313,7 +339,7 @@ def render_forceps(image: np.ndarray, rng: np.random.Generator) -> Pose:
 
     entry = base - direction * (max(width, height) * 0.72)
     shaft_thickness = int(rng.integers(28, 42))
-    jaw_root_offset = normal * (shaft_thickness * 0.34)
+    jaw_root_offset = normal * (shaft_thickness * (0.22 + 0.12 * roll_projection))
     jaw_root_a = base + jaw_root_offset
     jaw_root_b = base - jaw_root_offset
     shadow_base = base + shadow_offset
@@ -385,26 +411,34 @@ def normalized_center(polygon: np.ndarray, width: int, height: int) -> tuple[flo
     )
 
 
-def pose_label_line(pose: Pose, width: int, height: int, visibility: int = 2) -> str:
-    keypoint_polygons = [
-        pose.tip_polygons[0],
-        pose.tip_polygons[1],
-        pose.shadow_polygons[0],
-        pose.shadow_polygons[1],
-    ]
+def object_bbox(
+    keypoint_polygons: list[np.ndarray],
+    width: int,
+    height: int,
+    padding: float = 0.02,
+) -> list[float]:
     all_points = np.vstack(keypoint_polygons)
-    x1 = max(0.0, float(np.min(all_points[:, 0])) / width - 0.02)
-    y1 = max(0.0, float(np.min(all_points[:, 1])) / height - 0.02)
-    x2 = min(1.0, float(np.max(all_points[:, 0])) / width + 0.02)
-    y2 = min(1.0, float(np.max(all_points[:, 1])) / height + 0.02)
-    bbox = [
+    x1 = max(0.0, float(np.min(all_points[:, 0])) / width - padding)
+    y1 = max(0.0, float(np.min(all_points[:, 1])) / height - padding)
+    x2 = min(1.0, float(np.max(all_points[:, 0])) / width + padding)
+    y2 = min(1.0, float(np.max(all_points[:, 1])) / height + padding)
+    return [
         (x1 + x2) / 2.0,
         (y1 + y2) / 2.0,
         x2 - x1,
         y2 - y1,
     ]
 
-    values: list[float | int] = [FORCEPS_CLASS_ID, *bbox]
+
+def pose_label_line(
+    class_id: int,
+    keypoint_polygons: list[np.ndarray],
+    width: int,
+    height: int,
+    visibility: int = 2,
+) -> str:
+    bbox = object_bbox(keypoint_polygons, width, height)
+    values: list[float | int] = [class_id, *bbox]
     for polygon in keypoint_polygons:
         x, y = normalized_center(polygon, width, height)
         values.extend([x, y, visibility])
@@ -412,30 +446,81 @@ def pose_label_line(pose: Pose, width: int, height: int, visibility: int = 2) ->
     return " ".join(format_yolo_value(float(value)) for value in values)
 
 
+def pose_label_lines(pose: Pose, width: int, height: int, visibility: int = 2) -> list[str]:
+    forceps_polygons = [pose.tip_polygons[0], pose.tip_polygons[1]]
+    shadow_polygons = [pose.shadow_polygons[0], pose.shadow_polygons[1]]
+    return [
+        pose_label_line(FORCEPS_CLASS_ID, forceps_polygons, width, height, visibility),
+        pose_label_line(SHADOW_CLASS_ID, shadow_polygons, width, height, visibility),
+    ]
+
+
+def normalized_box_xyxy(
+    keypoint_polygons: list[np.ndarray],
+    width: int,
+    height: int,
+    padding: float = 0.02,
+) -> tuple[int, int, int, int]:
+    cx, cy, box_width, box_height = object_bbox(keypoint_polygons, width, height, padding)
+    x1 = int(round((cx - box_width / 2.0) * width))
+    y1 = int(round((cy - box_height / 2.0) * height))
+    x2 = int(round((cx + box_width / 2.0) * width))
+    y2 = int(round((cy + box_height / 2.0) * height))
+    return (
+        max(0, min(width - 1, x1)),
+        max(0, min(height - 1, y1)),
+        max(0, min(width - 1, x2)),
+        max(0, min(height - 1, y2)),
+    )
+
+
 def render_preview(image: np.ndarray, pose: Pose) -> np.ndarray:
     preview = image.copy()
-    keypoints = [
-        (0, pose.tip_polygons[0]),
-        (1, pose.tip_polygons[1]),
-        (2, pose.shadow_polygons[0]),
-        (3, pose.shadow_polygons[1]),
+    height, width = preview.shape[:2]
+    objects = [
+        (
+            FORCEPS_CLASS_ID,
+            "forceps",
+            FORCEPS_KEYPOINT_NAMES,
+            [pose.tip_polygons[0], pose.tip_polygons[1]],
+            CLASS_COLORS[0],
+        ),
+        (
+            SHADOW_CLASS_ID,
+            "shadow",
+            SHADOW_KEYPOINT_NAMES,
+            [pose.shadow_polygons[0], pose.shadow_polygons[1]],
+            CLASS_COLORS[2],
+        ),
     ]
-    for class_id, polygon in keypoints:
-        color = CLASS_COLORS[class_id]
-        center = np.round(np.mean(polygon, axis=0)).astype(int)
-        point = (int(center[0]), int(center[1]))
-        cv2.circle(preview, point, radius=6, color=(0, 0, 0), thickness=-1, lineType=cv2.LINE_AA)
-        cv2.circle(preview, point, radius=4, color=color, thickness=-1, lineType=cv2.LINE_AA)
+    for _class_id, class_name, keypoint_names, polygons, color in objects:
+        x1, y1, x2, y2 = normalized_box_xyxy(polygons, width, height)
+        cv2.rectangle(preview, (x1, y1), (x2, y2), color, 2, lineType=cv2.LINE_AA)
         cv2.putText(
             preview,
-            str(class_id),
-            (point[0] + 7, point[1] - 7),
+            class_name,
+            (x1, max(14, y1 - 6)),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.45,
+            0.5,
             color,
             1,
             cv2.LINE_AA,
         )
+        for keypoint_name, polygon in zip(keypoint_names, polygons, strict=True):
+            center = np.round(np.mean(polygon, axis=0)).astype(int)
+            point = (int(center[0]), int(center[1]))
+            cv2.circle(preview, point, radius=6, color=(0, 0, 0), thickness=-1, lineType=cv2.LINE_AA)
+            cv2.circle(preview, point, radius=4, color=color, thickness=-1, lineType=cv2.LINE_AA)
+            cv2.putText(
+                preview,
+                keypoint_name,
+                (point[0] + 7, point[1] - 7),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.45,
+                color,
+                1,
+                cv2.LINE_AA,
+            )
     return preview
 
 
@@ -462,6 +547,13 @@ def parse_args() -> argparse.Namespace:
         metavar="DEGREES",
         help="Randomly rotate each retina/background by +/- this many degrees before drawing forceps. Use 0 to disable.",
     )
+    parser.add_argument(
+        "--axis-roll",
+        type=float,
+        default=180.0,
+        metavar="DEGREES",
+        help="Randomly roll forceps and shadow around the forceps shaft axis by +/- this many degrees. Use 0 to disable.",
+    )
     parser.add_argument("--seed", type=int, help="Random seed for reproducible generation.")
     parser.add_argument("--prefix", default="synthetic", help="Filename prefix.")
     parser.add_argument("--start-index", type=int, default=0, help="First numeric image index.")
@@ -480,6 +572,8 @@ def main() -> int:
         raise SystemExit("--val-fraction must be between 0 and 1")
     if args.background_rotation < 0:
         raise SystemExit("--background-rotation must be non-negative")
+    if args.axis_roll < 0:
+        raise SystemExit("--axis-roll must be non-negative")
 
     rng = np.random.default_rng(args.seed)
     image_dirs = {split: args.out_dir / "images" / split for split in ("train", "val")}
@@ -500,11 +594,11 @@ def main() -> int:
         if args.background_rotation > 0:
             image = rotate_background(image, rng.uniform(-args.background_rotation, args.background_rotation))
 
-        pose = render_forceps(image, rng)
+        pose = render_forceps(image, rng, args.axis_roll)
         image_path = image_dirs[split] / f"{name}.{args.image_ext}"
         label_path = label_dirs[split] / f"{name}.txt"
         cv2.imwrite(str(image_path), image)
-        label_path.write_text(pose_label_line(pose, args.width, args.height) + "\n")
+        label_path.write_text("\n".join(pose_label_lines(pose, args.width, args.height)) + "\n")
         generated[split] += 1
 
         if i < args.preview:

@@ -53,3 +53,4 @@ segmentation/configs/generated/
 segmentation/runs/
 segmentation/*.pt
 CLAUDE.md
+segmentation/models/

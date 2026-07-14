@@ -26,13 +26,14 @@ class FakeTensor:
         return self.values
 
 
-def fake_pose_result(keypoints, box_conf=None, keypoint_conf=None):
+def fake_pose_result(keypoints, classes=None, box_conf=None, keypoint_conf=None):
+    classes = classes if classes is not None else list(range(len(keypoints)))
     box_conf = box_conf if box_conf is not None else [0.5] * len(keypoints)
     keypoint_conf = keypoint_conf if keypoint_conf is not None else [
-        [1.0, 1.0, 1.0, 1.0] for _ in keypoints
+        [1.0, 1.0] for _ in keypoints
     ]
     return SimpleNamespace(
-        boxes=SimpleNamespace(conf=FakeTensor(box_conf)),
+        boxes=SimpleNamespace(cls=FakeTensor(classes), conf=FakeTensor(box_conf)),
         keypoints=SimpleNamespace(
             xy=FakeTensor(keypoints),
             conf=FakeTensor(keypoint_conf),
@@ -46,6 +47,8 @@ def test_extracts_pose_keypoints_in_preprocessor_order() -> None:
             [
                 [10, 11],
                 [20, 21],
+            ],
+            [
                 [30, 31],
                 [40, 41],
             ]
@@ -68,17 +71,22 @@ def test_uses_highest_confidence_pose_detection() -> None:
             [
                 [1, 1],
                 [2, 2],
-                [3, 3],
-                [4, 4],
             ],
             [
                 [10, 11],
                 [20, 21],
+            ],
+            [
+                [3, 3],
+                [4, 4],
+            ],
+            [
                 [30, 31],
                 [40, 41],
             ],
         ],
-        box_conf=[0.1, 0.9],
+        classes=[0, 0, 1, 1],
+        box_conf=[0.1, 0.9, 0.2, 0.8],
     )
 
     points = extract_preprocessor_points(result)
@@ -93,6 +101,8 @@ def test_missing_required_keypoint_raises_for_zero_coordinate() -> None:
             [
                 [10, 11],
                 [0, 0],
+            ],
+            [
                 [30, 31],
                 [40, 41],
             ]
@@ -109,11 +119,13 @@ def test_keypoint_confidence_threshold_raises_when_required_point_is_low() -> No
             [
                 [10, 11],
                 [20, 21],
+            ],
+            [
                 [30, 31],
                 [40, 41],
             ]
         ],
-        keypoint_conf=[[0.9, 0.9, 0.1, 0.9]],
+        keypoint_conf=[[0.9, 0.9], [0.1, 0.9]],
     )
 
     with pytest.raises(PredictionExtractionError, match="left_shadow_px"):
@@ -147,6 +159,8 @@ def test_extracts_pose_keypoints_after_crop_transform() -> None:
             [
                 [10, 11],
                 [20, 21],
+            ],
+            [
                 [30, 31],
                 [40, 41],
             ]
@@ -157,6 +171,36 @@ def test_extracts_pose_keypoints_after_crop_transform() -> None:
 
     assert points["left_tip_px"] == [22.0, 19.0]
     assert points["right_shadow_px"] == [52.0, 49.0]
+
+
+def test_missing_forceps_detection_raises() -> None:
+    result = fake_pose_result(
+        [
+            [
+                [30, 31],
+                [40, 41],
+            ]
+        ],
+        classes=[1],
+    )
+
+    with pytest.raises(PredictionExtractionError, match="forceps"):
+        extract_preprocessor_points(result)
+
+
+def test_missing_shadow_detection_raises() -> None:
+    result = fake_pose_result(
+        [
+            [
+                [10, 11],
+                [20, 21],
+            ]
+        ],
+        classes=[0],
+    )
+
+    with pytest.raises(PredictionExtractionError, match="shadow"):
+        extract_preprocessor_points(result)
 
 
 def test_builds_merged_payload_and_writes_atomically(tmp_path) -> None:
