@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import math
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -781,6 +782,40 @@ def split_for_index(index: int, count: int, val_fraction: float) -> str:
     return "val" if index >= count - val_count else "train"
 
 
+def format_duration(seconds: float) -> str:
+    if not math.isfinite(seconds) or seconds < 0:
+        return "--:--"
+    total = int(round(seconds))
+    minutes, secs = divmod(total, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return f"{hours:d}:{minutes:02d}:{secs:02d}"
+    return f"{minutes:02d}:{secs:02d}"
+
+
+def print_generation_progress(
+    completed: int,
+    total: int,
+    generated: dict[str, int],
+    start_time: float,
+    *,
+    final: bool = False,
+) -> None:
+    elapsed = time.monotonic() - start_time
+    rate = completed / elapsed if elapsed > 0 else 0.0
+    eta = (total - completed) / rate if rate > 0 else math.inf
+    percent = 100.0 * completed / total if total else 100.0
+    message = (
+        f"Generating synthetic images: {completed}/{total} "
+        f"({percent:5.1f}%) train={generated['train']} val={generated['val']} "
+        f"{rate:4.1f} img/s ETA {format_duration(eta)}"
+    )
+    if sys.stderr.isatty():
+        print(f"\r{message}", end="\n" if final else "", file=sys.stderr, flush=True)
+    else:
+        print(message, file=sys.stderr, flush=True)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate synthetic retinal forceps pose data.")
     parser.add_argument("--count", type=int, default=100, help="Number of images to generate.")
@@ -832,6 +867,9 @@ def main() -> int:
         args.preview_dir.mkdir(parents=True, exist_ok=True)
 
     generated = {"train": 0, "val": 0}
+    start_time = time.monotonic()
+    progress_interval = max(1, min(100, args.count // 100))
+    print_generation_progress(0, args.count, generated, start_time)
     for i in range(args.count):
         split = split_for_index(i, args.count, args.val_fraction)
         name = f"{args.prefix}_{args.start_index + i:06d}"
@@ -852,6 +890,16 @@ def main() -> int:
         if i < args.preview:
             preview = render_preview(image, pose)
             cv2.imwrite(str(args.preview_dir / f"{name}.jpg"), preview)
+
+        completed = i + 1
+        if completed == args.count or completed % progress_interval == 0:
+            print_generation_progress(
+                completed,
+                args.count,
+                generated,
+                start_time,
+                final=completed == args.count,
+            )
 
     print(
         "Generated "
