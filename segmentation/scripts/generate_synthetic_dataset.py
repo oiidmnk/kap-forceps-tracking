@@ -10,11 +10,14 @@ The generated labels follow YOLO pose format with two objects per image:
 from __future__ import annotations
 
 import argparse
+import os
 import math
 import sys
 import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 import cv2
 import numpy as np
@@ -34,6 +37,25 @@ SHADOW_CLASS_ID = 1
 class Pose:
     tip_polygons: list[np.ndarray]
     shadow_polygons: list[np.ndarray]
+
+
+@dataclass(frozen=True)
+class GenerationTask:
+    index: int
+    seed: int
+    count: int
+    out_dir: Path
+    width: int
+    height: int
+    background: Optional[Path]
+    background_rotation: float
+    axis_roll: float
+    prefix: str
+    start_index: int
+    val_fraction: float
+    preview: int
+    preview_dir: Path
+    image_ext: str
 
 
 def unit(angle: float) -> np.ndarray:
@@ -816,6 +838,48 @@ def print_generation_progress(
         print(message, file=sys.stderr, flush=True)
 
 
+def resolve_worker_count(requested_workers: int, count: int) -> int:
+    if requested_workers < 0:
+        raise SystemExit("--workers must be non-negative")
+    if requested_workers == 0:
+        cpu_count = os.cpu_count() or 1
+        return max(1, min(count, cpu_count - 1 if cpu_count > 1 else 1))
+    return max(1, min(count, requested_workers))
+
+
+def build_image_seeds(seed: Optional[int], count: int) -> list[int]:
+    seed_sequence = np.random.SeedSequence(seed)
+    return [int(child.generate_state(1, dtype=np.uint32)[0]) for child in seed_sequence.spawn(count)]
+
+
+def generate_one_image(task: GenerationTask) -> str:
+    cv2.setNumThreads(1)
+    rng = np.random.default_rng(task.seed)
+    split = split_for_index(task.index, task.count, task.val_fraction)
+    name = f"{task.prefix}_{task.start_index + task.index:06d}"
+    if task.background:
+        image = load_background(task.background, task.width, task.height, rng)
+    else:
+        image = noisy_retina_background(task.width, task.height, rng)
+    if task.background_rotation > 0:
+        image = rotate_background(image, rng.uniform(-task.background_rotation, task.background_rotation))
+
+    pose = render_forceps(image, rng, task.axis_roll)
+    image_path = task.out_dir / "images" / split / f"{name}.{task.image_ext}"
+    label_path = task.out_dir / "labels" / split / f"{name}.txt"
+    if not cv2.imwrite(str(image_path), image):
+        raise RuntimeError(f"failed to write image: {image_path}")
+    label_path.write_text("\n".join(pose_label_lines(pose, task.width, task.height)) + "\n")
+
+    if task.index < task.preview:
+        preview = render_preview(image, pose)
+        preview_path = task.preview_dir / f"{name}.jpg"
+        if not cv2.imwrite(str(preview_path), preview):
+            raise RuntimeError(f"failed to write preview: {preview_path}")
+
+    return split
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate synthetic retinal forceps pose data.")
     parser.add_argument("--count", type=int, default=100, help="Number of images to generate.")
@@ -844,6 +908,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--preview", type=int, default=0, help="Also render N label-overlay preview images.")
     parser.add_argument("--preview-dir", type=Path, default=Path("runs/synthetic_preview"), help="Directory for previews.")
     parser.add_argument("--image-ext", choices=["jpg", "png"], default="jpg", help="Image file extension.")
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=0,
+        help="Parallel worker processes. Use 0 for auto, 1 for serial generation.",
+    )
     return parser.parse_args()
 
 
@@ -857,8 +927,8 @@ def main() -> int:
         raise SystemExit("--background-rotation must be non-negative")
     if args.axis_roll < 0:
         raise SystemExit("--axis-roll must be non-negative")
+    worker_count = resolve_worker_count(args.workers, args.count)
 
-    rng = np.random.default_rng(args.seed)
     image_dirs = {split: args.out_dir / "images" / split for split in ("train", "val")}
     label_dirs = {split: args.out_dir / "labels" / split for split in ("train", "val")}
     for path in [*image_dirs.values(), *label_dirs.values()]:
@@ -866,40 +936,72 @@ def main() -> int:
     if args.preview:
         args.preview_dir.mkdir(parents=True, exist_ok=True)
 
+    image_seeds = build_image_seeds(args.seed, args.count)
+    tasks = [
+        GenerationTask(
+            index=i,
+            seed=image_seeds[i],
+            count=args.count,
+            out_dir=args.out_dir,
+            width=args.width,
+            height=args.height,
+            background=args.background,
+            background_rotation=args.background_rotation,
+            axis_roll=args.axis_roll,
+            prefix=args.prefix,
+            start_index=args.start_index,
+            val_fraction=args.val_fraction,
+            preview=args.preview,
+            preview_dir=args.preview_dir,
+            image_ext=args.image_ext,
+        )
+        for i in range(args.count)
+    ]
+
     generated = {"train": 0, "val": 0}
     start_time = time.monotonic()
     progress_interval = max(1, min(100, args.count // 100))
+    print(f"Using {worker_count} synthetic generation worker(s)", file=sys.stderr, flush=True)
     print_generation_progress(0, args.count, generated, start_time)
-    for i in range(args.count):
-        split = split_for_index(i, args.count, args.val_fraction)
-        name = f"{args.prefix}_{args.start_index + i:06d}"
-        if args.background:
-            image = load_background(args.background, args.width, args.height, rng)
-        else:
-            image = noisy_retina_background(args.width, args.height, rng)
-        if args.background_rotation > 0:
-            image = rotate_background(image, rng.uniform(-args.background_rotation, args.background_rotation))
 
-        pose = render_forceps(image, rng, args.axis_roll)
-        image_path = image_dirs[split] / f"{name}.{args.image_ext}"
-        label_path = label_dirs[split] / f"{name}.txt"
-        cv2.imwrite(str(image_path), image)
-        label_path.write_text("\n".join(pose_label_lines(pose, args.width, args.height)) + "\n")
-        generated[split] += 1
+    completed = 0
+    if worker_count == 1:
+        for task in tasks:
+            split = generate_one_image(task)
+            generated[split] += 1
+            completed += 1
+            if completed == args.count or completed % progress_interval == 0:
+                print_generation_progress(
+                    completed,
+                    args.count,
+                    generated,
+                    start_time,
+                    final=completed == args.count,
+                )
+    else:
+        with ProcessPoolExecutor(max_workers=worker_count) as executor:
+            futures = [executor.submit(generate_one_image, task) for task in tasks]
+            for future in as_completed(futures):
+                split = future.result()
+                generated[split] += 1
+                completed += 1
+                if completed == args.count or completed % progress_interval == 0:
+                    print_generation_progress(
+                        completed,
+                        args.count,
+                        generated,
+                        start_time,
+                        final=completed == args.count,
+                    )
 
-        if i < args.preview:
-            preview = render_preview(image, pose)
-            cv2.imwrite(str(args.preview_dir / f"{name}.jpg"), preview)
-
-        completed = i + 1
-        if completed == args.count or completed % progress_interval == 0:
-            print_generation_progress(
-                completed,
-                args.count,
-                generated,
-                start_time,
-                final=completed == args.count,
-            )
+    if completed < args.count:
+        print_generation_progress(
+            completed,
+            args.count,
+            generated,
+            start_time,
+            final=True,
+        )
 
     print(
         "Generated "
