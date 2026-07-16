@@ -1,12 +1,20 @@
-import { Line } from '@react-three/drei'
 import { forcepsRenderPose, distanceToRetina } from '../geometry.js'
 import { distanceStatus } from '../ui.js'
+import { Rod, SteelMaterial } from './primitives.jsx'
+import {
+  SHAFT_RADIUS_MM,
+  JAW_BASE_RADIUS_MM,
+  JAW_TIP_RADIUS_MM,
+  TIP_INDICATOR_MM,
+} from '../config.js'
 
-// Minimal forceps: a thin shaft line (trocar -> hinge) and two delicate jaw
-// lines (hinge -> tips) that meet in a proper V. The hinge is placed back along
-// the shaft from the tips, so the jaws are NOT drawn from the tips' midpoint
-// (which would make them point straight out sideways at 180°). Jaw lines are
-// colored by each tip's Distance to Retina.
+// Solid microforceps: a brushed-steel 23G shaft (trocar → hinge) and two
+// tapered jaw prongs meeting in a proper V at the hinge. The hinge is placed
+// back along the shaft from the tips, so the jaws are NOT drawn from the tips'
+// midpoint (which would make them point straight out sideways at 180°).
+// Jaws stay colored by each tip's Distance to Retina — the safety cue lives on
+// the part of the instrument that can touch the wall — with a small emissive
+// bead at each very tip.
 export default function Forceps({ frame }) {
   if (!frame) return null
   const { tip_left, tip_right, trocar } = frame
@@ -14,13 +22,37 @@ export default function Forceps({ frame }) {
 
   return (
     <group>
-      {/* Shaft */}
-      <Line points={[trocar, hinge]} color="#aab4c4" lineWidth={3.5} />
+      {/* Shaft — slight taper toward the hinge */}
+      <Rod a={trocar} b={hinge} radius={SHAFT_RADIUS_MM} radiusTop={SHAFT_RADIUS_MM * 0.8}>
+        <SteelMaterial />
+      </Rod>
 
-      {/* Jaws — delicate lines meeting at the hinge, colored by Distance to Retina */}
+      {/* Hinge collar where the prongs emerge */}
+      <mesh position={hinge}>
+        <sphereGeometry args={[SHAFT_RADIUS_MM * 0.85, 20, 16]} />
+        <SteelMaterial roughness={0.45} />
+      </mesh>
+
+      {/* Jaws — tapered prongs, colored by Distance to Retina */}
       {[[tip_left, tipLeftRender], [tip_right, tipRightRender]].map(([tip, renderTip], i) => {
         const { color } = distanceStatus(distanceToRetina(tip))
-        return <Line key={i} points={[hinge, renderTip]} color={color} lineWidth={2.5} />
+        return (
+          <group key={i}>
+            <Rod a={hinge} b={renderTip} radius={JAW_BASE_RADIUS_MM} radiusTop={JAW_TIP_RADIUS_MM}>
+              <meshStandardMaterial
+                color={color}
+                emissive={color}
+                emissiveIntensity={0.3}
+                metalness={0.35}
+                roughness={0.4}
+              />
+            </Rod>
+            <mesh position={renderTip}>
+              <sphereGeometry args={[TIP_INDICATOR_MM, 12, 10]} />
+              <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.2} />
+            </mesh>
+          </group>
+        )
       })}
     </group>
   )

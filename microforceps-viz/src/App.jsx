@@ -48,8 +48,13 @@ export default function App() {
         >
           <SurgicalScene frame={frame} {...toggles} />
           <CameraRig view={view} snapNonce={snapNonce} />
-          <GizmoHelper alignment="bottom-right" margin={[70, 70]}>
-            <GizmoViewport axisColors={['#e05555', '#55e055', '#5577e0']} labelColor="#fff" />
+          {/* Muted axis tones — orientation aid, not a dev tool */}
+          <GizmoHelper alignment="bottom-right" margin={[64, 64]}>
+            <GizmoViewport
+              axisColors={['#a06a6a', '#6a9a7f', '#6a7ea6']}
+              labelColor="#dfe6ee"
+              axisHeadScale={0.8}
+            />
           </GizmoHelper>
         </Canvas>
         <ViewPresets view={view} onSelect={selectView} />

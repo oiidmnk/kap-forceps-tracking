@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import { Canvas } from '@react-three/fiber'
 import Forceps from '../scene/Forceps.jsx'
 import ProximityWall from '../scene/ProximityWall.jsx'
+import StudioEnvironment from '../scene/StudioEnvironment.jsx'
 import ScopeCamera, { ELEV_DEFAULT, ELEV_MIN, ELEV_MAX } from '../scene/ScopeCamera.jsx'
 import { nearestTip } from '../geometry.js'
 import { distanceStatus } from '../ui.js'
@@ -86,7 +87,8 @@ export default function ProximityScope({ frame }) {
       </div>
 
       <Canvas gl={{ alpha: true }} camera={{ fov: 42, near: 0.01, far: 100 }}>
-        <ambientLight intensity={0.8} />
+        <StudioEnvironment intensity={0.35} />
+        <ambientLight intensity={0.4} />
         <directionalLight position={[4, 6, 4]} intensity={1.1} />
         <directionalLight position={[-4, -2, -3]} intensity={0.4} />
 

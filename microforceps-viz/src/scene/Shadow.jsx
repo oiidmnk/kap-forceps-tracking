@@ -17,12 +17,12 @@ export default function Shadow({ frame, showRays = true }) {
   return (
     <group>
       {showRays && ls && (
-        <Line points={[light_tip, tipLeftRender, ls]} color="#fb7185" lineWidth={1.5} dashed dashSize={0.15} gapSize={0.08} />
+        <Line points={[light_tip, tipLeftRender, ls]} color="#fb7185" lineWidth={1} dashed dashSize={0.15} gapSize={0.08} transparent opacity={0.55} />
       )}
       {showRays && rs && (
-        <Line points={[light_tip, tipRightRender, rs]} color="#f43f5e" lineWidth={1.5} dashed dashSize={0.15} gapSize={0.08} />
+        <Line points={[light_tip, tipRightRender, rs]} color="#f43f5e" lineWidth={1} dashed dashSize={0.15} gapSize={0.08} transparent opacity={0.55} />
       )}
-      {ls && rs && <Line points={[ls, rs]} color="#fb7185" lineWidth={3} />}
+      {ls && rs && <Line points={[ls, rs]} color="#fb7185" lineWidth={2.5} />}
 
       {ls && (
         <mesh position={ls}>

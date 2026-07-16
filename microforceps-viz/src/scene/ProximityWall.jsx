@@ -123,16 +123,16 @@ export default function ProximityWall({ frame }) {
     <group ref={groupRef}>
       <mesh>
         <sphereGeometry args={[WALL_RADIUS_MM, 48, 24, 0, Math.PI * 2, 0, CAP_ANGLE]} />
-        <meshStandardMaterial color="#c04a68" emissive="#5c1524" emissiveIntensity={0.9} roughness={0.6} side={THREE.DoubleSide} />
+        <meshStandardMaterial color="#8e3a4e" emissive="#3d0e1b" emissiveIntensity={0.6} roughness={0.8} side={THREE.DoubleSide} />
       </mesh>
       {LAT_LINES.map((pts, i) => (
         <Line
           key={`lat-${i}`}
           points={pts}
-          color="#ffd9e2"
+          color="#f0c3cf"
           transparent
-          opacity={0.7}
-          lineWidth={1.4}
+          opacity={0.45}
+          lineWidth={1.2}
           depthTest={false}
           renderOrder={1}
         />
@@ -141,10 +141,10 @@ export default function ProximityWall({ frame }) {
         <Line
           key={`lon-${i}`}
           points={pts}
-          color="#ffd9e2"
+          color="#f0c3cf"
           transparent
-          opacity={0.7}
-          lineWidth={1.4}
+          opacity={0.45}
+          lineWidth={1.2}
           depthTest={false}
           renderOrder={1}
         />
