@@ -77,6 +77,18 @@ def oriented_box(center: np.ndarray, direction: np.ndarray, length: float, width
     )
 
 
+def keypoint_polygon(center: np.ndarray, radius: float = 1.8) -> np.ndarray:
+    return np.array(
+        [
+            center + [-radius, -radius],
+            center + [radius, -radius],
+            center + [radius, radius],
+            center + [-radius, radius],
+        ],
+        dtype=np.float32,
+    )
+
+
 def blend_mask(image: np.ndarray, mask: np.ndarray, color: tuple[int, int, int], alpha: float) -> None:
     mix = (mask.astype(np.float32) / 255.0)[:, :, None] * alpha
     color_arr = np.array(color, dtype=np.float32)
@@ -115,6 +127,144 @@ def draw_soft_polygon(
     blend_mask(image, mask, color, alpha)
 
 
+def motion_blur_mask(mask: np.ndarray, direction: np.ndarray, size: int) -> np.ndarray:
+    if size <= 1:
+        return mask
+    size = size + 1 if size % 2 == 0 else size
+    direction = direction / max(float(np.linalg.norm(direction)), 1e-6)
+    center = size // 2
+    endpoint = direction * center
+    kernel_mask = np.zeros((size, size), dtype=np.uint8)
+    cv2.line(
+        kernel_mask,
+        (int(round(center - endpoint[0])), int(round(center - endpoint[1]))),
+        (int(round(center + endpoint[0])), int(round(center + endpoint[1]))),
+        255,
+        thickness=1,
+        lineType=cv2.LINE_AA,
+    )
+    kernel = kernel_mask.astype(np.float32) / 255.0
+    kernel_sum = float(np.sum(kernel))
+    if kernel_sum <= 0:
+        return mask
+    return cv2.filter2D(mask, -1, kernel / kernel_sum)
+
+
+def tapered_segment_polygon(
+    start: np.ndarray,
+    end: np.ndarray,
+    start_width: float,
+    end_width: float,
+) -> np.ndarray:
+    direction = end - start
+    direction = direction / max(float(np.linalg.norm(direction)), 1e-6)
+    normal = np.array([-direction[1], direction[0]], dtype=np.float32)
+    return np.array(
+        [
+            start - normal * start_width / 2.0,
+            end - normal * end_width / 2.0,
+            end + normal * end_width / 2.0,
+            start + normal * start_width / 2.0,
+        ],
+        dtype=np.float32,
+    )
+
+
+def draw_soft_tapered_segment(
+    image: np.ndarray,
+    start: np.ndarray,
+    end: np.ndarray,
+    start_width: float,
+    end_width: float,
+    color: tuple[int, int, int],
+    alpha: float,
+    blur: int = 0,
+    motion_blur: int = 0,
+) -> None:
+    mask = np.zeros(image.shape[:2], dtype=np.uint8)
+    polygon = tapered_segment_polygon(start, end, start_width, end_width)
+    cv2.fillPoly(mask, [np.round(polygon).astype(np.int32)], color=255, lineType=cv2.LINE_AA)
+    if motion_blur > 1:
+        mask = motion_blur_mask(mask, end - start, motion_blur)
+    if blur > 0:
+        blur = blur + 1 if blur % 2 == 0 else blur
+        mask = cv2.GaussianBlur(mask, (blur, blur), 0)
+    blend_mask(image, mask, color, alpha)
+
+
+def draw_metal_segment(
+    image: np.ndarray,
+    start: np.ndarray,
+    end: np.ndarray,
+    start_width: float,
+    end_width: float,
+    rng: np.random.Generator,
+    highlight_side: float = -0.22,
+) -> None:
+    direction = end - start
+    direction = direction / max(float(np.linalg.norm(direction)), 1e-6)
+    normal = np.array([-direction[1], direction[0]], dtype=np.float32)
+    dark_edge = (31, 29, 29)
+    base = (72, 65, 60)
+    highlight = (127, 116, 103)
+
+    draw_soft_tapered_segment(image, start, end, start_width, end_width, dark_edge, 0.88, blur=7)
+    draw_soft_tapered_segment(
+        image,
+        start + normal * start_width * 0.03,
+        end + normal * end_width * 0.03,
+        start_width * 0.78,
+        end_width * 0.78,
+        base,
+        0.92,
+        blur=5,
+    )
+    draw_soft_line(
+        image,
+        np.vstack([start + normal * start_width * 0.42, end + normal * end_width * 0.42]),
+        (21, 20, 21),
+        thickness=max(1, round(min(start_width, end_width) * 0.12)),
+        alpha=0.58,
+        blur=5,
+    )
+    draw_soft_line(
+        image,
+        np.vstack([start - normal * start_width * 0.42, end - normal * end_width * 0.42]),
+        (38, 34, 33),
+        thickness=max(1, round(min(start_width, end_width) * 0.10)),
+        alpha=0.42,
+        blur=5,
+    )
+    draw_soft_line(
+        image,
+        np.vstack(
+            [
+                start + normal * start_width * highlight_side + direction * start_width * 0.35,
+                end + normal * end_width * highlight_side - direction * end_width * 0.35,
+            ]
+        ),
+        highlight,
+        thickness=max(1, round(min(start_width, end_width) * 0.12)),
+        alpha=0.33,
+        blur=5,
+    )
+
+    for _ in range(3):
+        t0 = rng.uniform(0.18, 0.82)
+        t1 = min(0.96, t0 + rng.uniform(0.08, 0.20))
+        p0 = start * (1.0 - t0) + end * t0
+        p1 = start * (1.0 - t1) + end * t1
+        offset = normal * rng.uniform(-0.18, 0.18) * min(start_width, end_width)
+        draw_soft_line(
+            image,
+            np.vstack([p0 + offset, p1 + offset]),
+            (103, 95, 88),
+            thickness=1,
+            alpha=0.16,
+            blur=3,
+        )
+
+
 def noisy_retina_background(width: int, height: int, rng: np.random.Generator) -> np.ndarray:
     yy, xx = np.mgrid[0:height, 0:width].astype(np.float32)
     cx = width * rng.uniform(0.46, 0.53)
@@ -123,19 +273,27 @@ def noisy_retina_background(width: int, height: int, rng: np.random.Generator) -
     rr = np.sqrt((xx - cx) ** 2 + (yy - cy) ** 2) / radius
 
     base = np.zeros((height, width, 3), dtype=np.float32)
-    base[:, :, 2] = rng.uniform(155, 198) - 28 * rr + 10 * (xx / width)
-    base[:, :, 1] = rng.uniform(58, 88) - 10 * rr + 7 * (yy / height)
-    base[:, :, 0] = rng.uniform(16, 34) - 4 * rr
+    base[:, :, 2] = rng.uniform(132, 176) - 13 * rr + 20 * (xx / width)
+    base[:, :, 1] = rng.uniform(50, 78) - 7 * rr + 10 * (yy / height)
+    base[:, :, 0] = rng.uniform(19, 35) - 2 * rr + 4 * (xx / width)
 
-    noise = rng.normal(0, 7, size=(height, width, 1)).astype(np.float32)
-    low_freq = rng.normal(0, 18, size=(max(2, height // 64), max(2, width // 64), 1)).astype(np.float32)
+    noise = rng.normal(0, 5.5, size=(height, width, 1)).astype(np.float32)
+    low_freq = rng.normal(0, 10, size=(max(2, height // 64), max(2, width // 64), 1)).astype(np.float32)
     low_freq = cv2.resize(low_freq, (width, height), interpolation=cv2.INTER_CUBIC)
     if low_freq.ndim == 2:
         low_freq = low_freq[:, :, None]
-    image = np.clip(base + noise + low_freq, 0, 255).astype(np.uint8)
-    image = cv2.GaussianBlur(image, (0, 0), 1.2)
+    warm_mottle = rng.normal(0, 10, size=(max(2, height // 34), max(2, width // 34), 1)).astype(np.float32)
+    warm_mottle = cv2.resize(warm_mottle, (width, height), interpolation=cv2.INTER_CUBIC)
+    if warm_mottle.ndim == 2:
+        warm_mottle = warm_mottle[:, :, None]
+    base[:, :, 1:3] += warm_mottle * np.array([[[0.35, 0.78]]], dtype=np.float32)
+    fine_texture = rng.normal(0, 2.2, size=(height, width, 1)).astype(np.float32)
+    image = np.clip(base + noise + low_freq + fine_texture, 0, 255).astype(np.uint8)
+    image = cv2.GaussianBlur(image, (0, 0), 0.35)
 
     draw_retina_details(image, (cx, cy, radius), rng)
+    sharpened = cv2.addWeighted(image, 1.16, cv2.GaussianBlur(image, (0, 0), 1.6), -0.16, 0)
+    image[:] = np.clip(sharpened, 0, 255).astype(np.uint8)
     apply_scope_border(image, (cx, cy, radius), rng)
     return image
 
@@ -161,15 +319,23 @@ def draw_retina_details(
         rng.uniform(-0.45, 0.45),
         points=28,
     )
-    draw_soft_polygon(image, disc_poly, (34, 151, 216), alpha=rng.uniform(0.62, 0.78), blur=17)
+    draw_soft_polygon(image, disc_poly, (28, 118, 185), alpha=rng.uniform(0.42, 0.58), blur=13)
+    draw_soft_polygon(
+        image,
+        ellipse_polygon(disc + np.array([radius * 0.025, radius * 0.02], dtype=np.float32), radius * 0.045, radius * 0.055, points=20),
+        (51, 153, 211),
+        alpha=0.24,
+        blur=7,
+    )
 
-    for _ in range(rng.integers(9, 15)):
+    for _ in range(rng.integers(14, 22)):
         start_angle = rng.uniform(-2.2, 2.0)
         length = radius * rng.uniform(0.45, 1.05)
-        thickness = int(rng.integers(2, 5))
+        thickness = int(rng.integers(1, 4))
         pts = wavy_vessel(disc, start_angle, length, rng)
-        draw_soft_line(image, pts, (18, 27, 104), thickness=thickness, alpha=rng.uniform(0.32, 0.55), blur=3)
-        if rng.random() < 0.75:
+        draw_soft_line(image, pts, (15, 21, 74), thickness=thickness, alpha=rng.uniform(0.34, 0.58), blur=1)
+        draw_soft_line(image, pts, (11, 14, 45), thickness=max(1, thickness - 1), alpha=0.25, blur=0)
+        if rng.random() < 0.9:
             branch_start = pts[rng.integers(max(2, len(pts) // 4), len(pts) - 1)]
             branch = wavy_vessel(
                 branch_start,
@@ -177,9 +343,9 @@ def draw_retina_details(
                 length * rng.uniform(0.28, 0.52),
                 rng,
             )
-            draw_soft_line(image, branch, (20, 35, 101), thickness=max(1, thickness - 1), alpha=0.32, blur=3)
+            draw_soft_line(image, branch, (14, 22, 65), thickness=max(1, thickness - 1), alpha=0.30, blur=1)
 
-    for _ in range(rng.integers(12, 24)):
+    for _ in range(rng.integers(8, 15)):
         angle = rng.uniform(0, math.tau)
         dist = radius * math.sqrt(rng.uniform(0.03, 0.92))
         center = np.array([cx + math.cos(angle) * dist, cy + math.sin(angle) * dist], dtype=np.float32)
@@ -192,8 +358,26 @@ def draw_retina_details(
             rng.uniform(0, math.tau),
             points=12,
         )
-        color = rng.choice([(18, 48, 78), (33, 72, 118), (12, 28, 56)])
-        draw_soft_polygon(image, spot, color, alpha=rng.uniform(0.08, 0.22), blur=11)
+        color = [(21, 39, 68), (27, 54, 91), (15, 25, 47)][int(rng.integers(0, 3))]
+        draw_soft_polygon(image, spot, color, alpha=rng.uniform(0.05, 0.13), blur=7)
+
+    for _ in range(rng.integers(10, 18)):
+        angle = rng.uniform(-0.35, 0.65)
+        direction = unit(angle)
+        start = np.array(
+            [rng.uniform(-width * 0.05, width * 1.05), rng.uniform(0, height)],
+            dtype=np.float32,
+        )
+        end = start + direction * rng.uniform(width * 0.18, width * 0.42)
+        color = [(28, 45, 83), (23, 36, 70), (34, 58, 90)][int(rng.integers(0, 3))]
+        draw_soft_line(
+            image,
+            np.vstack([start, end]),
+            color,
+            thickness=int(rng.integers(1, 3)),
+            alpha=rng.uniform(0.08, 0.17),
+            blur=5,
+        )
 
 
 def wavy_vessel(
@@ -223,24 +407,30 @@ def apply_scope_border(
     cx, cy, radius = roi
     yy, xx = np.mgrid[0:height, 0:width].astype(np.float32)
     dist = np.sqrt((xx - cx) ** 2 + (yy - cy) ** 2)
-    outside = np.clip((dist - radius * 0.94) / (radius * 0.12), 0, 1)
-    outside = cv2.GaussianBlur(outside, (0, 0), radius * 0.02)
-    dark = np.array((13, 15, 18), dtype=np.float32)
+    outside = np.clip((dist - radius * 1.06) / (radius * 0.18), 0, 1)
+    outside = cv2.GaussianBlur(outside, (0, 0), radius * 0.022)
+    dark = np.array((20, 22, 27), dtype=np.float32)
     image[:] = np.clip(image.astype(np.float32) * (1.0 - outside[:, :, None]) + dark * outside[:, :, None], 0, 255)
 
     rim_mask = np.zeros((height, width), dtype=np.uint8)
-    cv2.circle(rim_mask, (int(cx), int(cy)), int(radius * 0.98), 255, thickness=int(radius * 0.08), lineType=cv2.LINE_AA)
-    rim_mask = cv2.GaussianBlur(rim_mask, (0, 0), radius * 0.04)
-    blend_mask(image, rim_mask, (8, 11, 15), alpha=0.38)
+    cv2.circle(rim_mask, (int(cx), int(cy)), int(radius * 1.08), 255, thickness=int(radius * 0.026), lineType=cv2.LINE_AA)
+    rim_mask = cv2.GaussianBlur(rim_mask, (0, 0), radius * 0.035)
+    blend_mask(image, rim_mask, (15, 17, 22), alpha=0.10)
 
-    for _ in range(rng.integers(2, 5)):
+    corner = np.zeros((height, width), dtype=np.uint8)
+    corner_center = (int(width * rng.uniform(1.02, 1.12)), int(height * rng.uniform(-0.08, 0.05)))
+    cv2.circle(corner, corner_center, int(min(width, height) * rng.uniform(0.20, 0.32)), 255, -1, lineType=cv2.LINE_AA)
+    corner = cv2.GaussianBlur(corner, (0, 0), min(width, height) * 0.035)
+    blend_mask(image, corner, (5, 7, 10), alpha=rng.uniform(0.28, 0.46))
+
+    for _ in range(rng.integers(0, 2)):
         angle = rng.uniform(0, math.tau)
         center = np.array(
             [cx + math.cos(angle) * radius * rng.uniform(1.02, 1.2), cy + math.sin(angle) * radius * rng.uniform(1.02, 1.2)],
             dtype=np.float32,
         )
         glint = ellipse_polygon(center, radius * 0.09, radius * 0.018, angle + math.pi / 2, points=18)
-        draw_soft_polygon(image, glint, (80, 119, 166), alpha=0.18, blur=23)
+        draw_soft_polygon(image, glint, (59, 84, 119), alpha=0.08, blur=25)
 
 
 def load_background(background: Path, width: int, height: int, rng: np.random.Generator) -> np.ndarray:
@@ -347,52 +537,110 @@ def render_forceps(image: np.ndarray, rng: np.random.Generator, axis_roll: float
     shadow_root_a = jaw_root_a + shadow_offset
     shadow_root_b = jaw_root_b + shadow_offset
 
-    shadow_color = (19, 28, 50)
-    shadow_strength = rng.uniform(1.0, 1.3)
-    draw_soft_line(
-        image,
-        np.vstack([shadow_entry, shadow_base]),
-        shadow_color,
-        thickness=int(rng.integers(14, 24)),
-        alpha=min(1.0, 0.24 * shadow_strength),
-        blur=21,
-    )
-    draw_soft_line(
-        image,
-        np.vstack([shadow_root_a, shadow_a]),
-        shadow_color,
-        thickness=int(rng.integers(6, 10)),
-        alpha=min(1.0, 0.28 * shadow_strength),
-        blur=15,
-    )
-    draw_soft_line(
-        image,
-        np.vstack([shadow_root_b, shadow_b]),
-        shadow_color,
-        thickness=int(rng.integers(6, 10)),
-        alpha=min(1.0, 0.28 * shadow_strength),
-        blur=15,
-    )
-
-    shaft_color = (88, 88, 88)
-    jaw_color = shaft_color
-    draw_soft_line(image, np.vstack([entry, base]), shaft_color, thickness=shaft_thickness, alpha=0.94, blur=13)
-    draw_soft_line(image, np.vstack([jaw_root_a, tip_a]), jaw_color, thickness=int(rng.integers(5, 9)), alpha=0.96, blur=7)
-    draw_soft_line(image, np.vstack([jaw_root_b, tip_b]), jaw_color, thickness=int(rng.integers(5, 9)), alpha=0.96, blur=7)
-
     tip_radius_l = rng.uniform(6, 11)
     tip_radius_w = rng.uniform(3, 6)
-    tip_polys = [
+    visual_tip_polys = [
         oriented_box(tip_a, direction, tip_radius_l * 2.0, tip_radius_w * 2.0),
         oriented_box(tip_b, direction, tip_radius_l * 2.0, tip_radius_w * 2.0),
+    ]
+    tip_polys = [
+        keypoint_polygon(tip_a + direction * tip_radius_l * 0.92),
+        keypoint_polygon(tip_b + direction * tip_radius_l * 0.92),
     ]
     shadow_polys = [
         ellipse_polygon(shadow_a, rng.uniform(7, 14), rng.uniform(4, 9), math.atan2(direction[1], direction[0]), points=14),
         ellipse_polygon(shadow_b, rng.uniform(7, 14), rng.uniform(4, 9), math.atan2(direction[1], direction[0]), points=14),
     ]
 
+    shadow_color = (18, 23, 35)
+    shadow_strength = rng.uniform(0.85, 1.18)
+    draw_soft_tapered_segment(
+        image,
+        shadow_entry,
+        shadow_base,
+        shaft_thickness * rng.uniform(0.92, 1.16),
+        shaft_thickness * rng.uniform(0.48, 0.68),
+        shadow_color,
+        alpha=min(1.0, 0.20 * shadow_strength),
+        blur=17,
+        motion_blur=27,
+    )
+    draw_soft_tapered_segment(
+        image,
+        shadow_root_a,
+        shadow_a,
+        rng.uniform(9, 14),
+        rng.uniform(5, 8),
+        shadow_color,
+        alpha=min(1.0, 0.24 * shadow_strength),
+        blur=11,
+        motion_blur=17,
+    )
+    draw_soft_tapered_segment(
+        image,
+        shadow_root_b,
+        shadow_b,
+        rng.uniform(9, 14),
+        rng.uniform(5, 8),
+        shadow_color,
+        alpha=min(1.0, 0.24 * shadow_strength),
+        blur=11,
+        motion_blur=17,
+    )
     for poly in shadow_polys:
-        draw_soft_polygon(image, poly, shadow_color, alpha=min(1.0, 0.16 * shadow_strength), blur=15)
+        draw_soft_polygon(image, poly, shadow_color, alpha=min(1.0, 0.11 * shadow_strength), blur=11)
+
+    shaft_start_width = shaft_thickness * rng.uniform(1.10, 1.26)
+    shaft_end_width = shaft_thickness * rng.uniform(0.72, 0.92)
+    draw_metal_segment(image, entry, base, shaft_start_width, shaft_end_width, rng)
+
+    collar = oriented_box(
+        base - direction * shaft_thickness * 0.05,
+        direction,
+        shaft_thickness * 0.62,
+        shaft_thickness * (0.70 + 0.20 * roll_projection),
+    )
+    draw_soft_polygon(image, collar, (40, 36, 34), alpha=0.82, blur=5)
+    draw_soft_polygon(
+        image,
+        oriented_box(base + direction * shaft_thickness * 0.08, direction, shaft_thickness * 0.42, shaft_thickness * 0.48),
+        (92, 82, 74),
+        alpha=0.35,
+        blur=5,
+    )
+
+    jaw_width_root = rng.uniform(7, 10)
+    jaw_width_tip = rng.uniform(2.4, 4.0)
+    draw_metal_segment(
+        image,
+        jaw_root_a,
+        tip_a,
+        jaw_width_root,
+        jaw_width_tip,
+        rng,
+        highlight_side=0.16,
+    )
+    draw_metal_segment(
+        image,
+        jaw_root_b,
+        tip_b,
+        jaw_width_root,
+        jaw_width_tip,
+        rng,
+        highlight_side=-0.16,
+    )
+
+    for tip_poly in visual_tip_polys:
+        draw_soft_polygon(image, tip_poly, (27, 26, 26), alpha=0.72, blur=3)
+        tip_center = np.mean(tip_poly, axis=0)
+        draw_soft_line(
+            image,
+            np.vstack([tip_center - direction * tip_radius_l * 0.45, tip_center + direction * tip_radius_l * 0.35]),
+            (140, 130, 116),
+            thickness=1,
+            alpha=0.32,
+            blur=3,
+        )
 
     tip_polys = sorted(tip_polys, key=lambda p: float(np.mean(p[:, 0])))
     shadow_polys = sorted(shadow_polys, key=lambda p: float(np.mean(p[:, 0])))

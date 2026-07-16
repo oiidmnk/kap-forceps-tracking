@@ -354,6 +354,12 @@ def main() -> int:
         help="Image path, directory, or glob pattern.",
     )
     parser.add_argument("--conf", type=float, default=0.25)
+    parser.add_argument(
+        "--max-det",
+        type=int,
+        default=300,
+        help="Maximum detections to keep per image after NMS.",
+    )
     parser.add_argument("--imgsz", type=int, default=1024)
     parser.add_argument("--device", default=None, help="e.g. 0, cpu, mps")
     parser.add_argument("--project", default="runs/segment")
@@ -388,6 +394,7 @@ def main() -> int:
             conf=args.conf,
             imgsz=args.imgsz,
             device=args.device,
+            max_det=args.max_det,
             save=False,
             verbose=True,
         )
@@ -425,6 +432,7 @@ def main() -> int:
             conf=args.conf,
             imgsz=args.imgsz,
             device=args.device,
+            max_det=args.max_det,
             save=False,
             verbose=True,
         )
