@@ -45,20 +45,34 @@ export function useTrackingFeed(source = 'mock') {
         try {
           const raw = JSON.parse(ev.data)
           if (raw.positions) {
-            const mapPoint = (p) => [
-              p[0] * EYE_RADIUS_MM,
-              -p[2] * EYE_RADIUS_MM,
-              -p[1] * EYE_RADIUS_MM
-            ]
-            setFrame({
+            // A point may be null when the reconstruction degrades to just the
+            // anchors (trocars/light) — e.g. calibrating before a matching frame
+            // is processed. Carry the last known value forward so the forceps
+            // holds its pose while the trocars still update, instead of crashing.
+            // Reconstruction space is the microscope image frame: x-right,
+            // y-DOWN, z-depth (into the eye). Map to the viz's +Y-up frame:
+            // depth -> +Y, and flip the image y so "lower in the image" reads as
+            // "lower in the viz" instead of being vertically mirrored.
+            const prev = frameRef.current
+            const mapPoint = (p, fallback) =>
+              Array.isArray(p)
+                ? [p[0] * EYE_RADIUS_MM, -p[2] * EYE_RADIUS_MM, p[1] * EYE_RADIUS_MM]
+                : fallback ?? null
+            const next = {
               t: raw.timestamp,
-              tip_left: mapPoint(raw.positions.left_tip_forceps),
-              tip_right: mapPoint(raw.positions.right_tip_forceps),
-              trocar: mapPoint(raw.positions.trocar_forceps),
-              light_tip: mapPoint(raw.positions.tip_light),
-              light_trocar: mapPoint(raw.positions.trocar_light),
+              tip_left: mapPoint(raw.positions.left_tip_forceps, prev?.tip_left),
+              tip_right: mapPoint(raw.positions.right_tip_forceps, prev?.tip_right),
+              trocar: mapPoint(raw.positions.trocar_forceps, prev?.trocar),
+              light_tip: mapPoint(raw.positions.tip_light, prev?.light_tip),
+              light_trocar: mapPoint(raw.positions.trocar_light, prev?.light_trocar),
               confidence: 1.0,
-            })
+            }
+            // Only publish once the forceps pose is known, so downstream
+            // components never receive null tips.
+            if (next.tip_left && next.tip_right && next.trocar) {
+              frameRef.current = next
+              setFrame(next)
+            }
           }
         } catch {
           /* ignore malformed frame */

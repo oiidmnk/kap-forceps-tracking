@@ -7,7 +7,7 @@ import websockets
 
 
 async def main() -> None:
-    async with websockets.connect("ws://127.0.0.1:8765") as ws:
+    async with websockets.connect("ws://127.0.0.1:8765/ws") as ws:
         for _ in range(3):
             msg = json.loads(await ws.recv())
             print(

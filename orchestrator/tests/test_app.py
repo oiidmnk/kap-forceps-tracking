@@ -210,6 +210,104 @@ def test_process_upload_explains_missing_segmentation_weights(tmp_path):
     assert "Put trained weights" in response.json()["detail"]
 
 
+def test_apply_calibration_merges_onto_current_stream_inputs(tmp_path):
+    default_calibration = tmp_path / "default_calibration.json"
+    calibration_path = tmp_path / "calibration.json"
+    default_calibration.write_text(json.dumps(CALIBRATION), encoding="utf-8")
+    put_payloads = []
+
+    current_inputs = {
+        **CALIBRATION,
+        "forceps_rot_up": 0.1,  # stale angle that the calibration must override
+        "left_tip_px": [133.4, 112.9],
+        "left_shadow_px": [209.2, 45.1],
+        "right_tip_px": [157.2, 99.5],
+        "right_shadow_px": [227.7, 44.9],
+    }
+
+    async def stream_handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/inputs"
+        if request.method == "GET":
+            return httpx.Response(200, json={"inputs": current_inputs, "positions": {}})
+        put_payloads.append(json.loads(request.content.decode("utf-8")))
+        return httpx.Response(200, json={"positions": {"left_tip_forceps": [1, 2, 3]}})
+
+    client = TestClient(
+        create_app(
+            calibration_path=calibration_path,
+            default_calibration_source=default_calibration,
+            segmentation_url="http://segmentation.test",
+            stream_url="http://stream.test",
+            stream_transport=httpx.MockTransport(stream_handler),
+        )
+    )
+
+    client.put("/api/calibration", json=dict(CALIBRATION, forceps_rot_up=1.23))
+    response = client.post("/api/apply-calibration")
+
+    assert response.status_code == 200
+    # Calibration wins for the trocar angle; the last detections are preserved.
+    assert put_payloads[-1]["forceps_rot_up"] == 1.23
+    assert put_payloads[-1]["left_tip_px"] == [133.4, 112.9]
+
+
+def test_manual_points_bypasses_segmentation_and_merges_calibration(tmp_path):
+    default_calibration = tmp_path / "default_calibration.json"
+    calibration_path = tmp_path / "calibration.json"
+    default_calibration.write_text(json.dumps(CALIBRATION), encoding="utf-8")
+    put_payloads = []
+
+    async def stream_handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "PUT"
+        assert request.url.path == "/inputs"
+        put_payloads.append(json.loads(request.content.decode("utf-8")))
+        return httpx.Response(200, json={"positions": {"left_tip_forceps": [1, 2, 3]}})
+
+    client = TestClient(
+        create_app(
+            calibration_path=calibration_path,
+            default_calibration_source=default_calibration,
+            segmentation_url="http://segmentation.test",
+            stream_url="http://stream.test",
+            stream_transport=httpx.MockTransport(stream_handler),
+        )
+    )
+
+    manual_points = {
+        "left_tip_px": [133.4, 112.9],
+        "right_tip_px": [157.2, 99.5],
+        "left_shadow_px": [209.2, 45.1],
+        "right_shadow_px": [227.7, 44.9],
+    }
+    response = client.post("/api/manual-points", json=manual_points)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["predicted_points"] == manual_points
+    assert put_payloads[-1]["left_tip_px"] == [133.4, 112.9]
+    assert put_payloads[-1]["eye_radius_mm"] == 24.0  # calibration merged in
+
+
+def test_manual_points_rejects_missing_keys(tmp_path):
+    default_calibration = tmp_path / "default_calibration.json"
+    default_calibration.write_text(json.dumps(CALIBRATION), encoding="utf-8")
+    client = TestClient(
+        create_app(
+            calibration_path=tmp_path / "calibration.json",
+            default_calibration_source=default_calibration,
+            segmentation_url="http://segmentation.test",
+            stream_url="http://stream.test",
+        )
+    )
+
+    incomplete = {"left_tip_px": [1.0, 2.0], "right_tip_px": [3.0, 4.0]}
+    response = client.post("/api/manual-points", json=incomplete)
+
+    assert response.status_code == 400
+    assert "left_shadow_px" in response.json()["detail"]
+    assert "right_shadow_px" in response.json()["detail"]
+
+
 def test_calibration_update_persists(tmp_path):
     default_calibration = tmp_path / "default_calibration.json"
     calibration_path = tmp_path / "calibration.json"

@@ -9,14 +9,16 @@
 <body>
   <main>
     <header class="page-header">
-      <h1>{{ title }}</h1>
+      <div class="page-header-top">
+        <h1>{{ title }}</h1>
+        <div id="service-status" class="service-status">Checking services...</div>
+      </div>
       <p>Upload an image or select a video frame, segment the forceps points, and update the live stream.</p>
     </header>
 
     <div class="layout">
       <section class="panel">
         <h2>Upload</h2>
-        <div id="service-status" class="service-status">Checking services...</div>
         <form id="process-form">
           <div class="grid">
             <label class="wide">Image or video
@@ -40,7 +42,100 @@
     </div>
 
     <section class="panel calibration-panel">
-      <h2>Calibration</h2>
+      <h2>Live calibration</h2>
+      <p class="hint">
+        Zoom until the limbus sits on the solid ring, then set the trocars.
+        Scroll/wheel over the image to zoom in for precision, drag to pan.
+        Freeze the frame before clicking for a still target.
+      </p>
+
+      <div class="labeling-stage" id="labeling-stage">
+        <div class="live-calib-grid">
+          <div class="stage-col">
+            <div class="stage-toolbar">
+              <label class="inline">Camera
+                <select id="camera-select"></select>
+              </label>
+              <button id="camera-start" type="button">Start camera</button>
+              <button id="camera-stop" type="button" class="secondary" disabled>Stop</button>
+              <button id="freeze-toggle" type="button" class="secondary" disabled title="Hotkey: F">Freeze frame</button>
+              <button id="zoom-reset" type="button" class="secondary small">Reset zoom</button>
+              <button id="focus-mode-toggle" type="button" class="secondary" title="Hotkey: G">Focus mode</button>
+            </div>
+            <div class="calib-stage">
+              <canvas id="calib-canvas" width="640" height="480"></canvas>
+            </div>
+          </div>
+
+          <div class="control-col">
+            <div class="control-group ring-display-group">
+              <h3>Ring &amp; display</h3>
+              <label class="inline">Ring radius
+                <input id="ring-radius" type="range" min="0.15" max="0.49" step="0.005" value="0.42">
+              </label>
+              <label class="inline">Vertical stretch
+                <input id="vertical-stretch" type="range" min="0.6" max="1.4" step="0.005" value="1">
+              </label>
+              <button id="stretch-reset" type="button" class="secondary small">Reset stretch</button>
+            </div>
+
+            <div class="control-group">
+              <h3>Trocars</h3>
+              <div class="pick-row">
+                <button id="pick-forceps" type="button" class="pick pick-forceps" title="Hotkey: 1">
+                  <span class="dot"></span><span class="label">Forceps trocar</span>
+                </button>
+                <button id="pick-light" type="button" class="pick pick-light" title="Hotkey: 2">
+                  <span class="dot"></span><span class="label">Light trocar</span>
+                </button>
+              </div>
+              <pre id="calib-readout" class="calib-readout"></pre>
+              <div class="actions">
+                <button id="calib-apply" type="button" disabled>Apply &amp; save</button>
+              </div>
+              <div id="calib-mode-status" class="status"></div>
+            </div>
+
+            <details class="control-group" id="manual-points-details">
+              <summary class="disclosure">
+                <h3>Manual forceps points</h3>
+                <span class="badge">bypasses segmentation</span>
+              </summary>
+              <p class="hint">Hand-clicked stand-ins for segmentation, on this same frame — not saved to calibration.</p>
+              <div class="pick-row">
+                <button id="pick-left-tip" type="button" class="pick pick-left-tip" title="Hotkey: 3">
+                  <span class="dot"></span><span class="label">Left tip</span>
+                </button>
+                <button id="pick-right-tip" type="button" class="pick pick-right-tip" title="Hotkey: 4">
+                  <span class="dot"></span><span class="label">Right tip</span>
+                </button>
+                <button id="pick-left-shadow" type="button" class="pick pick-left-shadow" title="Hotkey: 5">
+                  <span class="dot"></span><span class="label">Left shadow</span>
+                </button>
+                <button id="pick-right-shadow" type="button" class="pick pick-right-shadow" title="Hotkey: 6">
+                  <span class="dot"></span><span class="label">Right shadow</span>
+                </button>
+              </div>
+              <pre id="points-readout" class="calib-readout"></pre>
+              <div class="actions">
+                <button id="points-push" type="button" disabled>Push points to stream</button>
+                <button id="points-clear" type="button" class="secondary">Clear points</button>
+              </div>
+              <div id="points-status" class="status"></div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <video id="calib-video" playsinline muted></video>
+    </section>
+
+    <details class="panel calibration-panel">
+      <summary class="disclosure">
+        <h2>Raw calibration values</h2>
+        <span class="badge">advanced</span>
+      </summary>
+      <p class="hint">Usually set automatically by Live calibration above — edit directly only if you need to.</p>
       <form id="calibration-form">
         <fieldset>
           <legend>Light</legend>
@@ -76,7 +171,7 @@
         </div>
         <div id="calibration-status" class="status"></div>
       </form>
-    </section>
+    </details>
   </main>
 
   <script src="{{ url_for('static', path='app.js') }}" defer></script>

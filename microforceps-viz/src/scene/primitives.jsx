@@ -32,12 +32,10 @@ export function Rod({ a, b, radius = 0.1, radiusTop, children, ...meshProps }) {
   )
 }
 
-// Trocar cannula sitting on the sphere surface: an open-ended tube along the
-// local radial direction plus a hub flange at the outer end — reads as the
-// actual entry port rather than an abstract marker ball. `tint` keeps the
-// per-instrument identity color (steel-blue forceps port, amber light port).
-const CANNULA_TUBE_R = 0.45
-const CANNULA_LEN = 1.6
+// Trocar marker sitting flush on the sphere surface: a single flange ring lying
+// tangent to the surface (no protruding tube), marking the instrument entry
+// port. `tint` keeps the per-instrument identity color (steel-blue forceps
+// port, amber light port).
 const FLANGE_R = 0.62
 
 export function Cannula({ position, tint = '#8fb3d9' }) {
@@ -48,11 +46,7 @@ export function Cannula({ position, tint = '#8fb3d9' }) {
 
   return (
     <group position={position} quaternion={quaternion}>
-      <mesh>
-        <cylinderGeometry args={[CANNULA_TUBE_R, CANNULA_TUBE_R, CANNULA_LEN, 24, 1, true]} />
-        <meshStandardMaterial color={tint} metalness={0.8} roughness={0.35} side={THREE.DoubleSide} />
-      </mesh>
-      <mesh position={[0, CANNULA_LEN / 2, 0]} rotation={[Math.PI / 2, 0, 0]}>
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
         <torusGeometry args={[FLANGE_R, 0.09, 12, 40]} />
         <meshStandardMaterial color={tint} metalness={0.8} roughness={0.4} />
       </mesh>

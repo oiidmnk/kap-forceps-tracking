@@ -4,14 +4,29 @@
   "light_depth_mm": 12.0,
   "light_aim_tilt": 0.0,
   "light_aim_clock": 0.0,
-  "forceps_rot_up": 0.8,
+  "forceps_rot_up": 0.9,
   "forceps_rot_clock": 1.5,
-  "left_tip_px": [133.4, 112.9],
-  "left_shadow_px": [209.2, 45.1],
-  "right_tip_px": [157.2, 99.5],
-  "right_shadow_px": [227.7, 44.9],
-  "eye_center_px": [95.0, 95.0],
-  "eye_radius_px": 210.0,
+  "left_tip_px": [
+    133.4,
+    112.9
+  ],
+  "left_shadow_px": [
+    209.2,
+    45.1
+  ],
+  "right_tip_px": [
+    157.2,
+    99.5
+  ],
+  "right_shadow_px": [
+    227.7,
+    44.9
+  ],
+  "eye_center_px": [
+    95.0,
+    95.0
+  ],
+  "eye_radius_px": 30.0,
   "eye_radius_mm": 24.0,
-  "jaw_length_mm": 3.0
+  "jaw_length_mm": 1.5
 }

@@ -185,6 +185,21 @@ def point_from_instance(instance: dict[str, Any]) -> list[float]:
     )
 
 
+def validate_manual_points(payload: Any) -> dict[str, list[float]]:
+    """Validate hand-clicked points meant to stand in for segmentation output.
+
+    Same four keys ``select_preprocessor_points`` would have produced from a
+    trained model, so callers (the stream merge) can't tell the difference.
+    """
+    if not isinstance(payload, dict):
+        raise OrchestratorError("manual points payload must be a JSON object")
+    required = list(REQUIRED_CLASS_TO_INPUT.values())
+    missing = [key for key in required if key not in payload]
+    if missing:
+        raise OrchestratorError("manual points missing keys: " + ", ".join(missing))
+    return {key: _as_vec2(payload[key], key) for key in required}
+
+
 def select_preprocessor_points(segmentation: dict[str, Any]) -> dict[str, list[float]]:
     instances = segmentation.get("instances")
     if not isinstance(instances, list):
@@ -355,6 +370,17 @@ async def put_stream_inputs(
     return response.json()
 
 
+async def get_stream_inputs(
+    stream_url: str,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> dict[str, Any]:
+    async with httpx.AsyncClient(transport=transport, timeout=30.0) as client:
+        response = await client.get(f"{stream_url.rstrip('/')}/inputs")
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"stream service failed: {_response_detail(response)}")
+    return response.json()
+
+
 def _response_detail(response: httpx.Response) -> str:
     try:
         payload = response.json()
@@ -454,6 +480,75 @@ def create_app(
             return service.state.calibration_store.save(payload)
         except OrchestratorError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @service.post("/api/apply-calibration")
+    async def apply_calibration() -> dict[str, Any]:
+        """Push the saved calibration onto the live stream.
+
+        The stream's ``PUT /inputs`` requires a full input set, so we fetch the
+        current inputs (which hold the last tip/shadow detections) and overlay
+        the calibration on top. This lets a calibration change (e.g. clicking a
+        new trocar) take effect immediately without re-uploading a frame.
+        """
+        try:
+            calibration = service.state.calibration_store.load()
+            current = await get_stream_inputs(
+                service.state.stream_url,
+                service.state.stream_transport,
+            )
+            current_inputs = current.get("inputs") if isinstance(current, dict) else None
+            if not isinstance(current_inputs, dict):
+                raise OrchestratorError(
+                    "stream has no current inputs to update; process a frame first "
+                    "so the tip/shadow points are seeded"
+                )
+            stream_payload = {**current_inputs, **calibration}
+            stream_result = await put_stream_inputs(
+                service.state.stream_url,
+                stream_payload,
+                service.state.stream_transport,
+            )
+        except HTTPException:
+            raise
+        except OrchestratorError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        return {
+            "calibration": calibration,
+            "stream_payload": stream_payload,
+            "stream_result": stream_result,
+        }
+
+    @service.post("/api/manual-points")
+    async def post_manual_points(payload: dict[str, Any]) -> dict[str, Any]:
+        """Push hand-clicked tip/shadow points onto the stream, bypassing segmentation.
+
+        For testing the viz before the YOLO model is trained: takes the four
+        points a trained model would have produced (in the same native camera
+        pixel space as the live-calibration trocars), merges them with the saved
+        calibration exactly like ``/api/process`` merges segmentation output, and
+        pushes the result straight to the stream.
+        """
+        try:
+            points = validate_manual_points(payload)
+            calibration = service.state.calibration_store.load()
+            stream_payload = {**calibration, **points}
+            stream_result = await put_stream_inputs(
+                service.state.stream_url,
+                stream_payload,
+                service.state.stream_transport,
+            )
+        except HTTPException:
+            raise
+        except OrchestratorError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        return {
+            "calibration": calibration,
+            "predicted_points": points,
+            "stream_payload": stream_payload,
+            "stream_result": stream_result,
+        }
 
     @service.post("/api/process")
     async def process_upload(
