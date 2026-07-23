@@ -701,6 +701,19 @@ def pose_inside_circular_view(
     )
 
 
+def circular_object_safety_margin(
+    width: int,
+    height: int,
+    maximum_shadow_blur: float,
+) -> float:
+    view_diameter = float(min(width, height))
+    return max(
+        12.0,
+        view_diameter * 0.07,
+        maximum_shadow_blur * 2.0 + view_diameter * 0.015,
+    )
+
+
 def load_background(background: Path, width: int, height: int, rng: np.random.Generator) -> np.ndarray:
     source = cv2.imread(str(background), cv2.IMREAD_UNCHANGED)
     if source is None:
@@ -1409,7 +1422,11 @@ def generate_one_image(task: GenerationTask) -> str:
         image = rotate_background(image, rng.uniform(-task.background_rotation, task.background_rotation))
 
     clean_background = image
-    placement_margin = max(4.0, min(task.width, task.height) * 0.012)
+    placement_margin = circular_object_safety_margin(
+        task.width,
+        task.height,
+        task.shadow_blur_max,
+    )
     for _ in range(120):
         rendered_image = clean_background.copy()
         pose = render_forceps(

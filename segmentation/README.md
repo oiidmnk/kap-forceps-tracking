@@ -68,8 +68,11 @@ This writes paired PNG images and YOLO pose labels into `data/images/{train,val}
 and `data/labels/{train,val}`. Synthetic images are always rectangular,
 non-transparent RGB PNG files, but the default usable training view is the
 circular microscope field with solid black corners. Both labeled objects are
-constrained to remain inside that circle. Use `--rectangular-view` only when a
-full-frame view is required. Each label has two objects:
+constrained to remain inside that circle with a safety margin based on both the
+view diameter and the maximum requested shadow blur. This keeps the forceps and
+shadow endpoint/root regions visibly away from the mask boundary. Use
+`--rectangular-view` only when a full-frame view is required. Each label has two
+objects:
 
 ```text
 0 <forceps_bbox> <tip_left_x> <tip_left_y> 2 <tip_right_x> <tip_right_y> 2 <jaw_root_x> <jaw_root_y> 2

@@ -10,6 +10,7 @@ from scripts.generate_synthetic_dataset import (
     GenerationTask,
     Pose,
     circular_png_image,
+    circular_object_safety_margin,
     distal_pad_width_profile,
     generate_one_image,
     load_background,
@@ -144,6 +145,20 @@ def test_generate_one_image_writes_black_circular_rgb_png_by_default(tmp_path) -
     assert np.all(saved[0, 0] == 0)
     assert np.all(saved[-1, -1] == 0)
     assert np.any(saved[128, 128] > 0)
+
+    label_lines = (
+        tmp_path / "labels" / "train" / "synthetic_000000.txt"
+    ).read_text().splitlines()
+    assert [line.split()[0] for line in label_lines] == ["0", "1"]
+    center = np.array([(256 - 1) / 2.0, (256 - 1) / 2.0])
+    radius = 256 / 2.0 - 1.0
+    required_clearance = circular_object_safety_margin(256, 256, 18.0)
+    for line in label_lines:
+        values = [float(value) for value in line.split()]
+        for offset in (5, 8, 11):
+            point = np.array([values[offset] * 256, values[offset + 1] * 256])
+            clearance = radius - float(np.linalg.norm(point - center))
+            assert clearance >= required_clearance
 
 
 def test_generate_one_image_can_opt_into_full_rectangular_view(tmp_path) -> None:
@@ -369,3 +384,8 @@ def test_pose_inside_circular_view_checks_both_labeled_objects() -> None:
 
     assert pose_inside_circular_view(inside, 100, 100, margin=2)
     assert not pose_inside_circular_view(shadow_outside, 100, 100, margin=2)
+
+
+def test_circular_object_safety_margin_accounts_for_view_and_blur() -> None:
+    assert circular_object_safety_margin(820, 920, 18.0) == pytest.approx(57.4)
+    assert circular_object_safety_margin(820, 920, 40.0) == pytest.approx(92.3)
