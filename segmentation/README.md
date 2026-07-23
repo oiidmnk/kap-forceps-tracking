@@ -28,7 +28,7 @@ Place hand-segmented data in the train/val folders:
 ```
 data/
 ├── images/
-│   ├── train/          # frame_001.jpg, ...
+│   ├── train/          # frame_001.png, ...
 │   └── val/
 └── labels/
     ├── train/          # frame_001.txt, ...
@@ -64,16 +64,19 @@ Generate retinal-style frames with randomized forceps and shadow positions:
 python scripts/generate_synthetic_dataset.py --count 500 --preview 10
 ```
 
-This writes paired images and YOLO pose labels into `data/images/{train,val}` and
-`data/labels/{train,val}`. Each label has two objects:
+This writes paired PNG images and YOLO pose labels into `data/images/{train,val}`
+and `data/labels/{train,val}`. Synthetic images use a circular, alpha-masked
+microscope field, so the image edges do not contain baked-in black corner
+pixels. Each label has two objects:
 
 ```text
-0 <forceps_bbox> <tip_left_x> <tip_left_y> 2 <tip_right_x> <tip_right_y> 2
-1 <shadow_bbox> <shadow_left_x> <shadow_left_y> 2 <shadow_right_x> <shadow_right_y> 2
+0 <forceps_bbox> <tip_left_x> <tip_left_y> 2 <tip_right_x> <tip_right_y> 2 <jaw_root_x> <jaw_root_y> 2
+1 <shadow_bbox> <shadow_left_x> <shadow_left_y> 2 <shadow_right_x> <shadow_right_y> 2 <shadow_root_x> <shadow_root_y> 2
 ```
 
 The forceps and shadow are trained as separate pose detections, each with two
-keypoints.
+endpoint keypoints plus a root keypoint. Existing two-keypoint pose labels and
+weights must be regenerated/retrained before using this config.
 
 Use `--background path/to/clean_background.png` if you have a clean microscope
 background to composite onto; otherwise the script creates a procedural
@@ -247,8 +250,9 @@ python scripts/benchmark.py \
 
 ## Send one prediction to the 3D preprocessor
 
-The single-image bridge reads the four pose keypoints in order
-`tip_left`, `tip_right`, `shadow_left`, `shadow_right`, merges those pixel
+The single-image bridge reads the endpoint pose keypoints in order
+`tip_left`, `tip_right`, `shadow_left`, `shadow_right`, ignores the root
+keypoints for now, merges those pixel
 coordinates into calibrated geometry values, and writes the JSON file that
 `preprocessing/ws_server.py` already knows how to stream.
 

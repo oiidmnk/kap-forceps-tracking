@@ -54,3 +54,5 @@ segmentation/runs/
 segmentation/*.pt
 CLAUDE.md
 segmentation/models/
+out/
+runs/

@@ -16,6 +16,11 @@ from scripts.common import REPO_ROOT
 DEFAULT_LABELS_ROOT = REPO_ROOT / "data" / "labels"
 DEFAULT_BACKUP_ROOT = REPO_ROOT / "data" / "labels_pose_backup"
 KEYPOINT_CLASSES = ("tip_left", "tip_right", "shadow_left", "shadow_right")
+POSE_KEYPOINTS_PER_OBJECT = 3
+POSE_ENDPOINT_CLASSES = {
+    0: (0, 1),
+    1: (2, 3),
+}
 
 
 def same_path(left: Path, right: Path) -> bool:
@@ -41,7 +46,7 @@ def square_polygon(cx: float, cy: float, size: float) -> list[float]:
 
 def parse_pose_line(line: str, label_path: Path, line_no: int) -> list[float]:
     parts = line.split()
-    expected_values = 5 + len(KEYPOINT_CLASSES) * 3
+    expected_values = 5 + POSE_KEYPOINTS_PER_OBJECT * 3
     if len(parts) != expected_values:
         raise ValueError(
             f"{label_path}:{line_no}: expected {expected_values} pose values, got {len(parts)}"
@@ -70,9 +75,14 @@ def convert_pose_text(
             continue
 
         values = parse_pose_line(line, label_path, line_no)
+        pose_class_id = int(values[0])
+        if values[0] != pose_class_id or pose_class_id not in POSE_ENDPOINT_CLASSES:
+            raise ValueError(
+                f"{label_path}:{line_no}: expected pose class 0 or 1, got {values[0]}"
+            )
         keypoints = values[5:]
-        for class_id in range(len(KEYPOINT_CLASSES)):
-            x, y, visibility = keypoints[class_id * 3 : class_id * 3 + 3]
+        for keypoint_index, class_id in enumerate(POSE_ENDPOINT_CLASSES[pose_class_id]):
+            x, y, visibility = keypoints[keypoint_index * 3 : keypoint_index * 3 + 3]
             if visibility < min_visibility:
                 continue
             if not 0.0 <= x <= 1.0 or not 0.0 <= y <= 1.0:
@@ -153,8 +163,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Convert YOLO pose/keypoint labels into YOLO segmentation labels. "
-            "Each keypoint becomes a small square polygon with class IDs: "
-            "0 tip_left, 1 tip_right, 2 shadow_left, 3 shadow_right."
+            "Each endpoint keypoint becomes a small square polygon with class IDs: "
+            "0 tip_left, 1 tip_right, 2 shadow_left, 3 shadow_right. "
+            "The jaw_root/shadow_root pose keypoints are ignored."
         )
     )
     parser.add_argument("--input-root", type=Path, default=DEFAULT_LABELS_ROOT)

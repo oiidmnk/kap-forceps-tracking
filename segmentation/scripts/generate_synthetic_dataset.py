@@ -3,8 +3,8 @@
 
 The generated labels follow YOLO pose format with two objects per image:
 
-    0 cx cy w h tip_left_x tip_left_y v tip_right_x tip_right_y v
-    1 cx cy w h shadow_left_x shadow_left_y v shadow_right_x shadow_right_y v
+    0 cx cy w h tip_left_x tip_left_y v tip_right_x tip_right_y v jaw_root_x jaw_root_y v
+    1 cx cy w h shadow_left_x shadow_left_y v shadow_right_x shadow_right_y v shadow_root_x shadow_root_y v
 """
 
 from __future__ import annotations
@@ -27,10 +27,11 @@ if __package__ is None or __package__ == "":
 
 from scripts.check_labels import CLASS_COLORS
 
-FORCEPS_KEYPOINT_NAMES = ("tip_left", "tip_right")
-SHADOW_KEYPOINT_NAMES = ("shadow_left", "shadow_right")
+FORCEPS_KEYPOINT_NAMES = ("tip_left", "tip_right", "jaw_root")
+SHADOW_KEYPOINT_NAMES = ("shadow_left", "shadow_right", "shadow_root")
 FORCEPS_CLASS_ID = 0
 SHADOW_CLASS_ID = 1
+EXPECTED_POSE_LABEL_COLUMNS = 14
 
 
 @dataclass(frozen=True)
@@ -55,7 +56,6 @@ class GenerationTask:
     val_fraction: float
     preview: int
     preview_dir: Path
-    image_ext: str
 
 
 def unit(angle: float) -> np.ndarray:
@@ -110,6 +110,27 @@ def keypoint_polygon(center: np.ndarray, radius: float = 1.8) -> np.ndarray:
         ],
         dtype=np.float32,
     )
+
+
+def point_segment_distances(points: np.ndarray, start: np.ndarray, end: np.ndarray) -> np.ndarray:
+    segment = end - start
+    segment_length_sq = float(np.dot(segment, segment))
+    if segment_length_sq <= 1e-6:
+        return np.linalg.norm(points - start, axis=1)
+    t = np.clip(((points - start) @ segment) / segment_length_sq, 0.0, 1.0)
+    closest = start + t[:, None] * segment
+    return np.linalg.norm(points - closest, axis=1)
+
+
+def shadow_clears_forceps(
+    shadow_points: np.ndarray,
+    forceps_segments: list[tuple[np.ndarray, np.ndarray]],
+    min_distance: float,
+) -> bool:
+    for start, end in forceps_segments:
+        if np.any(point_segment_distances(shadow_points, start, end) < min_distance):
+            return False
+    return True
 
 
 def blend_mask(image: np.ndarray, mask: np.ndarray, color: tuple[int, int, int], alpha: float) -> None:
@@ -430,21 +451,16 @@ def apply_scope_border(
     cx, cy, radius = roi
     yy, xx = np.mgrid[0:height, 0:width].astype(np.float32)
     dist = np.sqrt((xx - cx) ** 2 + (yy - cy) ** 2)
-    outside = np.clip((dist - radius * 1.06) / (radius * 0.18), 0, 1)
-    outside = cv2.GaussianBlur(outside, (0, 0), radius * 0.022)
-    dark = np.array((20, 22, 27), dtype=np.float32)
-    image[:] = np.clip(image.astype(np.float32) * (1.0 - outside[:, :, None]) + dark * outside[:, :, None], 0, 255)
+    edge_vignette = np.clip((dist - radius * 0.84) / (radius * 0.22), 0, 1)
+    edge_vignette = cv2.GaussianBlur(edge_vignette, (0, 0), radius * 0.022)
+    warm_edge = np.array((42, 44, 76), dtype=np.float32)
+    mix = edge_vignette[:, :, None] * 0.16
+    image[:] = np.clip(image.astype(np.float32) * (1.0 - mix) + warm_edge * mix, 0, 255)
 
     rim_mask = np.zeros((height, width), dtype=np.uint8)
     cv2.circle(rim_mask, (int(cx), int(cy)), int(radius * 1.08), 255, thickness=int(radius * 0.026), lineType=cv2.LINE_AA)
     rim_mask = cv2.GaussianBlur(rim_mask, (0, 0), radius * 0.035)
-    blend_mask(image, rim_mask, (15, 17, 22), alpha=0.10)
-
-    corner = np.zeros((height, width), dtype=np.uint8)
-    corner_center = (int(width * rng.uniform(1.02, 1.12)), int(height * rng.uniform(-0.08, 0.05)))
-    cv2.circle(corner, corner_center, int(min(width, height) * rng.uniform(0.20, 0.32)), 255, -1, lineType=cv2.LINE_AA)
-    corner = cv2.GaussianBlur(corner, (0, 0), min(width, height) * 0.035)
-    blend_mask(image, corner, (5, 7, 10), alpha=rng.uniform(0.28, 0.46))
+    blend_mask(image, rim_mask, (58, 48, 73), alpha=0.07)
 
     for _ in range(rng.integers(0, 2)):
         angle = rng.uniform(0, math.tau)
@@ -454,6 +470,33 @@ def apply_scope_border(
         )
         glint = ellipse_polygon(center, radius * 0.09, radius * 0.018, angle + math.pi / 2, points=18)
         draw_soft_polygon(image, glint, (59, 84, 119), alpha=0.08, blur=25)
+
+
+def circular_alpha_mask(width: int, height: int, feather: float | None = None) -> np.ndarray:
+    yy, xx = np.mgrid[0:height, 0:width].astype(np.float32)
+    cx = (width - 1) / 2.0
+    cy = (height - 1) / 2.0
+    radius = max(1.0, min(width, height) / 2.0 - 1.0)
+    feather_width = feather if feather is not None else max(1.0, min(width, height) * 0.012)
+    dist = np.sqrt((xx - cx) ** 2 + (yy - cy) ** 2)
+    alpha = np.clip((radius - dist) / feather_width, 0.0, 1.0)
+    return np.round(alpha * 255).astype(np.uint8)
+
+
+def circular_png_image(image: np.ndarray) -> np.ndarray:
+    height, width = image.shape[:2]
+    alpha = circular_alpha_mask(width, height)
+    rgba = cv2.cvtColor(image, cv2.COLOR_BGR2BGRA)
+    outside = alpha == 0
+    if np.any(outside):
+        visible = image[alpha > 0]
+        if visible.size:
+            fill_color = np.round(np.median(visible, axis=0)).astype(np.uint8)
+        else:
+            fill_color = np.array([48, 58, 96], dtype=np.uint8)
+        rgba[outside, :3] = fill_color
+    rgba[:, :, 3] = alpha
+    return rgba
 
 
 def load_background(background: Path, width: int, height: int, rng: np.random.Generator) -> np.ndarray:
@@ -500,6 +543,8 @@ def rotate_background(image: np.ndarray, angle_degrees: float) -> np.ndarray:
 
 def render_forceps(image: np.ndarray, rng: np.random.Generator, axis_roll: float) -> Pose:
     height, width = image.shape[:2]
+    is_large_forceps = rng.random() < 0.30
+    is_far_shadow = rng.random() < 0.30
     for _ in range(200):
         tip_center = np.array(
             [
@@ -510,8 +555,13 @@ def render_forceps(image: np.ndarray, rng: np.random.Generator, axis_roll: float
         )
         direction = unit(rng.uniform(math.radians(188), math.radians(235)))
         normal = np.array([-direction[1], direction[0]], dtype=np.float32)
-        jaw_len = rng.uniform(width * 0.105, width * 0.18)
-        jaw_open = rng.uniform(width * 0.045, width * 0.095)
+        if is_large_forceps:
+            jaw_len = rng.uniform(width * 0.15, width * 0.24)
+            jaw_open = rng.uniform(width * 0.065, width * 0.125)
+        else:
+            jaw_len = rng.uniform(width * 0.105, width * 0.18)
+            jaw_open = rng.uniform(width * 0.045, width * 0.095)
+        shaft_thickness = int(rng.integers(36, 59) if is_large_forceps else rng.integers(28, 43))
         roll_angle = math.radians(rng.uniform(-axis_roll, axis_roll)) if axis_roll > 0 else 0.0
         roll_projection = 0.18 + 0.82 * abs(math.cos(roll_angle))
         shadow_roll_projection = 0.06 + 0.94 * abs(math.cos(roll_angle))
@@ -529,10 +579,16 @@ def render_forceps(image: np.ndarray, rng: np.random.Generator, axis_roll: float
             + direction * (jaw_len - roll_depth_shift / 2.0)
             - normal * projected_open / 2.0
         )
-        shadow_offset = np.array(
-            [rng.uniform(width * 0.05, width * 0.20), rng.uniform(-height * 0.11, height * 0.04)],
-            dtype=np.float32,
-        )
+        if is_far_shadow:
+            shadow_offset = np.array(
+                [rng.uniform(width * 0.14, width * 0.34), rng.uniform(-height * 0.18, height * 0.08)],
+                dtype=np.float32,
+            )
+        else:
+            shadow_offset = np.array(
+                [rng.uniform(width * 0.05, width * 0.20), rng.uniform(-height * 0.11, height * 0.04)],
+                dtype=np.float32,
+            )
         shadow_center = base + direction * jaw_len + shadow_offset
         shadow_a = (
             shadow_center
@@ -544,24 +600,33 @@ def render_forceps(image: np.ndarray, rng: np.random.Generator, axis_roll: float
             - direction * (roll_depth_shift / 2.0)
             - normal * projected_shadow_open / 2.0
         )
-        all_centers = np.vstack([tip_a, tip_b, shadow_a, shadow_b])
-        if np.all((all_centers[:, 0] > 8) & (all_centers[:, 0] < width - 8) & (all_centers[:, 1] > 8) & (all_centers[:, 1] < height - 8)):
+        margin = 24 if is_large_forceps else 18
+        shadow_base = base + shadow_offset
+        all_centers = np.vstack([tip_a, tip_b, base, shadow_a, shadow_b, shadow_base])
+        entry = base - direction * (max(width, height) * 0.72)
+        shadow_points = np.vstack([shadow_a, shadow_b, shadow_base])
+        forceps_segments = [(entry, base), (base, tip_a), (base, tip_b)]
+        min_shadow_clearance = max(shaft_thickness * 0.72, jaw_open * 0.28, width * 0.025)
+        in_frame = np.all((all_centers[:, 0] > margin) & (all_centers[:, 0] < width - margin) & (all_centers[:, 1] > margin) & (all_centers[:, 1] < height - margin))
+        shadow_visible = shadow_clears_forceps(
+            shadow_points,
+            forceps_segments,
+            min_shadow_clearance,
+        )
+        if in_frame and shadow_visible:
             break
     else:
         raise RuntimeError("could not sample a valid forceps pose")
 
-    entry = base - direction * (max(width, height) * 0.72)
-    shaft_thickness = int(rng.integers(28, 42))
     jaw_root_offset = normal * (shaft_thickness * (0.22 + 0.12 * roll_projection))
     jaw_root_a = base + jaw_root_offset
     jaw_root_b = base - jaw_root_offset
-    shadow_base = base + shadow_offset
     shadow_entry = entry + shadow_offset
     shadow_root_a = jaw_root_a + shadow_offset
     shadow_root_b = jaw_root_b + shadow_offset
 
-    tip_radius_l = rng.uniform(6, 11)
-    tip_radius_w = rng.uniform(3, 6)
+    tip_radius_l = rng.uniform(8, 14) if is_large_forceps else rng.uniform(6, 11)
+    tip_radius_w = rng.uniform(4, 7) if is_large_forceps else rng.uniform(3, 6)
     visual_tip_polys = [
         oriented_box(tip_a, direction, tip_radius_l * 2.0, tip_radius_w * 2.0),
         oriented_box(tip_b, direction, tip_radius_l * 2.0, tip_radius_w * 2.0),
@@ -570,10 +635,14 @@ def render_forceps(image: np.ndarray, rng: np.random.Generator, axis_roll: float
         keypoint_polygon(tip_a + direction * tip_radius_l * 0.92),
         keypoint_polygon(tip_b + direction * tip_radius_l * 0.92),
     ]
+    tip_polys = sorted(tip_polys, key=lambda p: float(np.mean(p[:, 0])))
+    tip_polys.append(keypoint_polygon(base))
     shadow_polys = [
         ellipse_polygon(shadow_a, rng.uniform(7, 14), rng.uniform(4, 9), math.atan2(direction[1], direction[0]), points=14),
         ellipse_polygon(shadow_b, rng.uniform(7, 14), rng.uniform(4, 9), math.atan2(direction[1], direction[0]), points=14),
     ]
+    shadow_polys = sorted(shadow_polys, key=lambda p: float(np.mean(p[:, 0])))
+    shadow_polys.append(keypoint_polygon(shadow_base))
 
     shadow_color = (18, 23, 35)
     shadow_strength = rng.uniform(0.85, 1.18)
@@ -632,8 +701,8 @@ def render_forceps(image: np.ndarray, rng: np.random.Generator, axis_roll: float
         blur=5,
     )
 
-    jaw_width_root = rng.uniform(7, 10)
-    jaw_width_tip = rng.uniform(2.4, 4.0)
+    jaw_width_root = rng.uniform(shaft_thickness * 0.20, shaft_thickness * 0.28)
+    jaw_width_tip = rng.uniform(shaft_thickness * 0.07, shaft_thickness * 0.10)
     draw_metal_segment(
         image,
         jaw_root_a,
@@ -665,8 +734,6 @@ def render_forceps(image: np.ndarray, rng: np.random.Generator, axis_roll: float
             blur=3,
         )
 
-    tip_polys = sorted(tip_polys, key=lambda p: float(np.mean(p[:, 0])))
-    shadow_polys = sorted(shadow_polys, key=lambda p: float(np.mean(p[:, 0])))
     return Pose(tip_polygons=tip_polys, shadow_polygons=shadow_polys)
 
 
@@ -718,12 +785,20 @@ def pose_label_line(
 
 
 def pose_label_lines(pose: Pose, width: int, height: int, visibility: int = 2) -> list[str]:
-    forceps_polygons = [pose.tip_polygons[0], pose.tip_polygons[1]]
-    shadow_polygons = [pose.shadow_polygons[0], pose.shadow_polygons[1]]
-    return [
+    forceps_polygons = [pose.tip_polygons[0], pose.tip_polygons[1], pose.tip_polygons[2]]
+    shadow_polygons = [pose.shadow_polygons[0], pose.shadow_polygons[1], pose.shadow_polygons[2]]
+    lines = [
         pose_label_line(FORCEPS_CLASS_ID, forceps_polygons, width, height, visibility),
         pose_label_line(SHADOW_CLASS_ID, shadow_polygons, width, height, visibility),
     ]
+    for line in lines:
+        column_count = len(line.split())
+        if column_count != EXPECTED_POSE_LABEL_COLUMNS:
+            raise RuntimeError(
+                "invalid YOLO pose label column count: "
+                f"expected {EXPECTED_POSE_LABEL_COLUMNS}, got {column_count}"
+            )
+    return lines
 
 
 def normalized_box_xyxy(
@@ -753,14 +828,14 @@ def render_preview(image: np.ndarray, pose: Pose) -> np.ndarray:
             FORCEPS_CLASS_ID,
             "forceps",
             FORCEPS_KEYPOINT_NAMES,
-            [pose.tip_polygons[0], pose.tip_polygons[1]],
+            [pose.tip_polygons[0], pose.tip_polygons[1], pose.tip_polygons[2]],
             CLASS_COLORS[0],
         ),
         (
             SHADOW_CLASS_ID,
             "shadow",
             SHADOW_KEYPOINT_NAMES,
-            [pose.shadow_polygons[0], pose.shadow_polygons[1]],
+            [pose.shadow_polygons[0], pose.shadow_polygons[1], pose.shadow_polygons[2]],
             CLASS_COLORS[2],
         ),
     ]
@@ -865,15 +940,15 @@ def generate_one_image(task: GenerationTask) -> str:
         image = rotate_background(image, rng.uniform(-task.background_rotation, task.background_rotation))
 
     pose = render_forceps(image, rng, task.axis_roll)
-    image_path = task.out_dir / "images" / split / f"{name}.{task.image_ext}"
+    image_path = task.out_dir / "images" / split / f"{name}.png"
     label_path = task.out_dir / "labels" / split / f"{name}.txt"
-    if not cv2.imwrite(str(image_path), image):
+    if not cv2.imwrite(str(image_path), circular_png_image(image)):
         raise RuntimeError(f"failed to write image: {image_path}")
     label_path.write_text("\n".join(pose_label_lines(pose, task.width, task.height)) + "\n")
 
     if task.index < task.preview:
         preview = render_preview(image, pose)
-        preview_path = task.preview_dir / f"{name}.jpg"
+        preview_path = task.preview_dir / f"{name}.png"
         if not cv2.imwrite(str(preview_path), preview):
             raise RuntimeError(f"failed to write preview: {preview_path}")
 
@@ -907,7 +982,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--val-fraction", type=float, default=0.15, help="Fraction of generated images written to val/.")
     parser.add_argument("--preview", type=int, default=0, help="Also render N label-overlay preview images.")
     parser.add_argument("--preview-dir", type=Path, default=Path("runs/synthetic_preview"), help="Directory for previews.")
-    parser.add_argument("--image-ext", choices=["jpg", "png"], default="jpg", help="Image file extension.")
+    parser.add_argument(
+        "--image-ext",
+        choices=["png"],
+        default="png",
+        help="Deprecated compatibility option; synthetic dataset images are always PNG.",
+    )
     parser.add_argument(
         "--workers",
         type=int,
@@ -953,7 +1033,6 @@ def main() -> int:
             val_fraction=args.val_fraction,
             preview=args.preview,
             preview_dir=args.preview_dir,
-            image_ext=args.image_ext,
         )
         for i in range(args.count)
     ]

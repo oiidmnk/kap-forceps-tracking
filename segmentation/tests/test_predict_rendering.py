@@ -46,11 +46,11 @@ def test_pose_renderer_draws_class_aware_keypoints() -> None:
         keypoints=SimpleNamespace(
             xy=FakeTensor(
                 [
-                    [[20, 20], [30, 20]],
-                    [[70, 70], [80, 70]],
+                    [[20, 20], [30, 20], [25, 30]],
+                    [[70, 70], [80, 70], [75, 80]],
                 ]
             ),
-            conf=FakeTensor([[0.9, 0.9], [0.9, 0.9]]),
+            conf=FakeTensor([[0.9, 0.9, 0.9], [0.9, 0.9, 0.9]]),
         ),
         names={0: "forceps", 1: "shadow"},
     )
@@ -58,4 +58,6 @@ def test_pose_renderer_draws_class_aware_keypoints() -> None:
     rendered = render_pose_result(result)
 
     assert tuple(rendered[20, 20]) == CLASS_COLORS[0]
+    assert tuple(rendered[30, 25]) == CLASS_COLORS[0]
     assert tuple(rendered[70, 70]) == CLASS_COLORS[1]
+    assert tuple(rendered[80, 75]) == CLASS_COLORS[1]

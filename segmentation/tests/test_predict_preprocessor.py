@@ -30,7 +30,7 @@ def fake_pose_result(keypoints, classes=None, box_conf=None, keypoint_conf=None)
     classes = classes if classes is not None else list(range(len(keypoints)))
     box_conf = box_conf if box_conf is not None else [0.5] * len(keypoints)
     keypoint_conf = keypoint_conf if keypoint_conf is not None else [
-        [1.0, 1.0] for _ in keypoints
+        [1.0] * len(detection_keypoints) for detection_keypoints in keypoints
     ]
     return SimpleNamespace(
         boxes=SimpleNamespace(cls=FakeTensor(classes), conf=FakeTensor(box_conf)),
@@ -51,6 +51,32 @@ def test_extracts_pose_keypoints_in_preprocessor_order() -> None:
             [
                 [30, 31],
                 [40, 41],
+            ]
+        ]
+    )
+
+    points = extract_preprocessor_points(result)
+
+    assert points == {
+        "left_tip_px": [10.0, 11.0],
+        "right_tip_px": [20.0, 21.0],
+        "left_shadow_px": [30.0, 31.0],
+        "right_shadow_px": [40.0, 41.0],
+    }
+
+
+def test_extracts_pose_endpoints_and_ignores_root_keypoints() -> None:
+    result = fake_pose_result(
+        [
+            [
+                [10, 11],
+                [20, 21],
+                [15, 31],
+            ],
+            [
+                [30, 31],
+                [40, 41],
+                [35, 51],
             ]
         ]
     )

@@ -9,7 +9,7 @@ names:
   1: shadow
 
 # Keypoint order:
-#   forceps: 0 = tip_left, 1 = tip_right
-#   shadow:  0 = shadow_left, 1 = shadow_right
-kpt_shape: [2, 3]
-flip_idx: [1, 0]
+#   forceps: 0 = tip_left, 1 = tip_right, 2 = jaw_root
+#   shadow:  0 = shadow_left, 1 = shadow_right, 2 = shadow_root
+kpt_shape: [3, 3]
+flip_idx: [1, 0, 2]

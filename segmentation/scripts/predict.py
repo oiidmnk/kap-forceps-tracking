@@ -33,8 +33,8 @@ CLASS_COLORS = [
     (255, 180, 0),
 ]
 POSE_KEYPOINT_NAMES = {
-    0: ("tip_left", "tip_right"),
-    1: ("shadow_left", "shadow_right"),
+    0: ("tip_left", "tip_right", "jaw_root"),
+    1: ("shadow_left", "shadow_right", "shadow_root"),
 }
 
 

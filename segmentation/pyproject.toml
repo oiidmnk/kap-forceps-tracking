@@ -26,6 +26,10 @@ auge-prepare-preprocessing = "scripts.prepare_preprocessed_dataset:main"
 auge-check-labels = "scripts.check_labels:main"
 auge-split-dataset = "scripts.split_dataset:main"
 auge-generate-synthetic = "scripts.generate_synthetic_dataset:main"
+auge-adaptive-threshold-forceps = "scripts.adaptive_threshold_forceps:main"
+auge-apply-adaptive-mask = "scripts.overlay_adaptive_mask:main"
+auge-inpaint-retinal-vessels = "scripts.inpaint_retinal_vessels:main"
+auge-extract-avi-frames = "scripts.extract_avi_frames:main"
 
 [build-system]
 requires = ["setuptools>=68.0"]
