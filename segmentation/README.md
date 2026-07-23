@@ -65,9 +65,11 @@ python scripts/generate_synthetic_dataset.py --count 500 --preview 10
 ```
 
 This writes paired PNG images and YOLO pose labels into `data/images/{train,val}`
-and `data/labels/{train,val}`. Synthetic images use a circular, alpha-masked
-microscope field, so the image edges do not contain baked-in black corner
-pixels. Each label has two objects:
+and `data/labels/{train,val}`. Synthetic images are always rectangular,
+non-transparent RGB PNG files, but the default usable training view is the
+circular microscope field with solid black corners. Both labeled objects are
+constrained to remain inside that circle. Use `--rectangular-view` only when a
+full-frame view is required. Each label has two objects:
 
 ```text
 0 <forceps_bbox> <tip_left_x> <tip_left_y> 2 <tip_right_x> <tip_right_y> 2 <jaw_root_x> <jaw_root_y> 2
@@ -78,17 +80,73 @@ The forceps and shadow are trained as separate pose detections, each with two
 endpoint keypoints plus a root keypoint. Existing two-keypoint pose labels and
 weights must be regenerated/retrained before using this config.
 
-Use `--background path/to/clean_background.png` if you have a clean microscope
-background to composite onto; otherwise the script creates a procedural
-retina-like background.
+Use `--background` with one or more clean microscope images to sample a
+background uniformly for every generated frame; otherwise the script creates a
+procedural retina-like background. The option can also be repeated:
+
+```bash
+python scripts/generate_synthetic_dataset.py \
+  --count 500 \
+  --background backgrounds/retina_01.png backgrounds/retina_02.png \
+  --background backgrounds/retina_03.png
+```
+
+Each selected background still receives an independent crop, rotation, blur,
+gain, and brightness offset.
 
 By default, each retina/background is randomly rotated before the forceps are
 drawn. Use `--background-rotation 0` to disable it, or pass a smaller value such
 as `--background-rotation 30` for mild rotation variants.
 
-The forceps/shadow pair also gets a random shaft-axis roll by default, changing
-the apparent jaw opening and shadow geometry. Use `--axis-roll 0` to disable it,
-or pass a smaller value such as `--axis-roll 45` for milder roll variants.
+Completed images are also sampled from discrete quarter-turn rotations together
+with their YOLO keypoints, varying the forceps entry side as well as the retinal
+orientation. The default set is exactly `90`, `180`, and `270` degrees. The
+circular field is rotation-invariant, so quarter-turn variants fill the usable
+round view without internal letterboxing; everything outside the circle remains
+solid black:
+
+```bash
+python scripts/generate_synthetic_dataset.py \
+  --image-rotations 90 180 270
+```
+
+Use `--image-rotations 0` to keep the forceps entering from the original
+bottom-right region.
+
+Forceps roll and projected-shadow roll are sampled independently by default.
+The generator deliberately mixes forceps-only, shadow-only, independently
+rolled, and physically correlated roll cases. This changes jaw foreshortening,
+which jaw appears nearer, metal highlights, and the projected shadow opening.
+Use `--axis-roll 0` or `--shadow-axis-roll 0` to disable either source of roll,
+or pass a smaller value such as `--axis-roll 45` for milder variants.
+
+Shadow and gripping-tip scale also vary independently. The defaults include
+large penumbras and enlarged distal tips. Tune their ranges explicitly:
+
+```bash
+python scripts/generate_synthetic_dataset.py \
+  --count 500 \
+  --axis-roll 180 \
+  --shadow-axis-roll 180 \
+  --shadow-scale 0.9 2.1 \
+  --shadow-opacity 0.4 0.7 \
+  --shadow-blur 2 22 \
+  --tip-scale 0.85 2.0 \
+  --preview 12
+```
+
+Preview overlays print the sampled roll angles and scale factors at the bottom
+of each image, making it easy to audit that a batch covers the intended cases.
+`--shadow-opacity MIN MAX` (also available as `--shadow-visibility`) controls
+how visible shadows are on a `0` to `1` scale. Every sampled opacity remains
+inside the supplied bounds; use equal values such as `--shadow-opacity 0.6 0.6`
+for constant shadow visibility.
+
+`--shadow-blur MIN MAX` (also available as `--shadow-softness`) controls the
+Gaussian blur sigma in output pixels. Use `--shadow-blur 0 3` for mostly
+hard-edged shadows, `--shadow-blur 12 28` for soft shadows, or equal values for
+a constant blur. Far shadows are biased toward the blurrier end and near
+shadows toward the sharper end, without exceeding the requested range.
 
 Train with a pose checkpoint and the pose config:
 
