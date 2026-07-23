@@ -94,8 +94,9 @@ python scripts/generate_synthetic_dataset.py \
   --background backgrounds/retina_03.png
 ```
 
-Each selected background still receives an independent crop, rotation, blur,
-gain, and brightness offset.
+Each selected background still receives an independent crop, rotation, and
+blur. Its brightness is otherwise preserved; the generator does not apply
+random gain or brightness offsets.
 
 By default, each retina/background is randomly rotated before the forceps are
 drawn. Use `--background-rotation 0` to disable it, or pass a smaller value such

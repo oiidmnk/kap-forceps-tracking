@@ -348,6 +348,16 @@ def test_load_background_composites_transparent_pixels_onto_black(tmp_path) -> N
     assert np.any(loaded[:, 22:] > 0)
 
 
+def test_load_background_preserves_brightness(tmp_path) -> None:
+    source = np.full((40, 40, 3), (42, 103, 187), dtype=np.uint8)
+    path = tmp_path / "constant_background.png"
+    assert cv2.imwrite(str(path), source)
+
+    loaded = load_background(path, 40, 40, np.random.default_rng(31))
+
+    assert np.array_equal(loaded, source)
+
+
 def test_select_image_rotation_uses_only_discrete_requested_angles() -> None:
     rotations = (0.0, 90.0, 180.0, 270.0)
     rng = np.random.default_rng(55)

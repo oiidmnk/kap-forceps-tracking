@@ -749,13 +749,14 @@ def load_background(background: Path, width: int, height: int, rng: np.random.Ge
     y0 = int(rng.integers(0, max(1, max_y + 1)))
     crop = resized[y0 : y0 + height, x0 : x0 + width].copy()
     crop = cv2.GaussianBlur(crop, (0, 0), rng.uniform(0.25, 1.4))
-    gain = rng.uniform(0.90, 1.10)
-    bias = rng.uniform(-7, 7)
-    crop = np.clip(crop.astype(np.float32) * gain + bias, 0, 255)
     if resized_alpha is not None:
         crop_alpha = resized_alpha[y0 : y0 + height, x0 : x0 + width]
-        crop *= crop_alpha[:, :, None]
-    return crop.astype(np.uint8)
+        crop = np.clip(
+            crop.astype(np.float32) * crop_alpha[:, :, None],
+            0,
+            255,
+        ).astype(np.uint8)
+    return crop
 
 
 def select_background(
