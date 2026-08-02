@@ -214,6 +214,17 @@ def test_prediction_command_uses_model_run_weights_and_media(tmp_path: Path) -> 
     assert parameters["model_run_id"] == "20260101-120000-abcdef"
 
 
+def test_prediction_ui_exposes_temporal_video_tracking() -> None:
+    webui_root = Path(__file__).resolve().parents[1] / "webui"
+    index = (webui_root / "index.html").read_text()
+    app = (webui_root / "app.js").read_text()
+
+    assert 'name="prediction_temporal_filter"' in index
+    assert "Use temporal video tracking" in index
+    assert "temporal_filter: form.elements.prediction_temporal_filter.checked" in app
+    assert "temporal_filter: 'prediction_temporal_filter'" in app
+
+
 def test_model_run_resolves_best_weights(tmp_path: Path) -> None:
     manager = RunManager(tmp_path / "runs")
     run_id = "20260101-120000-abcdef"

@@ -8,6 +8,7 @@ dependencies = [
     "numpy>=1.23",
     "ultralytics>=8.3.0",
     "opencv-python-headless>=4.8.0",
+    "lap>=0.5.12",
     "pyyaml>=6.0",
     "fastapi>=0.115.0",
     "python-multipart>=0.0.9",

@@ -34,3 +34,29 @@ def test_predict_video_writes_every_rendered_frame(tmp_path: Path, monkeypatch) 
     capture.release()
     assert output.suffix == ".mp4"
     assert frame_count == 3
+
+
+def test_track_result_uses_persistent_ultralytics_tracking() -> None:
+    expected = object()
+
+    class FakeModel:
+        def track(self, **kwargs):
+            self.kwargs = kwargs
+            return [expected]
+
+    model = FakeModel()
+    frame = np.zeros((48, 64, 3), dtype=np.uint8)
+    args = Namespace(
+        conf=0.25,
+        imgsz=64,
+        device="cpu",
+        max_det=10,
+        tracker="botsort.yaml",
+    )
+
+    result = predict_media.track_result(model, frame, args, None)
+
+    assert result is expected
+    assert model.kwargs["source"] is frame
+    assert model.kwargs["persist"] is True
+    assert model.kwargs["tracker"] == "botsort.yaml"

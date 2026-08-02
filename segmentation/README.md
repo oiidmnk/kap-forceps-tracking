@@ -190,12 +190,15 @@ training run and applies them to one uploaded image or video (a local source
 path can be used instead). Confidence, image size, device, preprocessing, scene
 filtering, and maximum detections are configurable. Annotated frames and MP4
 videos are saved as run artifacts and can be viewed directly in the studio.
-Video pose predictions use a confidence-aware temporal tracker by default. It
-smooths continuous keypoint motion, rejects candidates that jump too far from
-the predicted trajectory, preserves image-frame left/right endpoint ordering,
-and bridges up to three missing frames with decaying confidence. Disable it in
-the Studio or pass `--no-temporal-filter` to `scripts/predict_media.py` when raw
-frame-independent predictions are needed for comparison.
+Video pose predictions use persistent Ultralytics BoT-SORT tracks and a
+confidence-aware optical-flow keypoint filter by default. The previous image
+guides the current keypoint locations, while current YOLO confidence controls
+their correction. The filter rejects candidates that jump too far, preserves
+image-frame left/right endpoint ordering, and bridges up to three missing
+frames with decaying confidence. It requires no model retraining. Disable it in
+the Studio or pass `--no-temporal-filter` to `scripts/predict_media.py` for raw,
+frame-independent `model.predict()` output. Image inputs always use the raw
+single-image prediction path, regardless of this setting.
 
 The **Video mask** run type implements the single-disc masking workflow from
 `open-a-eye`: it fits the largest bright circular contour on every frame,

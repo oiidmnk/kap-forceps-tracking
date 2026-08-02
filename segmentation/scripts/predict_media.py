@@ -98,6 +98,25 @@ def predict_result(model, frame, args, preset):
     return results[0]
 
 
+def track_result(model, frame, args, preset):
+    """Track one frame while preserving state in Ultralytics between calls."""
+    source = apply_preprocessing(frame, preset).image if preset is not None else frame
+    results = model.track(
+        source=source,
+        persist=True,
+        tracker=args.tracker,
+        conf=args.conf,
+        imgsz=args.imgsz,
+        device=args.device,
+        max_det=args.max_det,
+        save=False,
+        verbose=False,
+    )
+    if not results:
+        raise RuntimeError("model returned no tracking result")
+    return results[0]
+
+
 def predict_frame(model, frame, args, preset):
     return render_result(predict_result(model, frame, args, preset), args.scene_filter)
 
@@ -148,7 +167,7 @@ def predict_video(model, source: Path, output_dir: Path, args, preset) -> Path:
             if tracker is None:
                 rendered = predict_frame(model, frame, args, preset)
             else:
-                result = predict_result(model, frame, args, preset)
+                result = track_result(model, frame, args, preset)
                 rendered = (
                     render_pose_result(tracker.update(result))
                     if getattr(result, "keypoints", None) is not None
@@ -200,6 +219,11 @@ def main() -> int:
     parser.add_argument("--temporal-beta", type=float, default=0.15)
     parser.add_argument("--temporal-max-gap", type=int, default=3)
     parser.add_argument("--temporal-max-jump", type=float, default=0.12)
+    parser.add_argument(
+        "--tracker",
+        default="botsort.yaml",
+        help="Ultralytics tracker config used for video temporal filtering.",
+    )
     parser.set_defaults(scene_filter=True)
     parser.set_defaults(temporal_filter=True)
     args = parser.parse_args()

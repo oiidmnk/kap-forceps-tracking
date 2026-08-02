@@ -100,3 +100,24 @@ def test_normalizes_left_and_right_endpoint_order() -> None:
 
     assert rendered_points(result)[0, 0, 0] == 10
     assert rendered_points(result)[0, 1, 0] == 30
+
+
+def test_fuses_optical_flow_with_current_pose(monkeypatch) -> None:
+    tracker = TemporalPoseTracker(alpha=0.5, beta=0.0)
+    tracker.update(fake_result([(0, 1.0, [[10, 10], [20, 10], [15, 20]])]))
+
+    def translated_flow(_previous, _current, points, _unused, **_kwargs):
+        translated = points.copy()
+        translated[:, :, 0] += 4
+        count = len(points)
+        return translated, np.ones((count, 1), dtype=np.uint8), np.zeros((count, 1))
+
+    monkeypatch.setattr("scripts.temporal_pose.cv2.calcOpticalFlowPyrLK", translated_flow)
+    result = tracker.update(
+        fake_result([(0, 1.0, [[16, 10], [26, 10], [21, 20]])])
+    )
+
+    np.testing.assert_allclose(
+        rendered_points(result)[0],
+        [[15, 10], [25, 10], [20, 20]],
+    )

@@ -174,7 +174,7 @@
           <label class="field"><span>Device</span><input name="prediction_device" placeholder="auto, cpu, mps, 0"></label>
           <label class="field full"><span>Preprocess preset <small>optional</small></span><input name="prediction_preprocess_preset" placeholder="e.g. retina_reference"></label>
           <label class="check-field full"><input name="prediction_scene_filter" type="checkbox" checked><span><strong>Apply scene filter</strong><small>Reject border detections and retain the strongest forceps and shadow pose.</small></span></label>
-          <label class="check-field full"><input name="prediction_temporal_filter" type="checkbox" checked><span><strong>Track pose across video frames</strong><small>Smooth continuous motion, reject implausible jumps, and bridge short detection gaps. Images are unaffected.</small></span></label>
+          <label class="check-field full"><input name="prediction_temporal_filter" type="checkbox" checked><span><strong>Use temporal video tracking</strong><small>For videos, use persistent BoT-SORT tracks and optical flow from the previous image. Images are unaffected.</small></span></label>
         </div>
 
         <div id="video-mask-fields" class="form-grid hidden">

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
 
+import cv2
 import numpy as np
 
 from scripts.prediction_filtering import select_expected_pose_indices
@@ -83,9 +84,11 @@ class TemporalPoseTracker:
         self.max_jump_fraction = float(max_jump_fraction)
         self.max_candidates_per_class = int(max_candidates_per_class)
         self._tracks: dict[int, _Track] = {}
+        self._previous_gray: np.ndarray | None = None
 
     def reset(self) -> None:
         self._tracks.clear()
+        self._previous_gray = None
 
     @staticmethod
     def _canonicalize(points: np.ndarray, confidences: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -159,8 +162,8 @@ class TemporalPoseTracker:
         track: _Track,
         candidates: list[_Observation],
         diagonal: float,
+        predicted: np.ndarray,
     ) -> _Observation | None:
-        predicted = track.points + track.velocity
         gate = self.max_jump_fraction * diagonal * (1.0 + 0.35 * track.misses)
         eligible = [
             candidate
@@ -177,34 +180,84 @@ class TemporalPoseTracker:
             ),
         )
 
-    def _correct(self, track: _Track, observation: _Observation) -> None:
-        predicted = track.points + track.velocity
+    def _correct(
+        self,
+        track: _Track,
+        observation: _Observation,
+        predicted: np.ndarray,
+    ) -> None:
+        previous_points = track.points.copy()
         residual = observation.points - predicted
         confidence_scale = 0.5 + 0.5 * float(np.clip(observation.quality, 0.0, 1.0))
         effective_alpha = self.alpha * confidence_scale
         track.points = predicted + effective_alpha * residual
-        track.velocity = track.velocity + self.beta * residual
+        measured_velocity = observation.points - previous_points
+        track.velocity = (1.0 - self.beta) * track.velocity + self.beta * measured_velocity
         track.point_confidences = observation.point_confidences.copy()
         track.box = track.box + effective_alpha * (observation.box - track.box)
         track.quality = observation.quality
         track.misses = 0
 
-    def _coast(self, track: _Track, width: int, height: int) -> None:
-        average_velocity = np.mean(track.velocity, axis=0)
-        track.points = track.points + track.velocity
+    def _coast(
+        self,
+        track: _Track,
+        predicted: np.ndarray,
+        width: int,
+        height: int,
+    ) -> None:
+        previous_points = track.points.copy()
+        track.points = predicted.copy()
         track.points[:, 0] = np.clip(track.points[:, 0], 0, max(0, width - 1))
         track.points[:, 1] = np.clip(track.points[:, 1], 0, max(0, height - 1))
+        measured_velocity = track.points - previous_points
+        track.velocity = (1.0 - self.beta) * track.velocity + self.beta * measured_velocity
+        average_velocity = np.mean(measured_velocity, axis=0)
         track.box[[0, 2]] += average_velocity[0]
         track.box[[1, 3]] += average_velocity[1]
         track.point_confidences *= 0.6
         track.quality *= 0.6
         track.misses += 1
 
+    def _flow_predictions(self, current_gray: np.ndarray) -> dict[int, np.ndarray]:
+        predictions = {
+            class_id: track.points + track.velocity
+            for class_id, track in self._tracks.items()
+        }
+        if self._previous_gray is None or self._previous_gray.shape != current_gray.shape:
+            return predictions
+
+        height, width = current_gray.shape[:2]
+        for class_id, track in self._tracks.items():
+            next_points, status, errors = cv2.calcOpticalFlowPyrLK(
+                self._previous_gray,
+                current_gray,
+                track.points.astype(np.float32).reshape(-1, 1, 2),
+                None,
+                winSize=(21, 21),
+                maxLevel=3,
+                criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, 0.01),
+            )
+            if next_points is None or status is None:
+                continue
+            flowed = next_points.reshape(-1, 2).astype(float)
+            valid = status.reshape(-1).astype(bool)
+            if errors is not None:
+                valid &= errors.reshape(-1) <= 30.0
+            valid &= np.isfinite(flowed).all(axis=1)
+            valid &= (flowed[:, 0] >= 0) & (flowed[:, 0] < width)
+            valid &= (flowed[:, 1] >= 0) & (flowed[:, 1] < height)
+            displacement = np.linalg.norm(flowed - track.points, axis=1)
+            valid &= displacement <= self.max_jump_fraction * float(np.hypot(width, height))
+            predictions[class_id][valid] = flowed[valid]
+        return predictions
+
     def update(self, result: Any) -> Any:
         """Update tracks and return a renderer-compatible pose result."""
         image = result.orig_img
         height, width = image.shape[:2]
         diagonal = float(np.hypot(width, height))
+        current_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        predictions = self._flow_predictions(current_gray)
         observations = self._observations(result)
         class_ids = sorted(set(self._tracks) | set(observations))
 
@@ -218,11 +271,12 @@ class TemporalPoseTracker:
                     )
                 continue
 
-            candidate = self._choose_candidate(track, candidates, diagonal)
+            predicted = predictions[class_id]
+            candidate = self._choose_candidate(track, candidates, diagonal, predicted)
             if candidate is not None:
-                self._correct(track, candidate)
+                self._correct(track, candidate, predicted)
             elif track.misses < self.max_gap:
-                self._coast(track, width, height)
+                self._coast(track, predicted, width, height)
             elif candidates:
                 self._tracks[class_id] = self._new_track(
                     class_id, max(candidates, key=lambda item: item.quality)
@@ -241,6 +295,7 @@ class TemporalPoseTracker:
             confidences = np.empty((0, keypoint_count), dtype=float)
             boxes = np.empty((0, 4), dtype=float)
 
+        self._previous_gray = current_gray
         return SimpleNamespace(
             orig_img=image,
             names=result.names,
