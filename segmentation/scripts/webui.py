@@ -7,6 +7,7 @@ import json
 import os
 import re
 import signal
+import shutil
 import subprocess
 import sys
 import threading
@@ -42,6 +43,7 @@ PREVIEW_NAMES = {
     "val_batch0_pred.jpg",
     "preview.png",
 }
+ACTIVE_RUN_STATUSES = {"queued", "running", "cancelling"}
 
 
 def utc_now() -> str:
@@ -605,6 +607,13 @@ class RunManager:
                     pass
         return self.get(run_id)
 
+    def delete(self, run_id: str) -> None:
+        with self.lock:
+            metadata = self._load(run_id)
+            if metadata["status"] in ACTIVE_RUN_STATUSES:
+                raise ValueError("Stop the run before deleting it")
+            shutil.rmtree(self._run_dir(run_id))
+
     def list(self) -> list[dict[str, Any]]:
         runs = []
         for path in self.root.glob("*/run.json"):
@@ -830,6 +839,16 @@ def get_run(run_id: str) -> dict[str, Any]:
         return manager.get(run_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Run not found") from exc
+
+
+@app.delete("/api/runs/{run_id}", status_code=204)
+def delete_run(run_id: str) -> None:
+    try:
+        manager.delete(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Run not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.post("/api/runs/{run_id}/cancel")

@@ -120,6 +120,7 @@ function renderDetail(run) {
   $('#progress-bar').style.width = `${progress}%`
   $('#cancel-button').classList.toggle('hidden', !activeStatuses.has(run.status))
   $('#cancel-button').disabled = run.status === 'cancelling'
+  $('#delete-button').classList.toggle('hidden', activeStatuses.has(run.status))
   $('#parameter-list').innerHTML = Object.entries(run.parameters).map(([key, value]) => `<div><dt>${escapeHtml(titleCase(key))}</dt><dd>${escapeHtml(parameterValue(value))}</dd></div>`).join('')
   const consoleEl = $('#console-log')
   const wasNearBottom = consoleEl.scrollHeight - consoleEl.scrollTop - consoleEl.clientHeight < 50
@@ -295,6 +296,24 @@ $('#run-form').addEventListener('submit', async (event) => {
 $('#cancel-button').addEventListener('click', async () => {
   if (!state.selectedId || !confirm('Stop this run? Partial artifacts will be kept.')) return
   try { renderDetail(await api(`/api/runs/${state.selectedId}/cancel`, { method: 'POST' })) } catch (error) { alert(error.message) }
+})
+$('#delete-button').addEventListener('click', async () => {
+  if (!state.selectedId) return
+  const run = state.runs.find((item) => item.id === state.selectedId)
+  if (!confirm(`Delete “${run?.name || state.selectedId}”? All artifacts and logs for this run will be permanently removed.`)) return
+  const button = $('#delete-button')
+  button.disabled = true
+  try {
+    await api(`/api/runs/${state.selectedId}`, { method: 'DELETE' })
+    state.selectedId = null
+    $('#run-detail').classList.add('hidden')
+    $('#welcome').classList.remove('hidden')
+    await refreshRuns()
+  } catch (error) {
+    alert(error.message)
+  } finally {
+    button.disabled = false
+  }
 })
 $('#rerun-button').addEventListener('click', async () => { if (state.selectedId) openDialog(state.runs.find((run) => run.id === state.selectedId)?.kind, await api(`/api/runs/${state.selectedId}`)) })
 $('#copy-log').addEventListener('click', async () => { await navigator.clipboard.writeText($('#console-log').textContent); $('#copy-log').textContent = 'Copied'; setTimeout(() => { $('#copy-log').textContent = 'Copy' }, 1000) })

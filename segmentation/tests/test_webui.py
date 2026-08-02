@@ -376,6 +376,63 @@ def test_log_tail_reads_only_requested_bytes(tmp_path: Path) -> None:
     assert manager._read_log_tail(run_id, 10) == "xxx-suffix"
 
 
+def test_delete_run_removes_metadata_logs_and_artifacts(tmp_path: Path) -> None:
+    run_id = "20260101-120000-abcdef"
+    run_dir = tmp_path / run_id
+    artifact = run_dir / "artifacts" / "results.txt"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text("result")
+    (run_dir / "run.log").write_text("finished")
+    (run_dir / "run.json").write_text(json.dumps({
+        "id": run_id,
+        "status": "completed",
+    }))
+    manager = RunManager(tmp_path)
+
+    manager.delete(run_id)
+
+    assert not run_dir.exists()
+
+
+def test_delete_run_endpoint_returns_no_content(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run_id = "20260101-120000-abcdef"
+    run_dir = tmp_path / run_id
+    run_dir.mkdir()
+    (run_dir / "run.json").write_text(json.dumps({
+        "id": run_id,
+        "status": "completed",
+    }))
+    monkeypatch.setattr(webui, "manager", RunManager(tmp_path))
+
+    response = TestClient(webui.app).delete(f"/api/runs/{run_id}")
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert not run_dir.exists()
+
+
+@pytest.mark.parametrize("status", ["queued", "running", "cancelling"])
+def test_delete_run_rejects_active_statuses(tmp_path: Path, status: str) -> None:
+    run_id = "20260101-120000-abcdef"
+    run_dir = tmp_path / run_id
+    run_dir.mkdir()
+    (run_dir / "run.json").write_text(json.dumps({
+        "id": run_id,
+        "status": status,
+    }))
+    manager = RunManager(tmp_path)
+    metadata = json.loads((run_dir / "run.json").read_text())
+    metadata["status"] = status
+    (run_dir / "run.json").write_text(json.dumps(metadata))
+
+    with pytest.raises(ValueError, match="Stop the run before deleting it"):
+        manager.delete(run_id)
+
+    assert run_dir.is_dir()
+
+
 def test_artifacts_cannot_escape_run_directory(tmp_path: Path) -> None:
     run_id = "20260101-120000-abcdef"
     run_dir = tmp_path / run_id
