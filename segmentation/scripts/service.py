@@ -14,6 +14,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from ultralytics import YOLO
 
 from scripts.predict import DEFAULT_WEIGHTS, serialize_segmentation_result
+from scripts.prediction_filtering import filter_expected_pose_result
 from scripts.preprocessing import (
     DEFAULT_PREPROCESS_CONFIG,
     CropTransform,
@@ -43,6 +44,12 @@ IMAGE_SIZE = _env_int("SEGMENTATION_IMGSZ", 1024)
 DEVICE = os.getenv("SEGMENTATION_DEVICE") or None
 PREPROCESS_CONFIG = _env_path("SEGMENTATION_PREPROCESS_CONFIG", DEFAULT_PREPROCESS_CONFIG)
 PREPROCESS_PRESET = os.getenv("SEGMENTATION_PREPROCESS_PRESET") or None
+SCENE_FILTER = os.getenv("SEGMENTATION_SCENE_FILTER", "1").strip().lower() not in {
+    "0",
+    "false",
+    "no",
+    "off",
+}
 
 app = FastAPI(title="Forceps Segmentation API", version="0.1.0")
 
@@ -90,13 +97,19 @@ def predict_image(image: np.ndarray) -> dict[str, Any]:
     if not results:
         raise RuntimeError("model returned no prediction results")
 
-    payload = serialize_segmentation_result(results[0], transform)
+    result = (
+        filter_expected_pose_result(results[0])
+        if SCENE_FILTER
+        else results[0]
+    )
+    payload = serialize_segmentation_result(result, transform)
     payload["model"] = {
         "weights": str(WEIGHTS),
         "confidence": CONFIDENCE,
         "imgsz": IMAGE_SIZE,
         "device": DEVICE,
         "preprocess_preset": PREPROCESS_PRESET,
+        "scene_filter": SCENE_FILTER,
     }
     return payload
 
@@ -108,6 +121,7 @@ def health() -> dict[str, Any]:
         "weights": str(WEIGHTS),
         "weights_available": WEIGHTS.exists(),
         "preprocess_preset": PREPROCESS_PRESET,
+        "scene_filter": SCENE_FILTER,
     }
 
 

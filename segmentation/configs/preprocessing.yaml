@@ -9,6 +9,34 @@ presets:
     highlight_compression: {enabled: false}
     sharpen: {enabled: false}
 
+  retina_reference:
+    roi:
+      mode: mask
+      center: [0.5, 0.5]
+      radius: 0.5
+      fill: [0, 0, 0]
+    reference_match:
+      enabled: true
+      reference: ../../retina.png
+      lower_percentile: 5
+      upper_percentile: 95
+      strength: 1.0
+      minimum_scale: 0.35
+      maximum_scale: 3.0
+      black_threshold: 8
+      preserve_black: true
+      background_only:
+        enabled: true
+        minimum_saturation: 35
+        minimum_value: 50
+        dilation_kernel: 11
+        feather_sigma: 2.5
+    clahe: {enabled: false}
+    gamma: 1.0
+    bilateral: {enabled: false}
+    highlight_compression: {enabled: false}
+    sharpen: {enabled: false}
+
   roi:
     roi:
       mode: mask

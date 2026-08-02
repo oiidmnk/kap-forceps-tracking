@@ -135,6 +135,8 @@ python scripts/generate_synthetic_dataset.py \
   --shadow-scale 0.9 2.1 \
   --shadow-opacity 0.4 0.7 \
   --shadow-blur 2 22 \
+  --forceps-opacity 0.5 1.0 \
+  --forceps-blur 0 2.5 \
   --tip-scale 0.85 2.0 \
   --preview 12
 ```
@@ -152,6 +154,11 @@ hard-edged shadows, `--shadow-blur 12 28` for soft shadows, or equal values for
 a constant blur. Far shadows are biased toward the blurrier end and near
 shadows toward the sharper end, without exceeding the requested range.
 
+`--forceps-opacity MIN MAX` and `--forceps-blur MIN MAX` vary the instrument
+appearance independently of the background. The default opacity range includes
+pale, partially translucent instruments like real microscope footage, while
+the blur range adds mild defocus without blurring the retina or shadow.
+
 Train with a pose checkpoint and the pose config:
 
 ```bash
@@ -159,6 +166,53 @@ yolo pose train model=yolo11n-pose.pt data=configs/forceps_pose.yaml imgsz=1024
 ```
 
 ## Workflow
+
+### Run Studio web UI
+
+Launch the segmentation project's local run manager:
+
+```bash
+auge-webui
+```
+
+Then open `http://127.0.0.1:8010`. The UI can start and cancel model training
+or synthetic dataset generation, follow live logs and progress, and preview the
+resulting metrics and images. Every job is isolated under `runs/webui/<run-id>`;
+its parameters and status are persisted in `run.json`, its console output in
+`run.log`, and generated results under `artifacts/`.
+
+Training runs can use a completed synthetic dataset run directly. The studio
+creates a run-local YOLO pose config that points at the selected dataset's
+immutable artifacts. A dataset can also pass through a reproducible **Dataset
+split** run first; the child run copies and repartitions the paired images and
+labels, records its source run, and can then be selected as training input.
+
+The **Prediction** run type selects the `best.pt` weights from a completed
+training run and applies them to one uploaded image or video (a local source
+path can be used instead). Confidence, image size, device, preprocessing, scene
+filtering, and maximum detections are configurable. Annotated frames and MP4
+videos are saved as run artifacts and can be viewed directly in the studio.
+Video pose predictions use a confidence-aware temporal tracker by default. It
+smooths continuous keypoint motion, rejects candidates that jump too far from
+the predicted trajectory, preserves image-frame left/right endpoint ordering,
+and bridges up to three missing frames with decaying confidence. Disable it in
+the Studio or pass `--no-temporal-filter` to `scripts/predict_media.py` when raw
+frame-independent predictions are needed for comparison.
+
+The **Video mask** run type implements the single-disc masking workflow from
+`open-a-eye`: it fits the largest bright circular contour on every frame,
+optionally calibrates the crisp inner retina boundary, fixes the radius to the
+median detection, fills and smooths the tracked center, crops a constant square
+with black padding, and applies an anti-aliased circular mask. It writes an H.264
+`masked.mp4`, middle-frame `preview.png`, and `mask.json`. Completed masking runs
+appear as selectable inputs in Prediction runs. Stereo side-by-side selection is
+intentionally not exposed; this run type expects one retinal disc per frame.
+
+You can also run it without installing the entry point:
+
+```bash
+python scripts/webui.py
+```
 
 ### 1. Split raw data (optional)
 
@@ -212,6 +266,11 @@ python scripts/predict.py --source data/images/val/
 
 Outputs land in `runs/segment/predict/`.
 
+Pose inference applies the known scene constraints by default: keypoints on the
+black microscope border are rejected, and only the strongest valid forceps and
+shadow detection are retained. Pass `--no-scene-filter` only when inspecting
+all raw model proposals.
+
 ### 6. Serve predictions over HTTP
 
 The Docker Compose stack includes a `segmentation` service exposing
@@ -233,6 +292,9 @@ SEGMENTATION_WEIGHTS=runs/segment/forceps/weights/best.pt \
 SEGMENTATION_PREPROCESS_PRESET=roi_clahe \
 docker compose up segmentation
 ```
+
+The HTTP service enables the same pose scene filter by default. Set
+`SEGMENTATION_SCENE_FILTER=0` to return all raw detections.
 
 ## Train on a remote GPU server
 
@@ -271,7 +333,77 @@ scripts/remote_train.sh start \
 
 Presets in `configs/preprocessing.yaml` include the original input, circular ROI
 masking or cropping, CLAHE, gamma correction, bilateral denoising, highlight
-compression, and sharpening. Source images and labels are never modified.
+compression, sharpening, and `retina_reference`. Source images and labels are
+never modified.
+
+### Mask an MP4 or MOV to the retinal aperture
+
+To turn everything outside the inner circular retinal view black:
+
+```bash
+python scripts/mask_retinal_video.py input.mov output.mp4 \
+  --preview runs/retinal-mask-preview.jpg
+```
+
+The script gets an initial aperture from several frames near the start, then
+detects and tracks it on every frame by default. Implausible jumps and failed
+detections reuse the previous circle, while temporal smoothing prevents the
+mask from flickering. It uses FFmpeg when available so audio is retained. If
+detection needs adjustment, either move the detected boundary inward with
+`--margin 5`, or specify the initial circle in full-resolution pixels:
+
+```bash
+python scripts/mask_retinal_video.py input.mov output.mp4 \
+  --center-x 829 --center-y 926 --radius 450
+```
+
+Use `--feather 4` for a four-pixel soft inner edge. Existing output files are
+left untouched unless `--overwrite` is passed. Use `--static-mask` when the
+aperture does not move and per-frame detection is unnecessary. Tracking runs
+every frame unless changed with `--detect-every N`; `--smoothing`,
+`--max-center-shift`, and `--max-radius-change` control its stability.
+
+For prediction with weights trained on the generated `retina.png` backgrounds,
+use the reference-matching preset:
+
+```bash
+python scripts/predict.py \
+  --source data/testing \
+  --weights runs/pose/forceps/weights/best.pt \
+  --preprocess-preset retina_reference
+```
+
+The preset robustly matches LAB median color and percentile contrast to
+`retina.png`, but only on bright, saturated retinal tissue. Low-saturation
+metal, dark forceps-shadow pixels, vessels, and black microscope borders are
+protected by a dilated, feathered foreground mask and retain their original
+colors. The same circular field used by synthetic training is then applied.
+The pose-to-JSON prediction bridge supports the same flag:
+
+```bash
+python scripts/predict_preprocessor.py \
+  --source frame.png \
+  --weights runs/pose/forceps/weights/best.pt \
+  --preprocess-preset retina_reference
+```
+
+For the HTTP service, set
+`SEGMENTATION_PREPROCESS_PRESET=retina_reference`. Docker Compose mounts the
+repository `retina.png` reference into the inference container.
+
+Reference matching can reduce the retinal color-domain gap, but it does not
+change the instrument. A model trained only on opaque synthetic forceps will
+still miss pale real forceps. Generate a substantially larger replacement
+dataset with the default translucent/defocus variation and retrain; for example:
+
+```bash
+python scripts/generate_synthetic_dataset.py \
+  --count 5000 \
+  --background ../retina.png \
+  --forceps-opacity 0.35 1.0 \
+  --forceps-blur 0 3.5 \
+  --preview 20
+```
 
 Preview presets:
 
@@ -358,6 +490,8 @@ auge-predict-preprocessor --source data/testing/frame_001.png
 auge-benchmark --source data/images/val/
 auge-preview-preprocessing --source data/testing
 auge-prepare-preprocessing --preset roi_clahe
+auge-mask-retinal-video input.mov output.mp4
+auge-webui
 ```
 
 ## Training tips

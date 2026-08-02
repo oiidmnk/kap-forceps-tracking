@@ -24,6 +24,7 @@ from scripts.preprocessing import (
     apply_preprocessing,
     load_preprocess_preset,
 )
+from scripts.prediction_filtering import filter_expected_pose_result
 
 WORKSPACE_ROOT = REPO_ROOT.parent
 DEFAULT_WEIGHTS = Path("runs/pose/forceps/weights/best.pt")
@@ -212,7 +213,12 @@ def predict_one_image(args: argparse.Namespace) -> dict[str, Any]:
     if not results:
         raise PredictionExtractionError("model returned no prediction results")
 
-    predicted_points = extract_preprocessor_points(results[0], transform, args.kpt_conf)
+    result = (
+        results[0]
+        if args.no_scene_filter
+        else filter_expected_pose_result(results[0])
+    )
+    predicted_points = extract_preprocessor_points(result, transform, args.kpt_conf)
     return build_preprocessor_input(args.base_input, args.sidecar, predicted_points)
 
 
@@ -246,6 +252,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--preprocess-preset",
         default=None,
         help="Apply a named preprocessing preset before inference.",
+    )
+    parser.add_argument(
+        "--no-scene-filter",
+        action="store_true",
+        help=(
+            "Keep every pose detection. By default, detections on the black border "
+            "are rejected and only the best forceps and shadow are retained."
+        ),
     )
     parser.add_argument(
         "--base-input",

@@ -11,6 +11,7 @@ from scripts.generate_synthetic_dataset import (
     Pose,
     circular_png_image,
     circular_object_safety_margin,
+    composite_forceps_material,
     distal_pad_width_profile,
     generate_one_image,
     load_background,
@@ -214,6 +215,8 @@ def test_render_forceps_records_requested_large_tip_and_shadow_scales() -> None:
         tip_scale_range=(1.90, 1.90),
         shadow_opacity_range=(0.62, 0.62),
         shadow_blur_range=(11.0, 11.0),
+        forceps_opacity_range=(0.58, 0.58),
+        forceps_blur_range=(1.5, 1.5),
     )
 
     assert pose.variation is not None
@@ -221,8 +224,32 @@ def test_render_forceps_records_requested_large_tip_and_shadow_scales() -> None:
     assert pose.variation.tip_scale == pytest.approx(1.90)
     assert pose.variation.shadow_opacity == pytest.approx(0.62)
     assert pose.variation.shadow_softness == pytest.approx(11.0)
+    assert pose.variation.forceps_opacity == pytest.approx(0.58)
+    assert pose.variation.forceps_softness == pytest.approx(1.5)
     assert -180.0 <= pose.variation.forceps_roll_degrees <= 180.0
     assert -180.0 <= pose.variation.shadow_roll_degrees <= 180.0
+
+
+def test_forceps_material_opacity_preserves_background_and_softens_render() -> None:
+    background = np.full((80, 80, 3), (40, 90, 170), dtype=np.uint8)
+    rendered = background.copy()
+    cv2.rectangle(rendered, (20, 30), (60, 50), (80, 80, 80), -1)
+    opaque_delta = np.abs(
+        rendered.astype(np.int16) - background.astype(np.int16)
+    ).sum()
+
+    composite_forceps_material(
+        rendered,
+        background,
+        opacity=0.5,
+        softness=1.5,
+    )
+
+    assert np.array_equal(rendered[:20], background[:20])
+    translucent_delta = np.abs(
+        rendered.astype(np.int16) - background.astype(np.int16)
+    ).sum()
+    assert 0 < translucent_delta < opaque_delta
 
 
 def test_distal_pad_is_a_single_continuous_jaw_width_profile() -> None:

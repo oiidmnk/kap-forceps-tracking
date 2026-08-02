@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Launch and inspect forceps segmentation training and synthetic dataset runs.">
+  <title>Retina Lab — Segmentation Run Studio</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script src="/assets/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Retina Lab home">
+      <span class="brand-mark"><i></i></span>
+      <span><strong>Retina Lab</strong><small>segmentation run studio</small></span>
+    </a>
+    <div class="system-status"><span class="pulse"></span><span>Local runner</span><b id="runner-status">Connecting</b></div>
+  </header>
+
+  <main class="shell">
+    <aside class="run-rail">
+      <div class="rail-heading">
+        <div><span class="eyebrow">Workspace</span><h1>Runs</h1></div>
+        <button class="icon-button" id="new-run-button" title="Create run" aria-label="Create run">+</button>
+      </div>
+      <div class="rail-filters" role="group" aria-label="Filter runs">
+        <button class="filter active" data-filter="all">All</button>
+        <button class="filter" data-filter="running">Active</button>
+        <button class="filter" data-filter="completed">Done</button>
+      </div>
+      <div id="run-list" class="run-list" aria-live="polite"></div>
+      <div id="empty-runs" class="empty-runs hidden">
+        <span class="orb"></span>
+        <strong>No runs yet</strong>
+        <p>Launch a training job or generate a synthetic dataset.</p>
+      </div>
+    </aside>
+
+    <section class="workspace">
+      <div id="welcome" class="welcome-view">
+        <div class="welcome-copy">
+          <span class="eyebrow">Forceps intelligence</span>
+          <h2>From generated pixels<br>to trained perception.</h2>
+          <p>Configure, launch, and inspect every experiment without leaving the segmentation project.</p>
+          <button class="primary large" id="welcome-new-run">Create your first run <span>↗</span></button>
+        </div>
+        <div class="retina-visual" aria-hidden="true">
+          <div class="retina-grid"></div>
+          <div class="retina-disc">
+            <span class="scan-line"></span>
+            <i class="point p1"></i><i class="point p2"></i><i class="point p3"></i><i class="point p4"></i>
+            <span class="forceps-arm a1"></span><span class="forceps-arm a2"></span>
+          </div>
+          <span class="visual-label top">pose field / 1024</span>
+          <span class="visual-label bottom">04 keypoints tracked</span>
+        </div>
+        <div class="quick-grid">
+          <button class="quick-card" data-quick-kind="training"><span class="quick-icon">↗</span><small>YOLO pipeline</small><strong>Train a model</strong><p>Fit a segmentation or pose checkpoint on your prepared data.</p></button>
+          <button class="quick-card coral" data-quick-kind="synthetic"><span class="quick-icon">✦</span><small>Data engine</small><strong>Generate samples</strong><p>Render controlled retinal scenes with paired pose labels.</p></button>
+          <button class="quick-card blue" data-quick-kind="dataset_split"><span class="quick-icon">⌘</span><small>Dataset lineage</small><strong>Split a dataset</strong><p>Create a reproducible train/validation child run.</p></button>
+          <button class="quick-card violet" data-quick-kind="prediction"><span class="quick-icon">▶</span><small>Inference</small><strong>Predict media</strong><p>Run trained weights on a single frame or video.</p></button>
+          <button class="quick-card amber" data-quick-kind="video_mask"><span class="quick-icon">◉</span><small>Scope preparation</small><strong>Mask a video</strong><p>Track one retinal disc, crop it square, and black out its surround.</p></button>
+        </div>
+      </div>
+
+      <div id="run-detail" class="detail-view hidden">
+        <div class="detail-header">
+          <div>
+            <div class="detail-kicker"><span id="detail-kind">Training</span><span>•</span><code id="detail-id"></code></div>
+            <h2 id="detail-name"></h2>
+          </div>
+          <div class="detail-actions">
+            <button id="cancel-button" class="danger-button hidden">Stop run</button>
+            <button id="rerun-button" class="secondary-button">Run again</button>
+          </div>
+        </div>
+
+        <div class="status-strip">
+          <div class="status-primary"><span id="detail-status-dot" class="status-dot"></span><div><small>Status</small><strong id="detail-status"></strong></div></div>
+          <div><small>Started</small><strong id="detail-started">—</strong></div>
+          <div><small>Duration</small><strong id="detail-duration">—</strong></div>
+          <div class="progress-cell"><small>Progress <b id="progress-value">0%</b></small><div class="progress-track"><span id="progress-bar"></span></div></div>
+        </div>
+
+        <div class="detail-grid">
+          <section class="panel results-panel">
+            <div class="panel-heading"><div><span class="eyebrow">Output</span><h3>Run results</h3></div><span id="artifact-count" class="count-pill">0 artifacts</span></div>
+            <div id="metrics" class="metrics-grid"></div>
+            <div id="gallery" class="gallery"></div>
+            <div id="results-empty" class="panel-empty"><span>◎</span><strong>Results will appear here</strong><p>Preview images and training metrics are collected while the run progresses.</p></div>
+            <div id="files" class="file-list"></div>
+          </section>
+
+          <aside class="detail-side">
+            <section class="panel parameter-panel">
+              <div class="panel-heading"><div><span class="eyebrow">Recipe</span><h3>Parameters</h3></div></div>
+              <dl id="parameter-list" class="parameter-list"></dl>
+            </section>
+            <section class="panel console-panel">
+              <div class="panel-heading"><div><span class="eyebrow">Live stream</span><h3>Console</h3></div><button id="copy-log" class="text-button">Copy</button></div>
+              <pre id="console-log">Waiting for output…</pre>
+            </section>
+          </aside>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="run-dialog">
+    <form id="run-form" method="dialog">
+      <div class="dialog-head"><div><span class="eyebrow">New experiment</span><h2>Configure a run</h2></div><button type="button" class="dialog-close" aria-label="Close">×</button></div>
+      <div class="kind-switch" role="tablist">
+        <button type="button" class="kind-option active" data-kind="training"><span>↗</span><div><strong>Model training</strong><small>YOLO segmentation / pose</small></div></button>
+        <button type="button" class="kind-option" data-kind="synthetic"><span>✦</span><div><strong>Synthetic data</strong><small>Rendered images + labels</small></div></button>
+        <button type="button" class="kind-option" data-kind="dataset_split"><span>⌘</span><div><strong>Dataset split</strong><small>Train / validation child run</small></div></button>
+        <button type="button" class="kind-option" data-kind="prediction"><span>▶</span><div><strong>Prediction</strong><small>Single frame / video</small></div></button>
+        <button type="button" class="kind-option" data-kind="video_mask"><span>◉</span><div><strong>Video mask</strong><small>Single retinal disc</small></div></button>
+      </div>
+
+      <div class="form-scroll">
+        <label class="field full"><span>Run name <small>optional</small></span><input name="name" placeholder="e.g. Pose baseline 04"></label>
+        <div id="training-fields" class="form-grid">
+          <label class="field full"><span>Starting model</span><input name="model" value="yolo11n-seg.pt"></label>
+          <label class="field full"><span>Dataset run <small>optional — uses its generated train/val data</small></span><select name="dataset_run_id"><option value="">Use dataset config below</option></select></label>
+          <label class="field full"><span>Dataset config <small>used when no dataset run is selected</small></span><input name="config" value="configs/forceps_seg.yaml"></label>
+          <label class="field"><span>Epochs</span><input name="epochs" type="number" value="100" min="1"></label>
+          <label class="field"><span>Image size</span><input name="imgsz" type="number" value="1024" min="64"></label>
+          <label class="field"><span>Batch size</span><input name="batch" type="number" value="8" min="-1"></label>
+          <label class="field"><span>Patience</span><input name="patience" type="number" value="20" min="0"></label>
+          <label class="field"><span>Device</span><input name="device" placeholder="auto, cpu, mps, 0"></label>
+          <label class="field"><span>Preprocess preset</span><input name="preprocess_preset" placeholder="none"></label>
+          <label class="check-field full"><input name="rebuild_preprocessed" type="checkbox"><span><strong>Rebuild preprocessed dataset</strong><small>Regenerate derived images before training.</small></span></label>
+        </div>
+
+        <div id="synthetic-fields" class="form-grid hidden">
+          <label class="field"><span>Images</span><input name="count" type="number" value="500" min="1"></label>
+          <label class="field"><span>Preview count</span><input name="preview" type="number" value="12" min="0"></label>
+          <label class="field"><span>Width</span><input name="width" type="number" value="820" min="128"></label>
+          <label class="field"><span>Height</span><input name="height" type="number" value="920" min="128"></label>
+          <label class="field"><span>Validation fraction</span><input name="val_fraction" type="number" value="0.15" min="0" max="1" step="0.01"></label>
+          <label class="field"><span>Workers <small>0 = auto</small></span><input name="workers" type="number" value="0" min="0"></label>
+          <label class="field"><span>Seed <small>optional</small></span><input name="seed" type="number" placeholder="random"></label>
+          <label class="field"><span>Filename prefix</span><input name="prefix" value="synthetic"></label>
+          <label class="field full"><span>Background images <small>comma separated, optional</small></span><input name="backgrounds" placeholder="../retina.png, backgrounds/retina_02.png"></label>
+          <label class="field"><span>Background roll ±°</span><input name="background_rotation" type="number" value="180" min="0"></label>
+          <label class="field"><span>Image rotations</span><input name="image_rotations" value="90, 180, 270"></label>
+          <label class="field"><span>Forceps roll ±°</span><input name="axis_roll" type="number" value="180" min="0"></label>
+          <label class="field"><span>Shadow roll ±°</span><input name="shadow_axis_roll" type="number" value="180" min="0"></label>
+          <fieldset class="range-field"><legend>Shadow scale</legend><input name="shadow_scale_min" type="number" value="0.9" step="0.05"><span>to</span><input name="shadow_scale_max" type="number" value="1.9" step="0.05"></fieldset>
+          <fieldset class="range-field"><legend>Tip scale</legend><input name="tip_scale_min" type="number" value="0.85" step="0.05"><span>to</span><input name="tip_scale_max" type="number" value="1.85" step="0.05"></fieldset>
+          <fieldset class="range-field"><legend>Shadow opacity</legend><input name="shadow_opacity_min" type="number" value="0.3" step="0.05"><span>to</span><input name="shadow_opacity_max" type="number" value="0.55" step="0.05"></fieldset>
+          <fieldset class="range-field"><legend>Shadow blur</legend><input name="shadow_blur_min" type="number" value="3" step="0.5"><span>to</span><input name="shadow_blur_max" type="number" value="18" step="0.5"></fieldset>
+          <fieldset class="range-field"><legend>Forceps opacity</legend><input name="forceps_opacity_min" type="number" value="0.5" step="0.05"><span>to</span><input name="forceps_opacity_max" type="number" value="1" step="0.05"></fieldset>
+          <fieldset class="range-field"><legend>Forceps blur</legend><input name="forceps_blur_min" type="number" value="0" step="0.5"><span>to</span><input name="forceps_blur_max" type="number" value="2.5" step="0.5"></fieldset>
+          <label class="check-field full"><input name="circular_mask" type="checkbox" checked><span><strong>Circular microscope field</strong><small>Keep generated objects inside the retinal view.</small></span></label>
+        </div>
+
+        <div id="dataset-split-fields" class="form-grid hidden">
+          <label class="field full"><span>Source dataset run</span><select name="source_run_id"><option value="">Select a completed dataset run</option></select></label>
+          <label class="field"><span>Training fraction</span><input name="train_ratio" type="number" value="0.85" min="0.01" max="1" step="0.01"></label>
+          <label class="field"><span>Random seed</span><input name="split_seed" type="number" value="42"></label>
+          <div class="lineage-note full"><span>→</span><p>The source images and labels are copied into a new isolated run. The source run remains unchanged.</p></div>
+        </div>
+
+        <div id="prediction-fields" class="form-grid hidden">
+          <label class="field full"><span>Model run</span><select name="model_run_id"><option value="">Select a completed training run</option></select></label>
+          <label class="field full"><span>Masked video run <small>optional — use its output directly</small></span><select name="masked_video_run_id"><option value="">Upload media or use a source path below</option></select></label>
+          <label class="field full"><span>Upload frame or video</span><input name="media_file" type="file" accept="image/*,video/*,.mov,.mkv,.avi,.m4v,.webm"></label>
+          <label class="field full"><span>Or source path <small>relative to segmentation/ or absolute</small></span><input name="prediction_source" placeholder="data/testing/frame_001.png"></label>
+          <label class="field"><span>Confidence</span><input name="prediction_confidence" type="number" value="0.25" min="0.01" max="1" step="0.01"></label>
+          <label class="field"><span>Maximum detections</span><input name="prediction_max_detections" type="number" value="300" min="1"></label>
+          <label class="field"><span>Image size</span><input name="prediction_imgsz" type="number" value="1024" min="64"></label>
+          <label class="field"><span>Device</span><input name="prediction_device" placeholder="auto, cpu, mps, 0"></label>
+          <label class="field full"><span>Preprocess preset <small>optional</small></span><input name="prediction_preprocess_preset" placeholder="e.g. retina_reference"></label>
+          <label class="check-field full"><input name="prediction_scene_filter" type="checkbox" checked><span><strong>Apply scene filter</strong><small>Reject border detections and retain the strongest forceps and shadow pose.</small></span></label>
+          <label class="check-field full"><input name="prediction_temporal_filter" type="checkbox" checked><span><strong>Track pose across video frames</strong><small>Smooth continuous motion, reject implausible jumps, and bridge short detection gaps. Images are unaffected.</small></span></label>
+        </div>
+
+        <div id="video-mask-fields" class="form-grid hidden">
+          <label class="field full"><span>Upload single-disc scope video</span><input name="mask_media_file" type="file" accept="video/*,.mov,.mkv,.avi,.m4v,.webm"></label>
+          <label class="field full"><span>Or source path <small>relative to segmentation/ or absolute</small></span><input name="mask_source" placeholder="data/testing/scope.mov"></label>
+          <label class="field"><span>Circle boundary</span><select name="mask_circle"><option value="outer">Outer scope aperture</option><option value="inner">Inner crisp retina</option></select></label>
+          <label class="field"><span>Inner threshold <small>0 = calibrate</small></span><input name="mask_inner_threshold" type="number" value="0" min="0" max="255"></label>
+          <label class="field"><span>Probe frames</span><input name="mask_probe" type="number" value="24" min="4"></label>
+          <label class="field"><span>Fixed radius <small>0 = detected median</small></span><input name="mask_radius" type="number" value="0" min="0"></label>
+          <label class="field"><span>Center smoothing</span><input name="mask_smooth" type="number" value="9" min="0"></label>
+          <label class="field"><span>Edge erosion (px)</span><input name="mask_erode" type="number" value="2" min="0"></label>
+          <label class="field"><span>Outer threshold</span><input name="mask_threshold" type="number" value="12" min="0" max="255"></label>
+          <label class="field"><span>Output size <small>0 = native diameter</small></span><input name="mask_size" type="number" value="0" min="0"></label>
+          <label class="field"><span>H.264 quality (CRF)</span><input name="mask_crf" type="number" value="18" min="0" max="51"></label>
+          <label class="check-field full"><input name="mask_track" type="checkbox" checked><span><strong>Track the disc center</strong><small>Use a fixed median radius and a smoothed center for every frame.</small></span></label>
+          <div class="lineage-note full"><span>→</span><p>The masked H.264 video becomes a selectable input for Prediction runs.</p></div>
+        </div>
+      </div>
+
+      <div id="form-error" class="form-error" role="alert"></div>
+      <div class="dialog-actions"><button type="button" class="secondary-button dialog-cancel">Cancel</button><button type="submit" class="primary" id="launch-button"><span>Launch run</span><b>↗</b></button></div>
+    </form>
+  </dialog>
+</body>
+</html>

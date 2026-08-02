@@ -22,6 +22,7 @@ from scripts.preprocessing import (
     find_images,
     load_preprocess_preset,
 )
+from scripts.prediction_filtering import filter_expected_pose_result
 
 DEFAULT_WEIGHTS = Path("runs/segment/forceps/weights/best.pt")
 CLASS_COLORS = [
@@ -380,6 +381,14 @@ def main() -> int:
         action="store_true",
         help="Do not save prediction images.",
     )
+    parser.add_argument(
+        "--no-scene-filter",
+        action="store_true",
+        help=(
+            "Keep every pose detection. By default, detections on the black border "
+            "are rejected and only the best forceps and shadow are retained."
+        ),
+    )
     args = parser.parse_args()
 
     if not args.weights.exists():
@@ -401,6 +410,8 @@ def main() -> int:
         if not args.no_save:
             output_dir = Path(args.project) / args.name
             for result in results:
+                if not args.no_scene_filter:
+                    result = filter_expected_pose_result(result)
                 output_path = output_dir / Path(result.path).name
                 if not save_prediction_result(result, output_path):
                     print(f"Failed to write prediction: {output_path}")
@@ -438,6 +449,8 @@ def main() -> int:
         )
         if not args.no_save:
             for result in results:
+                if not args.no_scene_filter:
+                    result = filter_expected_pose_result(result)
                 output_path = output_dir / source_path.name
                 if not save_prediction_result(result, output_path):
                     print(f"Failed to write prediction: {output_path}")

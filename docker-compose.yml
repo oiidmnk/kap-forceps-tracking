@@ -43,10 +43,12 @@ services:
       SEGMENTATION_IMGSZ: ${SEGMENTATION_IMGSZ:-1024}
       SEGMENTATION_DEVICE: ${SEGMENTATION_DEVICE:-cpu}
       SEGMENTATION_PREPROCESS_PRESET: ${SEGMENTATION_PREPROCESS_PRESET:-}
+      SEGMENTATION_SCENE_FILTER: ${SEGMENTATION_SCENE_FILTER:-1}
     ports:
       - "8000:8000"
     volumes:
       - ./segmentation/runs:/app/runs:ro
+      - ./retina.png:/retina.png:ro
     restart: unless-stopped
 
   viz:
