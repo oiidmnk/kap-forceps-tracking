@@ -82,6 +82,22 @@ def test_pose_label_lines_keep_coordinates_normalized() -> None:
         assert all(0.0 <= value <= 1.0 for value in normalized_values)
 
 
+def test_pose_boxes_can_use_visible_object_extents() -> None:
+    point = np.array([[48, 48], [52, 48], [52, 52], [48, 52]], dtype=np.float32)
+    extent = np.array([[10, 35], [90, 35], [90, 65], [10, 65]], dtype=np.float32)
+    pose = Pose(
+        tip_polygons=[point.copy() for _ in range(3)],
+        shadow_polygons=[point.copy() for _ in range(3)],
+        forceps_extent_polygons=[extent],
+        shadow_extent_polygons=[extent],
+    )
+
+    forceps = [float(value) for value in pose_label_lines(pose, 100, 100)[0].split()]
+
+    assert forceps[3] == pytest.approx(0.84)
+    assert forceps[4] == pytest.approx(0.34)
+
+
 def test_shadow_visibility_rejects_points_covered_by_forceps_segments() -> None:
     forceps_segments = [
         (
@@ -351,6 +367,22 @@ def test_rotate_image_and_pose_uses_black_canvas_and_transforms_labels() -> None
     rotated_center = np.mean(rotated_pose.tip_polygons[0], axis=0)
     assert rotated_center[0] == pytest.approx(49.5, abs=0.6)
     assert rotated_center[1] < original_center[1]
+
+
+def test_rotation_restores_image_frame_left_right_order() -> None:
+    image = np.full((100, 100, 3), 255, dtype=np.uint8)
+    left = np.array([[18, 48], [22, 48], [22, 52], [18, 52]], dtype=np.float32)
+    right = left + np.array([40, 0], dtype=np.float32)
+    root = left + np.array([20, 20], dtype=np.float32)
+    pose = Pose(
+        tip_polygons=[left, right, root],
+        shadow_polygons=[left.copy(), right.copy(), root.copy()],
+    )
+
+    _, rotated = rotate_image_and_pose(image, pose, 180)
+
+    assert np.mean(rotated.tip_polygons[0][:, 0]) < np.mean(rotated.tip_polygons[1][:, 0])
+    assert np.mean(rotated.shadow_polygons[0][:, 0]) < np.mean(rotated.shadow_polygons[1][:, 0])
 
 
 def test_load_background_composites_transparent_pixels_onto_black(tmp_path) -> None:

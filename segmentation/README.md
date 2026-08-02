@@ -117,10 +117,11 @@ python scripts/generate_synthetic_dataset.py \
 Use `--image-rotations 0` to keep the forceps entering from the original
 bottom-right region.
 
-Forceps roll and projected-shadow roll are sampled independently by default.
-The generator deliberately mixes forceps-only, shadow-only, independently
-rolled, and physically correlated roll cases. This changes jaw foreshortening,
-which jaw appears nearer, metal highlights, and the projected shadow opening.
+Forceps roll and projected-shadow roll are physically correlated in 75% of
+samples by default, while the remainder preserve harder independent-roll cases.
+This changes jaw foreshortening, which jaw appears nearer, metal highlights,
+and the projected shadow opening. Set `--shadow-correlation` between `0` and
+`1` to tune that mixture.
 Use `--axis-roll 0` or `--shadow-axis-roll 0` to disable either source of roll,
 or pass a smaller value such as `--axis-roll 45` for milder variants.
 
@@ -136,6 +137,8 @@ python scripts/generate_synthetic_dataset.py \
   --shadow-opacity 0.4 0.7 \
   --shadow-blur 2 22 \
   --forceps-blur 0 2.5 \
+  --forceps-contrast 0.25 0.8 \
+  --shadow-correlation 0.8 \
   --tip-scale 0.85 2.0 \
   --preview 12
 ```
@@ -154,8 +157,36 @@ a constant blur. Far shadows are biased toward the blurrier end and near
 shadows toward the sharper end, without exceeding the requested range.
 
 `--forceps-blur MIN MAX` varies instrument defocus independently of the
-background. Synthetic forceps are always rendered fully opaque; only the
-shadow has configurable opacity.
+background. `--forceps-contrast MIN MAX` attenuates the rendered material delta
+to include the pale, low-contrast instruments seen in scope video.
+
+### Learn appearance from an unlabeled video
+
+The generator can recover clean retinal backgrounds and a reusable photometric
+profile directly from an unlabeled video. A masked, stabilized retinal video is
+preferred. Moving dark forceps and shadows are removed with robust temporal
+upper-quantile compositing; no point or mask annotations are needed:
+
+```bash
+python scripts/generate_synthetic_dataset.py \
+  --count 2000 \
+  --realism-video runs/webui/MASK_RUN/artifacts/masking/masked.mp4 \
+  --video-samples 64 \
+  --video-backgrounds 6 \
+  --preview 12
+```
+
+This writes recovered backgrounds and `realism_profile.json` below the output
+dataset's `realism/` directory. Generated frames then match the video's color
+statistics, detail/blur level, sensor-like noise, resampling, occasional motion
+blur, and compression. Pass `--no-video-degradation` to use only the recovered
+backgrounds. The same controls are available in the Studio's Synthetic data
+form under **Realism video**.
+
+Pose boxes now cover the visible distal forceps and shadow geometry rather than
+only the point markers. Completed-image rotations also restore image-frame
+left/right endpoint ordering after transforming the labels. Datasets generated
+by older versions should be regenerated before comparing models.
 
 Train with a pose checkpoint and the pose config:
 

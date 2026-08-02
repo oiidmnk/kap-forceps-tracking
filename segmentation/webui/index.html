@@ -144,6 +144,11 @@
           <label class="field"><span>Seed <small>optional</small></span><input name="seed" type="number" placeholder="random"></label>
           <label class="field"><span>Filename prefix</span><input name="prefix" value="synthetic"></label>
           <label class="field full"><span>Background images <small>comma separated, optional</small></span><input name="backgrounds" placeholder="../retina.png, backgrounds/retina_02.png"></label>
+          <label class="field full"><span>Masked video run <small>optional — use its output as realism reference</small></span><select name="realism_video_run_id"><option value="">Upload a video or use a source path below</option></select></label>
+          <label class="field full"><span>Upload realism video <small>optional — preferably a masked retina video</small></span><input name="realism_video_file" type="file" accept="video/*,.mp4,.mov,.mkv,.avi,.m4v,.webm"></label>
+          <label class="field full"><span>Or realism video source path <small>relative to segmentation/ or absolute</small></span><input name="realism_video" placeholder="runs/webui/.../artifacts/masking/masked.mp4"></label>
+          <label class="field"><span>Recovered backgrounds</span><input name="video_backgrounds" type="number" value="6" min="1" max="32"></label>
+          <label class="field"><span>Sampled video frames</span><input name="video_samples" type="number" value="64" min="2" max="500"></label>
           <label class="field"><span>Background roll ±°</span><input name="background_rotation" type="number" value="180" min="0"></label>
           <label class="field"><span>Image rotations</span><input name="image_rotations" value="90, 180, 270"></label>
           <label class="field"><span>Forceps roll ±°</span><input name="axis_roll" type="number" value="180" min="0"></label>
@@ -153,7 +158,10 @@
           <fieldset class="range-field"><legend>Shadow opacity</legend><input name="shadow_opacity_min" type="number" value="0.3" step="0.05"><span>to</span><input name="shadow_opacity_max" type="number" value="0.55" step="0.05"></fieldset>
           <fieldset class="range-field"><legend>Shadow blur</legend><input name="shadow_blur_min" type="number" value="3" step="0.5"><span>to</span><input name="shadow_blur_max" type="number" value="18" step="0.5"></fieldset>
           <fieldset class="range-field"><legend>Forceps blur</legend><input name="forceps_blur_min" type="number" value="0" step="0.5"><span>to</span><input name="forceps_blur_max" type="number" value="2.5" step="0.5"></fieldset>
+          <fieldset class="range-field"><legend>Forceps contrast</legend><input name="forceps_contrast_min" type="number" value="0.25" min="0.01" max="1" step="0.05"><span>to</span><input name="forceps_contrast_max" type="number" value="0.8" min="0.01" max="1" step="0.05"></fieldset>
+          <label class="field"><span>Shadow correlation</span><input name="shadow_correlation" type="number" value="0.75" min="0" max="1" step="0.05"></label>
           <label class="check-field full"><input name="circular_mask" type="checkbox" checked><span><strong>Circular microscope field</strong><small>Keep generated objects inside the retinal view.</small></span></label>
+          <label class="check-field full"><input name="video_degradation" type="checkbox" checked><span><strong>Match realism video appearance</strong><small>Apply measured color, blur, noise, resampling, motion blur, and compression after rendering.</small></span></label>
         </div>
 
         <div id="dataset-split-fields" class="form-grid hidden">

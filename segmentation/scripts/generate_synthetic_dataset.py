@@ -26,6 +26,11 @@ if __package__ is None or __package__ == "":
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scripts.check_labels import CLASS_COLORS
+from scripts.video_realism import (
+    RealismProfile,
+    apply_realism_degradation,
+    build_video_realism_assets,
+)
 
 FORCEPS_KEYPOINT_NAMES = ("tip_left", "tip_right", "jaw_root")
 SHADOW_KEYPOINT_NAMES = ("shadow_left", "shadow_right", "shadow_root")
@@ -39,6 +44,8 @@ class Pose:
     tip_polygons: list[np.ndarray]
     shadow_polygons: list[np.ndarray]
     variation: Optional["RenderVariation"] = None
+    forceps_extent_polygons: Optional[list[np.ndarray]] = None
+    shadow_extent_polygons: Optional[list[np.ndarray]] = None
 
 
 @dataclass(frozen=True)
@@ -50,6 +57,7 @@ class RenderVariation:
     shadow_softness: float
     shadow_opacity: float
     forceps_softness: float = 0.0
+    forceps_contrast: float = 1.0
     image_rotation_degrees: float = 0.0
 
 
@@ -81,6 +89,11 @@ class GenerationTask:
     shadow_blur_max: float = 18.0
     forceps_blur_min: float = 0.0
     forceps_blur_max: float = 2.5
+    forceps_contrast_min: float = 0.25
+    forceps_contrast_max: float = 0.80
+    shadow_correlation: float = 0.75
+    realism_profile: Optional[RealismProfile] = None
+    video_degradation: bool = True
     circular_mask: bool = True
     image_rotations: tuple[float, ...] = (0.0,)
 
@@ -426,8 +439,9 @@ def composite_realistic_shadow(
     )
     alpha = np.clip(combined / 255.0 * opacity * low_frequency, 0.0, 0.72)[:, :, None]
     shadow_tint = np.array((27, 34, 43), dtype=np.float32)
+    source = image.astype(np.float32)
     image[:] = np.clip(
-        image.astype(np.float32) * (1.0 - alpha) + shadow_tint * alpha,
+        source * (1.0 - alpha * 0.84) + shadow_tint * alpha * 0.16,
         0,
         255,
     ).astype(np.uint8)
@@ -438,20 +452,22 @@ def composite_forceps_material(
     background: np.ndarray,
     *,
     softness: float,
+    contrast: float = 1.0,
 ) -> None:
-    """Apply defocus to an opaque rendered instrument.
+    """Apply defocus and contrast attenuation to the rendered instrument.
 
     Operating on the rendered color delta preserves the retina and shadow while
-    allowing mildly defocused forceps variants. The instrument color delta is
-    never attenuated, so this step cannot make the forceps translucent.
+    allowing mildly defocused, low-contrast forceps variants.
     """
 
     if image.shape != background.shape:
         raise ValueError("forceps image and background must have the same shape")
     if softness < 0:
         raise ValueError("forceps softness must be non-negative")
+    if not 0 < contrast <= 1:
+        raise ValueError("forceps contrast must be in (0, 1]")
 
-    delta = image.astype(np.float32) - background.astype(np.float32)
+    delta = (image.astype(np.float32) - background.astype(np.float32)) * contrast
     if softness > 1e-6:
         delta = cv2.GaussianBlur(delta, (0, 0), softness)
     image[:] = np.clip(
@@ -868,10 +884,30 @@ def rotate_image_and_pose(
     variation = pose.variation
     if variation is not None:
         variation = replace(variation, image_rotation_degrees=angle_degrees)
+    def transform_and_order(polygons: list[np.ndarray]) -> list[np.ndarray]:
+        transformed = [transform_polygon(polygon) for polygon in polygons]
+        if len(transformed) >= 2:
+            endpoints = sorted(
+                transformed[:2],
+                key=lambda polygon: tuple(np.mean(polygon, axis=0)),
+            )
+            transformed = [*endpoints, *transformed[2:]]
+        return transformed
+
     transformed_pose = Pose(
-        tip_polygons=[transform_polygon(polygon) for polygon in pose.tip_polygons],
-        shadow_polygons=[transform_polygon(polygon) for polygon in pose.shadow_polygons],
+        tip_polygons=transform_and_order(pose.tip_polygons),
+        shadow_polygons=transform_and_order(pose.shadow_polygons),
         variation=variation,
+        forceps_extent_polygons=(
+            [transform_polygon(polygon) for polygon in pose.forceps_extent_polygons]
+            if pose.forceps_extent_polygons is not None
+            else None
+        ),
+        shadow_extent_polygons=(
+            [transform_polygon(polygon) for polygon in pose.shadow_extent_polygons]
+            if pose.shadow_extent_polygons is not None
+            else None
+        ),
     )
     return rotated, transformed_pose
 
@@ -938,21 +974,34 @@ def render_forceps(
     shadow_opacity_range: tuple[float, float] = (0.30, 0.55),
     shadow_blur_range: tuple[float, float] = (3.0, 18.0),
     forceps_blur_range: tuple[float, float] = (0.0, 2.5),
+    forceps_contrast_range: tuple[float, float] = (0.25, 0.80),
+    shadow_correlation: float = 0.75,
 ) -> Pose:
     height, width = image.shape[:2]
     image_scale = width / 820.0
     is_large_forceps = rng.random() < 0.38
     is_far_shadow = rng.random() < 0.42
-    forceps_roll_degrees, shadow_roll_degrees = sample_roll_pair(
-        rng,
-        axis_roll,
-        shadow_axis_roll,
-    )
+    if rng.random() < shadow_correlation:
+        forceps_roll_degrees = sample_expressive_roll(rng, axis_roll)
+        shadow_roll_degrees = float(
+            np.clip(
+                forceps_roll_degrees + rng.normal(0.0, max(4.0, shadow_axis_roll * 0.10)),
+                -shadow_axis_roll,
+                shadow_axis_roll,
+            )
+        )
+    else:
+        forceps_roll_degrees, shadow_roll_degrees = sample_roll_pair(
+            rng,
+            axis_roll,
+            shadow_axis_roll,
+        )
     forceps_roll = math.radians(forceps_roll_degrees)
     shadow_roll = math.radians(shadow_roll_degrees)
     shadow_scale = float(rng.uniform(*shadow_scale_range))
     tip_scale = float(rng.uniform(*tip_scale_range))
     forceps_softness = float(rng.uniform(*forceps_blur_range))
+    forceps_contrast = float(rng.uniform(*forceps_contrast_range))
     if rng.random() < 0.34:
         shadow_scale = max(shadow_scale, shadow_scale_range[0] + 0.68 * (shadow_scale_range[1] - shadow_scale_range[0]))
     if rng.random() < 0.34:
@@ -1220,7 +1269,37 @@ def render_forceps(
         image,
         forceps_background,
         softness=forceps_softness,
+        contrast=forceps_contrast,
     )
+
+    # Use the visible distal assembly as detection context instead of a box
+    # around only the three point markers. Limiting the proximal shaft keeps
+    # the box informative even though the rendered instrument enters off-frame.
+    forceps_box_entry = base - direction * min(jaw_len * 1.35, width * 0.28)
+    forceps_extent_polygons = [
+        tapered_segment_polygon(
+            forceps_box_entry,
+            base,
+            shaft_start_width,
+            shaft_end_width,
+        ),
+        collar,
+        profiled_ribbon_polygon(jaw_curve_a, jaw_width_profile),
+        profiled_ribbon_polygon(jaw_curve_b, jaw_width_profile),
+    ]
+    shadow_box_entry = shadow_base - shadow_direction * min(
+        shadow_jaw_len * 1.35,
+        width * 0.30,
+    )
+    shadow_extent_polygons = [
+        tapered_segment_polygon(
+            shadow_box_entry,
+            shadow_base,
+            shadow_shaft_start_width,
+            shadow_shaft_end_width,
+        ),
+        *shadow_shapes[1:],
+    ]
 
     return Pose(
         tip_polygons=tip_polys,
@@ -1233,7 +1312,10 @@ def render_forceps(
             shadow_softness=shadow_softness,
             shadow_opacity=shadow_opacity,
             forceps_softness=forceps_softness,
+            forceps_contrast=forceps_contrast,
         ),
+        forceps_extent_polygons=forceps_extent_polygons,
+        shadow_extent_polygons=shadow_extent_polygons,
     )
 
 
@@ -1274,8 +1356,9 @@ def pose_label_line(
     width: int,
     height: int,
     visibility: int = 2,
+    extent_polygons: Optional[list[np.ndarray]] = None,
 ) -> str:
-    bbox = object_bbox(keypoint_polygons, width, height)
+    bbox = object_bbox(extent_polygons or keypoint_polygons, width, height)
     values: list[float | int] = [class_id, *bbox]
     for polygon in keypoint_polygons:
         x, y = normalized_center(polygon, width, height)
@@ -1288,8 +1371,22 @@ def pose_label_lines(pose: Pose, width: int, height: int, visibility: int = 2) -
     forceps_polygons = [pose.tip_polygons[0], pose.tip_polygons[1], pose.tip_polygons[2]]
     shadow_polygons = [pose.shadow_polygons[0], pose.shadow_polygons[1], pose.shadow_polygons[2]]
     lines = [
-        pose_label_line(FORCEPS_CLASS_ID, forceps_polygons, width, height, visibility),
-        pose_label_line(SHADOW_CLASS_ID, shadow_polygons, width, height, visibility),
+        pose_label_line(
+            FORCEPS_CLASS_ID,
+            forceps_polygons,
+            width,
+            height,
+            visibility,
+            pose.forceps_extent_polygons,
+        ),
+        pose_label_line(
+            SHADOW_CLASS_ID,
+            shadow_polygons,
+            width,
+            height,
+            visibility,
+            pose.shadow_extent_polygons,
+        ),
     ]
     for line in lines:
         column_count = len(line.split())
@@ -1374,7 +1471,7 @@ def render_preview(image: np.ndarray, pose: Pose) -> np.ndarray:
             f"shadow={variation.shadow_roll_degrees:+.0f}deg  "
             f"shadow={variation.shadow_scale:.2f}x/{variation.shadow_opacity:.2f}alpha "
             f"blur={variation.shadow_softness:.1f}px tips={variation.tip_scale:.2f}x "
-            f"forceps blur={variation.forceps_softness:.1f}px "
+            f"forceps={variation.forceps_contrast:.2f}contrast/{variation.forceps_softness:.1f}px "
             f"image={variation.image_rotation_degrees:+.0f}deg"
         )
         cv2.rectangle(preview, (6, height - 27), (min(width - 6, 640), height - 5), (12, 12, 12), -1)
@@ -1482,6 +1579,8 @@ def generate_one_image(task: GenerationTask) -> str:
             (task.shadow_opacity_min, task.shadow_opacity_max),
             (task.shadow_blur_min, task.shadow_blur_max),
             (task.forceps_blur_min, task.forceps_blur_max),
+            (task.forceps_contrast_min, task.forceps_contrast_max),
+            task.shadow_correlation,
         )
         if not task.circular_mask or pose_inside_circular_view(
             pose,
@@ -1502,6 +1601,8 @@ def generate_one_image(task: GenerationTask) -> str:
             image_rotation,
             fit_to_frame=not task.circular_mask,
         )
+    if task.realism_profile is not None and task.video_degradation:
+        image = apply_realism_degradation(image, task.realism_profile, rng)
     image_path = task.out_dir / "images" / split / f"{name}.png"
     label_path = task.out_dir / "labels" / split / f"{name}.txt"
     output_image = circular_png_image(image) if task.circular_mask else image
@@ -1617,6 +1718,34 @@ def parse_args() -> argparse.Namespace:
         metavar=("MIN", "MAX"),
         help="Gaussian defocus bounds for the rendered forceps in output pixels.",
     )
+    parser.add_argument(
+        "--forceps-contrast",
+        type=float,
+        nargs=2,
+        default=(0.25, 0.80),
+        metavar=("MIN", "MAX"),
+        help="Rendered forceps contrast bounds; 1 is fully opaque contrast.",
+    )
+    parser.add_argument(
+        "--shadow-correlation",
+        type=float,
+        default=0.75,
+        help="Probability that shadow roll is physically correlated with forceps roll.",
+    )
+    parser.add_argument(
+        "--realism-video",
+        type=Path,
+        help="Unlabeled preferably masked video used to recover backgrounds and image statistics.",
+    )
+    parser.add_argument("--video-backgrounds", type=int, default=6)
+    parser.add_argument("--video-samples", type=int, default=64)
+    parser.add_argument(
+        "--no-video-degradation",
+        dest="video_degradation",
+        action="store_false",
+        help="Use recovered video backgrounds without matching blur/noise/compression.",
+    )
+    parser.set_defaults(video_degradation=True)
     parser.add_argument("--seed", type=int, help="Random seed for reproducible generation.")
     parser.add_argument("--prefix", default="synthetic", help="Filename prefix.")
     parser.add_argument("--start-index", type=int, default=0, help="First numeric image index.")
@@ -1688,6 +1817,18 @@ def main() -> int:
         raise SystemExit("--forceps-blur values must be non-negative")
     if args.forceps_blur[0] > args.forceps_blur[1]:
         raise SystemExit("--forceps-blur MIN must not exceed MAX")
+    if not 0 < args.forceps_contrast[0] <= 1 or not 0 < args.forceps_contrast[1] <= 1:
+        raise SystemExit("--forceps-contrast values must be in (0, 1]")
+    if args.forceps_contrast[0] > args.forceps_contrast[1]:
+        raise SystemExit("--forceps-contrast MIN must not exceed MAX")
+    if not 0 <= args.shadow_correlation <= 1:
+        raise SystemExit("--shadow-correlation must be between 0 and 1")
+    if args.video_backgrounds < 1:
+        raise SystemExit("--video-backgrounds must be positive")
+    if args.video_samples < 2:
+        raise SystemExit("--video-samples must be at least 2")
+    if args.realism_video is not None and not args.realism_video.is_file():
+        raise SystemExit(f"realism video does not exist or is not a file: {args.realism_video}")
     backgrounds = tuple(args.background or ())
     for background in backgrounds:
         if not background.is_file():
@@ -1700,6 +1841,20 @@ def main() -> int:
         path.mkdir(parents=True, exist_ok=True)
     if args.preview:
         args.preview_dir.mkdir(parents=True, exist_ok=True)
+
+    realism_profile = None
+    if args.realism_video is not None:
+        print("Recovering backgrounds and image statistics from realism video…", flush=True)
+        video_backgrounds, realism_profile = build_video_realism_assets(
+            args.realism_video,
+            args.out_dir / "realism",
+            width=args.width,
+            height=args.height,
+            sample_count=args.video_samples,
+            background_count=args.video_backgrounds,
+            seed=args.seed,
+        )
+        backgrounds = (*backgrounds, *video_backgrounds)
 
     image_seeds = build_image_seeds(args.seed, args.count)
     tasks = [
@@ -1730,6 +1885,11 @@ def main() -> int:
             shadow_blur_max=args.shadow_blur[1],
             forceps_blur_min=args.forceps_blur[0],
             forceps_blur_max=args.forceps_blur[1],
+            forceps_contrast_min=args.forceps_contrast[0],
+            forceps_contrast_max=args.forceps_contrast[1],
+            shadow_correlation=args.shadow_correlation,
+            realism_profile=realism_profile,
+            video_degradation=args.video_degradation,
             circular_mask=args.circular_mask,
             image_rotations=tuple(float(angle % 360.0) for angle in args.image_rotations),
         )

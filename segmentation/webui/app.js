@@ -156,6 +156,7 @@ function refreshDatasetOptions() {
   $('#run-form').elements.model_run_id.innerHTML = `<option value="">Select a completed training run</option>${modelOptions}`
   const maskedOptions = state.runs.filter((run) => run.kind === 'video_mask' && run.status === 'completed').map((run) => `<option value="${run.id}">${escapeHtml(run.name)} · ${formatDate(run.created_at, true)}</option>`).join('')
   $('#run-form').elements.masked_video_run_id.innerHTML = `<option value="">Upload media or use a source path below</option>${maskedOptions}`
+  $('#run-form').elements.realism_video_run_id.innerHTML = `<option value="">Upload a video or use a source path below</option>${maskedOptions}`
 }
 
 function openDialog(kind = 'training', sourceRun = null) {
@@ -257,13 +258,20 @@ function readParameters(form, uploadedSource = null) {
   }
   const seed = form.elements.seed.value.trim()
   const csv = (name) => form.elements[name].value.split(',').map((value) => value.trim()).filter(Boolean)
+  const realismVideoRunId = form.elements.realism_video_run_id.value
   return {
     count: readNumber(form, 'count'), preview: readNumber(form, 'preview'), width: readNumber(form, 'width'), height: readNumber(form, 'height'),
     val_fraction: readNumber(form, 'val_fraction'), workers: readNumber(form, 'workers'), seed: seed === '' ? null : Number(seed), prefix: form.elements.prefix.value.trim(),
-    backgrounds: csv('backgrounds'), background_rotation: readNumber(form, 'background_rotation'), image_rotations: csv('image_rotations').map(Number),
+    backgrounds: csv('backgrounds'),
+    realism_video_run_id: realismVideoRunId || null,
+    realism_video: realismVideoRunId ? null : uploadedSource || form.elements.realism_video.value.trim() || null,
+    video_backgrounds: readNumber(form, 'video_backgrounds'), video_samples: readNumber(form, 'video_samples'),
+    video_degradation: form.elements.video_degradation.checked,
+    background_rotation: readNumber(form, 'background_rotation'), image_rotations: csv('image_rotations').map(Number),
     axis_roll: readNumber(form, 'axis_roll'), shadow_axis_roll: readNumber(form, 'shadow_axis_roll'), circular_mask: form.elements.circular_mask.checked,
     shadow_scale: readRange(form, 'shadow_scale'), tip_scale: readRange(form, 'tip_scale'), shadow_opacity: readRange(form, 'shadow_opacity'),
     shadow_blur: readRange(form, 'shadow_blur'), forceps_blur: readRange(form, 'forceps_blur'),
+    forceps_contrast: readRange(form, 'forceps_contrast'), shadow_correlation: readNumber(form, 'shadow_correlation'),
   }
 }
 
@@ -275,9 +283,15 @@ $('#run-form').addEventListener('submit', async (event) => {
   $('#form-error').textContent = ''
   try {
     let uploadedSource = null
-    if (state.kind === 'prediction' || state.kind === 'video_mask') {
-      const useMaskedRun = state.kind === 'prediction' && form.elements.masked_video_run_id.value
-      const media = state.kind === 'prediction' ? form.elements.media_file.files[0] : form.elements.mask_media_file.files[0]
+    if (state.kind === 'prediction' || state.kind === 'video_mask' || state.kind === 'synthetic') {
+      const useMaskedRun = state.kind === 'prediction'
+        ? form.elements.masked_video_run_id.value
+        : state.kind === 'synthetic' && form.elements.realism_video_run_id.value
+      const media = state.kind === 'prediction'
+        ? form.elements.media_file.files[0]
+        : state.kind === 'video_mask'
+          ? form.elements.mask_media_file.files[0]
+          : form.elements.realism_video_file.files[0]
       if (media && !useMaskedRun) {
         button.querySelector('span').textContent = 'Uploading…'
         const uploadBody = new FormData()

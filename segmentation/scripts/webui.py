@@ -92,6 +92,11 @@ class SyntheticParameters(BaseModel):
     val_fraction: float = Field(default=0.15, ge=0, le=1)
     prefix: str = Field(default="synthetic", pattern=r"^[A-Za-z0-9_-]+$", max_length=80)
     backgrounds: list[str] = Field(default_factory=list, max_length=100)
+    realism_video: str | None = Field(default=None, max_length=2000)
+    realism_video_run_id: str | None = Field(default=None, pattern=r"^[a-z0-9-]+$")
+    video_backgrounds: int = Field(default=6, ge=1, le=32)
+    video_samples: int = Field(default=64, ge=2, le=500)
+    video_degradation: bool = True
     background_rotation: float = Field(default=180, ge=0, le=360)
     image_rotations: list[float] = Field(default_factory=lambda: [90, 180, 270], min_length=1, max_length=16)
     axis_roll: float = Field(default=180, ge=0, le=360)
@@ -101,6 +106,8 @@ class SyntheticParameters(BaseModel):
     shadow_blur: NumberRange = Field(default_factory=lambda: NumberRange(minimum=3, maximum=18))
     tip_scale: NumberRange = Field(default_factory=lambda: NumberRange(minimum=0.85, maximum=1.85))
     forceps_blur: NumberRange = Field(default_factory=lambda: NumberRange(minimum=0, maximum=2.5))
+    forceps_contrast: NumberRange = Field(default_factory=lambda: NumberRange(minimum=0.25, maximum=0.80))
+    shadow_correlation: float = Field(default=0.75, ge=0, le=1)
     circular_mask: bool = True
 
     @field_validator("image_rotations")
@@ -117,13 +124,20 @@ class SyntheticParameters(BaseModel):
             raise ValueError("background paths must be non-empty paths")
         return values
 
+    @field_validator("realism_video", "realism_video_run_id", mode="before")
+    @classmethod
+    def empty_realism_video_to_none(cls, value: Any) -> Any:
+        return None if value == "" else value
+
     @model_validator(mode="after")
     def valid_render_ranges(self) -> "SyntheticParameters":
+        if self.realism_video and self.realism_video_run_id:
+            raise ValueError("choose either a realism video source or a masked video run")
         for name in ("shadow_scale", "tip_scale"):
             value = getattr(self, name)
             if value.minimum <= 0:
                 raise ValueError(f"{name.replace('_', ' ')} values must be positive")
-        for name in ("shadow_opacity",):
+        for name in ("shadow_opacity", "forceps_contrast"):
             value = getattr(self, name)
             if value.minimum < 0 or value.maximum > 1:
                 raise ValueError(f"{name.replace('_', ' ')} values must be between 0 and 1")
@@ -195,6 +209,7 @@ def build_command(
     source_model_weights: Path | None = None,
     source_media: Path | None = None,
     starting_model_weights: Path | None = None,
+    realism_video_source: Path | None = None,
 ) -> tuple[list[str], dict[str, Any]]:
     if kind == "training":
         parsed = TrainingParameters.model_validate(parameters)
@@ -330,12 +345,29 @@ def build_command(
         *_range_args("--shadow-blur", parsed.shadow_blur),
         *_range_args("--tip-scale", parsed.tip_scale),
         *_range_args("--forceps-blur", parsed.forceps_blur),
+        *_range_args("--forceps-contrast", parsed.forceps_contrast),
+        "--shadow-correlation",
+        str(parsed.shadow_correlation),
         "--circular-mask" if parsed.circular_mask else "--rectangular-view",
     ]
     if parsed.seed is not None:
         command.extend(["--seed", str(parsed.seed)])
     if parsed.backgrounds:
         command.extend(["--background", *parsed.backgrounds])
+    realism_video = realism_video_source or parsed.realism_video
+    if realism_video:
+        command.extend(
+            [
+                "--realism-video",
+                str(realism_video),
+                "--video-backgrounds",
+                str(parsed.video_backgrounds),
+                "--video-samples",
+                str(parsed.video_samples),
+            ]
+        )
+    if not parsed.video_degradation:
+        command.append("--no-video-degradation")
     return command, params
 
 
@@ -404,6 +436,10 @@ class RunManager:
         masked_video_run_id = (
             request.parameters.get("masked_video_run_id") if request.kind == "prediction" else None
         )
+        realism_video_run_id = (
+            request.parameters.get("realism_video_run_id") if request.kind == "synthetic" else None
+        )
+        realism_video_source = None
         if model_run_id:
             source_model_weights = self._resolve_model_run(str(model_run_id))
         if starting_model_run_id:
@@ -412,6 +448,10 @@ class RunManager:
             source_media = self._resolve_masked_video_run(str(masked_video_run_id))
         elif request.kind in {"prediction", "video_mask"} and request.parameters.get("source"):
             source_media = self._resolve_media(str(request.parameters["source"]))
+        if realism_video_run_id:
+            realism_video_source = self._resolve_masked_video_run(str(realism_video_run_id))
+        elif request.kind == "synthetic" and request.parameters.get("realism_video"):
+            realism_video_source = self._resolve_video(str(request.parameters["realism_video"]))
         command, parameters = build_command(
             request.kind,
             request.parameters,
@@ -420,6 +460,7 @@ class RunManager:
             source_model_weights=source_model_weights,
             source_media=source_media,
             starting_model_weights=starting_model_weights,
+            realism_video_source=realism_video_source,
         )
         run_dir.mkdir(parents=True)
         (run_dir / "artifacts").mkdir()
@@ -455,6 +496,7 @@ class RunManager:
                     starting_model_run_id,
                     model_run_id,
                     masked_video_run_id,
+                    realism_video_run_id,
                 )
                 if run
             ],
@@ -496,7 +538,7 @@ class RunManager:
         if metadata.get("kind") != "video_mask":
             raise ValueError("Selected run does not produce a masked video")
         if metadata.get("status") != "completed":
-            raise ValueError("Video masking must finish before prediction")
+            raise ValueError("Video masking must finish before its output can be used")
         video = self._run_dir(run_id) / "artifacts" / "masking" / "masked.mp4"
         if not video.is_file():
             raise ValueError("Selected masking run has no usable video")
@@ -512,6 +554,13 @@ class RunManager:
             raise ValueError(f"Prediction source does not exist: {value}")
         if path.suffix.lower() not in MEDIA_SUFFIXES:
             raise ValueError(f"Unsupported prediction media type: {path.suffix or 'none'}")
+        return path
+
+    @staticmethod
+    def _resolve_video(value: str) -> Path:
+        path = RunManager._resolve_media(value)
+        if path.suffix.lower() not in VIDEO_SUFFIXES:
+            raise ValueError(f"Unsupported realism video type: {path.suffix or 'none'}")
         return path
 
     def _resolve_dataset_run(self, run_id: str) -> tuple[dict[str, Any], Path]:

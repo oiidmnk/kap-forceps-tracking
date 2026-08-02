@@ -55,6 +55,10 @@ def test_synthetic_command_maps_ranges_and_output_paths(tmp_path: Path) -> None:
             "seed": 42,
             "image_rotations": [0, 90],
             "shadow_opacity": {"minimum": 0.4, "maximum": 0.7},
+            "realism_video": "masked.mp4",
+            "video_backgrounds": 4,
+            "video_samples": 20,
+            "forceps_contrast": {"minimum": 0.35, "maximum": 0.8},
         },
         tmp_path,
     )
@@ -65,9 +69,25 @@ def test_synthetic_command_maps_ranges_and_output_paths(tmp_path: Path) -> None:
     assert command[command.index("--seed") + 1] == "42"
     opacity_index = command.index("--shadow-opacity")
     assert command[opacity_index + 1 : opacity_index + 3] == ["0.4", "0.7"]
+    assert command[command.index("--realism-video") + 1] == "masked.mp4"
+    assert command[command.index("--video-backgrounds") + 1] == "4"
+    contrast_index = command.index("--forceps-contrast")
+    assert command[contrast_index + 1 : contrast_index + 3] == ["0.35", "0.8"]
     assert "--forceps-opacity" not in command
     assert "forceps_opacity" not in parameters
     assert parameters["count"] == 7
+
+
+def test_synthetic_command_uses_resolved_realism_video(tmp_path: Path) -> None:
+    video = tmp_path / "uploads" / "retina.mov"
+    command, _ = build_command(
+        "synthetic",
+        {"realism_video": "unresolved.mov"},
+        tmp_path / "run",
+        realism_video_source=video,
+    )
+
+    assert command[command.index("--realism-video") + 1] == str(video)
 
 
 def test_dataset_split_command_references_source_run_artifacts(tmp_path: Path) -> None:
@@ -225,6 +245,29 @@ def test_prediction_ui_exposes_temporal_video_tracking() -> None:
     assert "temporal_filter: 'prediction_temporal_filter'" in app
 
 
+def test_synthetic_ui_exposes_unlabeled_video_realism_controls() -> None:
+    webui_root = Path(__file__).resolve().parents[1] / "webui"
+    index = (webui_root / "index.html").read_text()
+    app = (webui_root / "app.js").read_text()
+
+    for field_name in (
+        "realism_video_run_id",
+        "realism_video_file",
+        "realism_video",
+        "video_backgrounds",
+        "video_samples",
+        "video_degradation",
+        "forceps_contrast_min",
+        "forceps_contrast_max",
+        "shadow_correlation",
+    ):
+        assert f'name="{field_name}"' in index
+    assert "realism_video_run_id: realismVideoRunId || null" in app
+    assert "form.elements.realism_video_file.files[0]" in app
+    assert "elements.realism_video_run_id.innerHTML" in app
+    assert "forceps_contrast: readRange(form, 'forceps_contrast')" in app
+
+
 def test_model_run_resolves_best_weights(tmp_path: Path) -> None:
     manager = RunManager(tmp_path / "runs")
     run_id = "20260101-120000-abcdef"
@@ -285,6 +328,55 @@ def test_prediction_can_resolve_completed_mask_run(tmp_path: Path) -> None:
     }))
 
     assert manager._resolve_masked_video_run(run_id) == video.resolve()
+
+
+def test_synthetic_run_can_use_completed_mask_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manager = RunManager(tmp_path / "runs")
+    mask_id = "20260102-120000-fedcba"
+    mask_dir = tmp_path / "runs" / mask_id
+    video = mask_dir / "artifacts" / "masking" / "masked.mp4"
+    video.parent.mkdir(parents=True)
+    video.write_bytes(b"video")
+    (mask_dir / "run.json").write_text(json.dumps({
+        "id": mask_id, "kind": "video_mask", "status": "completed",
+    }))
+    monkeypatch.setattr("scripts.webui.threading.Thread.start", lambda _self: None)
+
+    run = manager.create(CreateRunRequest(kind="synthetic", parameters={
+        "realism_video_run_id": mask_id,
+    }))
+
+    assert run["input_runs"] == [mask_id]
+    assert run["parameters"]["realism_video_run_id"] == mask_id
+    assert run["command"][run["command"].index("--realism-video") + 1] == str(video.resolve())
+
+
+def test_synthetic_run_resolves_uploaded_realism_video(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manager = RunManager(tmp_path / "runs")
+    video = tmp_path / "retina.mov"
+    video.write_bytes(b"video")
+    monkeypatch.setattr("scripts.webui.threading.Thread.start", lambda _self: None)
+
+    run = manager.create(CreateRunRequest(kind="synthetic", parameters={
+        "realism_video": str(video),
+    }))
+
+    assert run["command"][run["command"].index("--realism-video") + 1] == str(video.resolve())
+
+
+def test_synthetic_run_rejects_image_as_realism_video(tmp_path: Path) -> None:
+    manager = RunManager(tmp_path / "runs")
+    image = tmp_path / "frame.png"
+    image.write_bytes(b"image")
+
+    with pytest.raises(ValueError, match="Unsupported realism video type"):
+        manager.create(CreateRunRequest(kind="synthetic", parameters={
+            "realism_video": str(image),
+        }))
 
 
 def test_prediction_run_records_model_and_masked_video_lineage(
