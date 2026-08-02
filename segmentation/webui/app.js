@@ -59,10 +59,12 @@ function renderRunList() {
 
 async function refreshRuns() {
   try {
+    const selectedWasActive = activeStatuses.has(state.runs.find((run) => run.id === state.selectedId)?.status)
     state.runs = await api('/api/runs')
     $('#runner-status').textContent = 'Ready'
     renderRunList()
-    if (state.selectedId) await refreshDetail()
+    const selectedIsActive = activeStatuses.has(state.runs.find((run) => run.id === state.selectedId)?.status)
+    if (state.selectedId && (selectedWasActive || selectedIsActive)) await refreshDetail()
   } catch (error) {
     $('#runner-status').textContent = 'Offline'
     console.error(error)
@@ -149,6 +151,7 @@ function refreshDatasetOptions() {
   $('#run-form').elements.dataset_run_id.innerHTML = `<option value="">Use dataset config below</option>${options}`
   $('#run-form').elements.source_run_id.innerHTML = `<option value="">Select a completed dataset run</option>${options}`
   const modelOptions = state.runs.filter((run) => run.kind === 'training' && run.status === 'completed').map((run) => `<option value="${run.id}">${escapeHtml(run.name)} · ${formatDate(run.created_at, true)}</option>`).join('')
+  $('#run-form').elements.starting_model_run_id.innerHTML = `<option value="">Use checkpoint or model YAML below</option>${modelOptions}`
   $('#run-form').elements.model_run_id.innerHTML = `<option value="">Select a completed training run</option>${modelOptions}`
   const maskedOptions = state.runs.filter((run) => run.kind === 'video_mask' && run.status === 'completed').map((run) => `<option value="${run.id}">${escapeHtml(run.name)} · ${formatDate(run.created_at, true)}</option>`).join('')
   $('#run-form').elements.masked_video_run_id.innerHTML = `<option value="">Upload media or use a source path below</option>${maskedOptions}`
@@ -156,9 +159,11 @@ function refreshDatasetOptions() {
 
 function openDialog(kind = 'training', sourceRun = null) {
   $('#run-form').reset()
+  $('#run-form').elements.model.disabled = false
   refreshDatasetOptions()
   setKind(kind)
   if (sourceRun) populateForm(sourceRun)
+  syncStartingModelField()
   $('#run-dialog').showModal()
 }
 
@@ -209,9 +214,14 @@ function populateForm(run) {
 
 function readNumber(form, name) { return Number(form.elements[name].value) }
 function readRange(form, name) { return { minimum: readNumber(form, `${name}_min`), maximum: readNumber(form, `${name}_max`) } }
+function syncStartingModelField() {
+  const form = $('#run-form')
+  form.elements.model.disabled = Boolean(form.elements.starting_model_run_id.value)
+}
 function readParameters(form, uploadedSource = null) {
   if (state.kind === 'training') return {
     model: form.elements.model.value.trim(), config: form.elements.config.value.trim(),
+    starting_model_run_id: form.elements.starting_model_run_id.value || null,
     epochs: readNumber(form, 'epochs'), imgsz: readNumber(form, 'imgsz'), batch: readNumber(form, 'batch'),
     patience: readNumber(form, 'patience'), device: form.elements.device.value.trim() || null,
     preprocess_preset: form.elements.preprocess_preset.value.trim() || null,
@@ -252,7 +262,7 @@ function readParameters(form, uploadedSource = null) {
     backgrounds: csv('backgrounds'), background_rotation: readNumber(form, 'background_rotation'), image_rotations: csv('image_rotations').map(Number),
     axis_roll: readNumber(form, 'axis_roll'), shadow_axis_roll: readNumber(form, 'shadow_axis_roll'), circular_mask: form.elements.circular_mask.checked,
     shadow_scale: readRange(form, 'shadow_scale'), tip_scale: readRange(form, 'tip_scale'), shadow_opacity: readRange(form, 'shadow_opacity'),
-    shadow_blur: readRange(form, 'shadow_blur'), forceps_opacity: readRange(form, 'forceps_opacity'), forceps_blur: readRange(form, 'forceps_blur'),
+    shadow_blur: readRange(form, 'shadow_blur'), forceps_blur: readRange(form, 'forceps_blur'),
   }
 }
 
@@ -298,8 +308,13 @@ $('#run-form').elements.dataset_run_id.addEventListener('change', (event) => {
   if (form.elements.model.value === 'yolo11n-seg.pt') form.elements.model.value = 'yolo11n-pose.pt'
   if (form.elements.config.value === 'configs/forceps_seg.yaml') form.elements.config.value = 'configs/forceps_pose.yaml'
 })
+$('#run-form').elements.starting_model_run_id.addEventListener('change', syncStartingModelField)
 $$('.dialog-close, .dialog-cancel').forEach((button) => button.addEventListener('click', () => $('#run-dialog').close()))
 $$('.filter').forEach((button) => button.addEventListener('click', () => { state.filter = button.dataset.filter; $$('.filter').forEach((item) => item.classList.toggle('active', item === button)); renderRunList() }))
 
-refreshRuns()
-state.timer = setInterval(refreshRuns, 2000)
+async function pollRuns() {
+  await refreshRuns()
+  state.timer = setTimeout(pollRuns, 2000)
+}
+
+pollRuns()

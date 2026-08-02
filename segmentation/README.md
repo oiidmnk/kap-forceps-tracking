@@ -135,7 +135,6 @@ python scripts/generate_synthetic_dataset.py \
   --shadow-scale 0.9 2.1 \
   --shadow-opacity 0.4 0.7 \
   --shadow-blur 2 22 \
-  --forceps-opacity 0.5 1.0 \
   --forceps-blur 0 2.5 \
   --tip-scale 0.85 2.0 \
   --preview 12
@@ -154,10 +153,9 @@ hard-edged shadows, `--shadow-blur 12 28` for soft shadows, or equal values for
 a constant blur. Far shadows are biased toward the blurrier end and near
 shadows toward the sharper end, without exceeding the requested range.
 
-`--forceps-opacity MIN MAX` and `--forceps-blur MIN MAX` vary the instrument
-appearance independently of the background. The default opacity range includes
-pale, partially translucent instruments like real microscope footage, while
-the blur range adds mild defocus without blurring the retina or shadow.
+`--forceps-blur MIN MAX` varies instrument defocus independently of the
+background. Synthetic forceps are always rendered fully opaque; only the
+shadow has configurable opacity.
 
 Train with a pose checkpoint and the pose config:
 
@@ -392,15 +390,13 @@ For the HTTP service, set
 repository `retina.png` reference into the inference container.
 
 Reference matching can reduce the retinal color-domain gap, but it does not
-change the instrument. A model trained only on opaque synthetic forceps will
-still miss pale real forceps. Generate a substantially larger replacement
-dataset with the default translucent/defocus variation and retrain; for example:
+change the instrument. Generate a substantially larger replacement dataset
+with defocus variation and retrain; for example:
 
 ```bash
 python scripts/generate_synthetic_dataset.py \
   --count 5000 \
   --background ../retina.png \
-  --forceps-opacity 0.35 1.0 \
   --forceps-blur 0 3.5 \
   --preview 20
 ```

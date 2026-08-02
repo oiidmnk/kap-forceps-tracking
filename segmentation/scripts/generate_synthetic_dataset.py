@@ -49,7 +49,6 @@ class RenderVariation:
     tip_scale: float
     shadow_softness: float
     shadow_opacity: float
-    forceps_opacity: float = 1.0
     forceps_softness: float = 0.0
     image_rotation_degrees: float = 0.0
 
@@ -80,8 +79,6 @@ class GenerationTask:
     shadow_opacity_max: float = 0.55
     shadow_blur_min: float = 3.0
     shadow_blur_max: float = 18.0
-    forceps_opacity_min: float = 0.50
-    forceps_opacity_max: float = 1.0
     forceps_blur_min: float = 0.0
     forceps_blur_max: float = 2.5
     circular_mask: bool = True
@@ -440,19 +437,17 @@ def composite_forceps_material(
     image: np.ndarray,
     background: np.ndarray,
     *,
-    opacity: float,
     softness: float,
 ) -> None:
-    """Blend a rendered instrument over the untouched scene.
+    """Apply defocus to an opaque rendered instrument.
 
     Operating on the rendered color delta preserves the retina and shadow while
-    allowing pale, semi-transparent, and mildly defocused forceps variants.
+    allowing mildly defocused forceps variants. The instrument color delta is
+    never attenuated, so this step cannot make the forceps translucent.
     """
 
     if image.shape != background.shape:
         raise ValueError("forceps image and background must have the same shape")
-    if not 0.0 <= opacity <= 1.0:
-        raise ValueError("forceps opacity must be within [0, 1]")
     if softness < 0:
         raise ValueError("forceps softness must be non-negative")
 
@@ -460,7 +455,7 @@ def composite_forceps_material(
     if softness > 1e-6:
         delta = cv2.GaussianBlur(delta, (0, 0), softness)
     image[:] = np.clip(
-        background.astype(np.float32) + delta * opacity,
+        background.astype(np.float32) + delta,
         0,
         255,
     ).astype(np.uint8)
@@ -942,7 +937,6 @@ def render_forceps(
     tip_scale_range: tuple[float, float] = (0.85, 1.85),
     shadow_opacity_range: tuple[float, float] = (0.30, 0.55),
     shadow_blur_range: tuple[float, float] = (3.0, 18.0),
-    forceps_opacity_range: tuple[float, float] = (0.50, 1.0),
     forceps_blur_range: tuple[float, float] = (0.0, 2.5),
 ) -> Pose:
     height, width = image.shape[:2]
@@ -958,7 +952,6 @@ def render_forceps(
     shadow_roll = math.radians(shadow_roll_degrees)
     shadow_scale = float(rng.uniform(*shadow_scale_range))
     tip_scale = float(rng.uniform(*tip_scale_range))
-    forceps_opacity = float(rng.uniform(*forceps_opacity_range))
     forceps_softness = float(rng.uniform(*forceps_blur_range))
     if rng.random() < 0.34:
         shadow_scale = max(shadow_scale, shadow_scale_range[0] + 0.68 * (shadow_scale_range[1] - shadow_scale_range[0]))
@@ -1226,7 +1219,6 @@ def render_forceps(
     composite_forceps_material(
         image,
         forceps_background,
-        opacity=forceps_opacity,
         softness=forceps_softness,
     )
 
@@ -1240,7 +1232,6 @@ def render_forceps(
             tip_scale=tip_scale,
             shadow_softness=shadow_softness,
             shadow_opacity=shadow_opacity,
-            forceps_opacity=forceps_opacity,
             forceps_softness=forceps_softness,
         ),
     )
@@ -1383,7 +1374,7 @@ def render_preview(image: np.ndarray, pose: Pose) -> np.ndarray:
             f"shadow={variation.shadow_roll_degrees:+.0f}deg  "
             f"shadow={variation.shadow_scale:.2f}x/{variation.shadow_opacity:.2f}alpha "
             f"blur={variation.shadow_softness:.1f}px tips={variation.tip_scale:.2f}x "
-            f"forceps={variation.forceps_opacity:.2f}alpha/{variation.forceps_softness:.1f}px "
+            f"forceps blur={variation.forceps_softness:.1f}px "
             f"image={variation.image_rotation_degrees:+.0f}deg"
         )
         cv2.rectangle(preview, (6, height - 27), (min(width - 6, 640), height - 5), (12, 12, 12), -1)
@@ -1490,7 +1481,6 @@ def generate_one_image(task: GenerationTask) -> str:
             (task.tip_scale_min, task.tip_scale_max),
             (task.shadow_opacity_min, task.shadow_opacity_max),
             (task.shadow_blur_min, task.shadow_blur_max),
-            (task.forceps_opacity_min, task.forceps_opacity_max),
             (task.forceps_blur_min, task.forceps_blur_max),
         )
         if not task.circular_mask or pose_inside_circular_view(
@@ -1620,17 +1610,6 @@ def parse_args() -> argparse.Namespace:
         help="Random forceps gripping-tip scale range.",
     )
     parser.add_argument(
-        "--forceps-opacity",
-        type=float,
-        nargs=2,
-        default=(0.50, 1.0),
-        metavar=("MIN", "MAX"),
-        help=(
-            "Rendered instrument opacity bounds. Lower values create pale, "
-            "partially translucent forceps while preserving the retinal background."
-        ),
-    )
-    parser.add_argument(
         "--forceps-blur",
         type=float,
         nargs=2,
@@ -1705,10 +1684,6 @@ def main() -> int:
         raise SystemExit("--shadow-blur values must be non-negative")
     if args.shadow_blur[0] > args.shadow_blur[1]:
         raise SystemExit("--shadow-blur MIN must not exceed MAX")
-    if not 0 <= args.forceps_opacity[0] <= 1 or not 0 <= args.forceps_opacity[1] <= 1:
-        raise SystemExit("--forceps-opacity values must be between 0 and 1")
-    if args.forceps_opacity[0] > args.forceps_opacity[1]:
-        raise SystemExit("--forceps-opacity MIN must not exceed MAX")
     if args.forceps_blur[0] < 0 or args.forceps_blur[1] < 0:
         raise SystemExit("--forceps-blur values must be non-negative")
     if args.forceps_blur[0] > args.forceps_blur[1]:
@@ -1753,8 +1728,6 @@ def main() -> int:
             shadow_opacity_max=args.shadow_opacity[1],
             shadow_blur_min=args.shadow_blur[0],
             shadow_blur_max=args.shadow_blur[1],
-            forceps_opacity_min=args.forceps_opacity[0],
-            forceps_opacity_max=args.forceps_opacity[1],
             forceps_blur_min=args.forceps_blur[0],
             forceps_blur_max=args.forceps_blur[1],
             circular_mask=args.circular_mask,

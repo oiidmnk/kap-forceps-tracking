@@ -61,6 +61,7 @@ class NumberRange(BaseModel):
 
 class TrainingParameters(BaseModel):
     model: str = Field(default="yolo11n-seg.pt", min_length=1, max_length=500)
+    starting_model_run_id: str | None = Field(default=None, pattern=r"^[a-z0-9-]+$")
     config: str = Field(default="configs/forceps_seg.yaml", min_length=1, max_length=500)
     epochs: int = Field(default=100, ge=1, le=10000)
     imgsz: int = Field(default=1024, ge=64, le=8192)
@@ -71,7 +72,9 @@ class TrainingParameters(BaseModel):
     rebuild_preprocessed: bool = False
     dataset_run_id: str | None = Field(default=None, pattern=r"^[a-z0-9-]+$")
 
-    @field_validator("device", "preprocess_preset", "dataset_run_id", mode="before")
+    @field_validator(
+        "device", "preprocess_preset", "dataset_run_id", "starting_model_run_id", mode="before"
+    )
     @classmethod
     def empty_to_none(cls, value: Any) -> Any:
         return None if value == "" else value
@@ -95,7 +98,6 @@ class SyntheticParameters(BaseModel):
     shadow_opacity: NumberRange = Field(default_factory=lambda: NumberRange(minimum=0.3, maximum=0.55))
     shadow_blur: NumberRange = Field(default_factory=lambda: NumberRange(minimum=3, maximum=18))
     tip_scale: NumberRange = Field(default_factory=lambda: NumberRange(minimum=0.85, maximum=1.85))
-    forceps_opacity: NumberRange = Field(default_factory=lambda: NumberRange(minimum=0.5, maximum=1))
     forceps_blur: NumberRange = Field(default_factory=lambda: NumberRange(minimum=0, maximum=2.5))
     circular_mask: bool = True
 
@@ -119,7 +121,7 @@ class SyntheticParameters(BaseModel):
             value = getattr(self, name)
             if value.minimum <= 0:
                 raise ValueError(f"{name.replace('_', ' ')} values must be positive")
-        for name in ("shadow_opacity", "forceps_opacity"):
+        for name in ("shadow_opacity",):
             value = getattr(self, name)
             if value.minimum < 0 or value.maximum > 1:
                 raise ValueError(f"{name.replace('_', ' ')} values must be between 0 and 1")
@@ -190,6 +192,7 @@ def build_command(
     source_dataset_root: Path | None = None,
     source_model_weights: Path | None = None,
     source_media: Path | None = None,
+    starting_model_weights: Path | None = None,
 ) -> tuple[list[str], dict[str, Any]]:
     if kind == "training":
         parsed = TrainingParameters.model_validate(parameters)
@@ -198,7 +201,7 @@ def build_command(
             sys.executable,
             "scripts/train.py",
             "--model",
-            parsed.model,
+            str(starting_model_weights) if starting_model_weights else parsed.model,
             "--config",
             str(run_dir / "input_dataset.yaml") if parsed.dataset_run_id else parsed.config,
             "--epochs",
@@ -324,7 +327,6 @@ def build_command(
         *_range_args("--shadow-opacity", parsed.shadow_opacity),
         *_range_args("--shadow-blur", parsed.shadow_blur),
         *_range_args("--tip-scale", parsed.tip_scale),
-        *_range_args("--forceps-opacity", parsed.forceps_opacity),
         *_range_args("--forceps-blur", parsed.forceps_blur),
         "--circular-mask" if parsed.circular_mask else "--rectangular-view",
     ]
@@ -390,14 +392,20 @@ class RunManager:
         source_dataset_root = None
         source_model_weights = None
         source_media = None
+        starting_model_weights = None
         if source_run_id:
             source_metadata, source_dataset_root = self._resolve_dataset_run(str(source_run_id))
         model_run_id = request.parameters.get("model_run_id") if request.kind == "prediction" else None
+        starting_model_run_id = (
+            request.parameters.get("starting_model_run_id") if request.kind == "training" else None
+        )
         masked_video_run_id = (
             request.parameters.get("masked_video_run_id") if request.kind == "prediction" else None
         )
         if model_run_id:
             source_model_weights = self._resolve_model_run(str(model_run_id))
+        if starting_model_run_id:
+            starting_model_weights = self._resolve_model_run(str(starting_model_run_id))
         if masked_video_run_id:
             source_media = self._resolve_masked_video_run(str(masked_video_run_id))
         elif request.kind in {"prediction", "video_mask"} and request.parameters.get("source"):
@@ -409,6 +417,7 @@ class RunManager:
             source_dataset_root=source_dataset_root,
             source_model_weights=source_model_weights,
             source_media=source_media,
+            starting_model_weights=starting_model_weights,
         )
         run_dir.mkdir(parents=True)
         (run_dir / "artifacts").mkdir()
@@ -437,7 +446,16 @@ class RunManager:
             "message": "Waiting to start",
             "parameters": parameters,
             "command": command,
-            "input_runs": [run for run in (source_run_id, model_run_id, masked_video_run_id) if run],
+            "input_runs": [
+                run
+                for run in (
+                    source_run_id,
+                    starting_model_run_id,
+                    model_run_id,
+                    masked_video_run_id,
+                )
+                if run
+            ],
             "dataset_format": (
                 "pose"
                 if request.kind == "synthetic"
@@ -459,7 +477,7 @@ class RunManager:
         if metadata.get("kind") != "training":
             raise ValueError("Selected run does not produce a trained model")
         if metadata.get("status") != "completed":
-            raise ValueError("Training run must be completed before prediction")
+            raise ValueError("Training run must be completed before its model can be used")
         artifacts = self._run_dir(run_id) / "artifacts"
         weights = next(artifacts.glob("**/weights/best.pt"), None)
         if weights is None:
@@ -591,7 +609,9 @@ class RunManager:
         runs = []
         for path in self.root.glob("*/run.json"):
             try:
-                runs.append(self._enrich(json.loads(path.read_text()), include_log=False))
+                metadata = json.loads(path.read_text())
+                metadata["progress"] = self._progress(metadata)
+                runs.append(metadata)
             except (OSError, json.JSONDecodeError):
                 continue
         return sorted(runs, key=lambda run: run["created_at"], reverse=True)
@@ -601,21 +621,36 @@ class RunManager:
 
     def _enrich(self, metadata: dict[str, Any], *, include_log: bool) -> dict[str, Any]:
         result = dict(metadata)
-        result["progress"] = self._progress(metadata)
+        log = None
+        if include_log:
+            log = self._read_log_tail(metadata["id"], 200_000)
+        result["progress"] = self._progress(metadata, log=log)
         result["summary"] = self._summary(metadata)
         result["artifacts"] = self._artifacts(metadata["id"])
         if include_log:
-            log_path = self._run_dir(metadata["id"]) / "run.log"
-            result["log"] = log_path.read_text(errors="replace")[-200_000:] if log_path.exists() else ""
+            result["log"] = log or ""
         return result
 
-    def _progress(self, metadata: dict[str, Any]) -> float | None:
+    def _read_log_tail(self, run_id: str, max_bytes: int) -> str:
+        log_path = self._run_dir(run_id) / "run.log"
+        try:
+            with log_path.open("rb") as log_file:
+                log_file.seek(0, os.SEEK_END)
+                size = log_file.tell()
+                log_file.seek(max(0, size - max_bytes))
+                return log_file.read().decode(errors="replace")
+        except OSError:
+            return ""
+
+    def _progress(self, metadata: dict[str, Any], *, log: str | None = None) -> float | None:
         if metadata["status"] == "completed":
             return 100.0
-        log_path = self._run_dir(metadata["id"]) / "run.log"
-        if not log_path.exists():
+        if log is None:
+            log = self._read_log_tail(metadata["id"], 100_000)
+        else:
+            log = log[-100_000:]
+        if not log:
             return 0.0 if metadata["status"] in {"queued", "running"} else None
-        log = log_path.read_text(errors="replace")[-100_000:]
         if metadata["kind"] in {"synthetic", "dataset_split"}:
             matches = re.findall(r"Generating synthetic images: (\d+)/(\d+)", log)
             if matches:
@@ -696,30 +731,33 @@ class RunManager:
         if not root.exists():
             return []
         artifacts = []
-        for path in root.glob("**/*"):
-            if not path.is_file():
-                continue
-            relative = path.relative_to(root)
-            is_image = path.suffix.lower() in IMAGE_SUFFIXES
-            is_video = path.suffix.lower() in VIDEO_SUFFIXES
-            if "dataset" in relative.parts:
-                continue
-            if is_image and not (
-                "previews" in relative.parts
-                or "predictions" in relative.parts
-                or path.name in PREVIEW_NAMES
-                or path.name.startswith(("val_batch", "train_batch"))
-            ):
-                continue
-            artifacts.append(
-                {
-                    "path": relative.as_posix(),
-                    "name": path.name,
-                    "size": path.stat().st_size,
-                    "type": "image" if is_image else "video" if is_video else path.suffix.lower().lstrip(".") or "file",
-                    "url": f"/api/runs/{run_id}/artifacts/{relative.as_posix()}",
-                }
-            )
+        for directory, subdirectories, filenames in os.walk(root):
+            subdirectories[:] = [name for name in subdirectories if name != "dataset"]
+            for filename in filenames:
+                path = Path(directory) / filename
+                relative = path.relative_to(root)
+                is_image = path.suffix.lower() in IMAGE_SUFFIXES
+                is_video = path.suffix.lower() in VIDEO_SUFFIXES
+                if is_image and not (
+                    "previews" in relative.parts
+                    or "predictions" in relative.parts
+                    or path.name in PREVIEW_NAMES
+                    or path.name.startswith(("val_batch", "train_batch"))
+                ):
+                    continue
+                try:
+                    size = path.stat().st_size
+                except OSError:
+                    continue
+                artifacts.append(
+                    {
+                        "path": relative.as_posix(),
+                        "name": path.name,
+                        "size": size,
+                        "type": "image" if is_image else "video" if is_video else path.suffix.lower().lstrip(".") or "file",
+                        "url": f"/api/runs/{run_id}/artifacts/{relative.as_posix()}",
+                    }
+                )
         artifacts.sort(key=lambda item: (item["type"] not in {"image", "video"}, item["path"]))
         return artifacts[:250]
 

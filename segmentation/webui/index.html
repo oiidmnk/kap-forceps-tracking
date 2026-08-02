@@ -120,7 +120,8 @@
       <div class="form-scroll">
         <label class="field full"><span>Run name <small>optional</small></span><input name="name" placeholder="e.g. Pose baseline 04"></label>
         <div id="training-fields" class="form-grid">
-          <label class="field full"><span>Starting model</span><input name="model" value="yolo11n-seg.pt"></label>
+          <label class="field full"><span>Starting model <small>optional — use weights from a completed run</small></span><select name="starting_model_run_id"><option value="">Use checkpoint or model YAML below</option></select></label>
+          <label class="field full"><span>Checkpoint or model YAML <small>used when no training run is selected</small></span><input name="model" value="yolo11n-seg.pt"></label>
           <label class="field full"><span>Dataset run <small>optional — uses its generated train/val data</small></span><select name="dataset_run_id"><option value="">Use dataset config below</option></select></label>
           <label class="field full"><span>Dataset config <small>used when no dataset run is selected</small></span><input name="config" value="configs/forceps_seg.yaml"></label>
           <label class="field"><span>Epochs</span><input name="epochs" type="number" value="100" min="1"></label>
@@ -150,7 +151,6 @@
           <fieldset class="range-field"><legend>Tip scale</legend><input name="tip_scale_min" type="number" value="0.85" step="0.05"><span>to</span><input name="tip_scale_max" type="number" value="1.85" step="0.05"></fieldset>
           <fieldset class="range-field"><legend>Shadow opacity</legend><input name="shadow_opacity_min" type="number" value="0.3" step="0.05"><span>to</span><input name="shadow_opacity_max" type="number" value="0.55" step="0.05"></fieldset>
           <fieldset class="range-field"><legend>Shadow blur</legend><input name="shadow_blur_min" type="number" value="3" step="0.5"><span>to</span><input name="shadow_blur_max" type="number" value="18" step="0.5"></fieldset>
-          <fieldset class="range-field"><legend>Forceps opacity</legend><input name="forceps_opacity_min" type="number" value="0.5" step="0.05"><span>to</span><input name="forceps_opacity_max" type="number" value="1" step="0.05"></fieldset>
           <fieldset class="range-field"><legend>Forceps blur</legend><input name="forceps_blur_min" type="number" value="0" step="0.5"><span>to</span><input name="forceps_blur_max" type="number" value="2.5" step="0.5"></fieldset>
           <label class="check-field full"><input name="circular_mask" type="checkbox" checked><span><strong>Circular microscope field</strong><small>Keep generated objects inside the retinal view.</small></span></label>
         </div>

@@ -29,6 +29,23 @@ def test_training_command_is_scoped_to_run_artifacts(tmp_path: Path) -> None:
     assert parameters["device"] == "cpu"
 
 
+def test_training_command_uses_weights_from_starting_model_run(tmp_path: Path) -> None:
+    weights = tmp_path / "parent" / "weights" / "best.pt"
+    command, parameters = build_command(
+        "training",
+        {
+            "model": "yolo11n-pose.pt",
+            "starting_model_run_id": "20260101-120000-abcdef",
+            "config": "configs/forceps_pose.yaml",
+        },
+        tmp_path / "child",
+        starting_model_weights=weights,
+    )
+
+    assert command[command.index("--model") + 1] == str(weights)
+    assert parameters["starting_model_run_id"] == "20260101-120000-abcdef"
+
+
 def test_synthetic_command_maps_ranges_and_output_paths(tmp_path: Path) -> None:
     command, parameters = build_command(
         "synthetic",
@@ -48,6 +65,8 @@ def test_synthetic_command_maps_ranges_and_output_paths(tmp_path: Path) -> None:
     assert command[command.index("--seed") + 1] == "42"
     opacity_index = command.index("--shadow-opacity")
     assert command[opacity_index + 1 : opacity_index + 3] == ["0.4", "0.7"]
+    assert "--forceps-opacity" not in command
+    assert "forceps_opacity" not in parameters
     assert parameters["count"] == 7
 
 
@@ -136,6 +155,36 @@ def test_training_run_records_dataset_lineage_and_uses_generated_config(
     config_path = tmp_path / "runs" / run["id"] / "input_dataset.yaml"
     assert config_path.is_file()
     assert run["command"][run["command"].index("--config") + 1] == str(config_path)
+
+
+def test_training_run_uses_parent_model_and_records_lineage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manager = RunManager(tmp_path / "runs")
+    parent_id = "20260101-120000-abcdef"
+    parent_dir = tmp_path / "runs" / parent_id
+    weights = parent_dir / "artifacts" / "training" / "weights" / "best.pt"
+    weights.parent.mkdir(parents=True)
+    weights.write_bytes(b"weights")
+    (parent_dir / "run.json").write_text(json.dumps({
+        "id": parent_id,
+        "kind": "training",
+        "status": "completed",
+    }))
+    monkeypatch.setattr("scripts.webui.threading.Thread.start", lambda _self: None)
+
+    run = manager.create(CreateRunRequest(
+        kind="training",
+        parameters={
+            "starting_model_run_id": parent_id,
+            "model": "yolo11n-pose.pt",
+            "config": "configs/forceps_pose.yaml",
+            "epochs": 2,
+        },
+    ))
+
+    assert run["input_runs"] == [parent_id]
+    assert run["command"][run["command"].index("--model") + 1] == str(weights.resolve())
 
 
 def test_prediction_command_uses_model_run_weights_and_media(tmp_path: Path) -> None:
@@ -290,6 +339,41 @@ def test_run_manager_recovers_active_metadata_as_interrupted(tmp_path: Path) -> 
     recovered = manager.get(run_dir.name)
     assert recovered["status"] == "interrupted"
     assert recovered["finished_at"] is not None
+
+
+def test_list_runs_does_not_scan_summaries_or_artifacts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run_id = "20260101-120000-abcdef"
+    run_dir = tmp_path / run_id
+    run_dir.mkdir()
+    (run_dir / "run.json").write_text(json.dumps({
+        "id": run_id,
+        "kind": "synthetic",
+        "name": "large dataset",
+        "status": "completed",
+        "created_at": "2026-01-01T12:00:00+00:00",
+    }))
+    manager = RunManager(tmp_path)
+    monkeypatch.setattr(manager, "_summary", lambda _metadata: pytest.fail("summary scanned"))
+    monkeypatch.setattr(manager, "_artifacts", lambda _run_id: pytest.fail("artifacts scanned"))
+
+    runs = manager.list()
+
+    assert runs[0]["id"] == run_id
+    assert runs[0]["progress"] == 100.0
+    assert "summary" not in runs[0]
+    assert "artifacts" not in runs[0]
+
+
+def test_log_tail_reads_only_requested_bytes(tmp_path: Path) -> None:
+    run_id = "20260101-120000-abcdef"
+    run_dir = tmp_path / run_id
+    run_dir.mkdir()
+    (run_dir / "run.log").write_bytes(b"prefix-" + b"x" * 100 + b"-suffix")
+    manager = RunManager(tmp_path)
+
+    assert manager._read_log_tail(run_id, 10) == "xxx-suffix"
 
 
 def test_artifacts_cannot_escape_run_directory(tmp_path: Path) -> None:
