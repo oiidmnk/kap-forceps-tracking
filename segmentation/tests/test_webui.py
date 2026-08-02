@@ -268,6 +268,16 @@ def test_synthetic_ui_exposes_unlabeled_video_realism_controls() -> None:
     assert "forceps_contrast: readRange(form, 'forceps_contrast')" in app
 
 
+def test_inactive_run_fields_are_disabled_before_browser_validation() -> None:
+    webui_root = Path(__file__).resolve().parents[1] / "webui"
+    index = (webui_root / "index.html").read_text()
+    app = (webui_root / "app.js").read_text()
+
+    assert "control.disabled = !active" in app
+    assert "state.kind !== 'training'" in app
+    assert 'name="forceps_contrast_max" type="number" value="0.8" min="0"' in index
+
+
 def test_model_run_resolves_best_weights(tmp_path: Path) -> None:
     manager = RunManager(tmp_path / "runs")
     run_id = "20260101-120000-abcdef"

@@ -138,11 +138,19 @@ async function refreshDetail() {
 function setKind(kind) {
   state.kind = kind
   $$('.kind-option').forEach((button) => button.classList.toggle('active', button.dataset.kind === kind))
-  $('#training-fields').classList.toggle('hidden', kind !== 'training')
-  $('#synthetic-fields').classList.toggle('hidden', kind !== 'synthetic')
-  $('#dataset-split-fields').classList.toggle('hidden', kind !== 'dataset_split')
-  $('#prediction-fields').classList.toggle('hidden', kind !== 'prediction')
-  $('#video-mask-fields').classList.toggle('hidden', kind !== 'video_mask')
+  const sections = {
+    training: $('#training-fields'),
+    synthetic: $('#synthetic-fields'),
+    dataset_split: $('#dataset-split-fields'),
+    prediction: $('#prediction-fields'),
+    video_mask: $('#video-mask-fields'),
+  }
+  for (const [sectionKind, section] of Object.entries(sections)) {
+    const active = sectionKind === kind
+    section.classList.toggle('hidden', !active)
+    section.querySelectorAll('input, select, textarea').forEach((control) => { control.disabled = !active })
+  }
+  syncStartingModelField()
   $('#form-error').textContent = ''
 }
 
@@ -218,7 +226,7 @@ function readNumber(form, name) { return Number(form.elements[name].value) }
 function readRange(form, name) { return { minimum: readNumber(form, `${name}_min`), maximum: readNumber(form, `${name}_max`) } }
 function syncStartingModelField() {
   const form = $('#run-form')
-  form.elements.model.disabled = Boolean(form.elements.starting_model_run_id.value)
+  form.elements.model.disabled = state.kind !== 'training' || Boolean(form.elements.starting_model_run_id.value)
 }
 function readParameters(form, uploadedSource = null) {
   if (state.kind === 'training') return {
