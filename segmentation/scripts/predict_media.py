@@ -143,13 +143,22 @@ def restore_pose_coordinates(result, full_frame, roi):
     x1, y1, _, _ = roi
     boxes = getattr(result, "boxes", None)
     if boxes is not None and getattr(boxes, "data", None) is not None:
-        boxes.data[:, [0, 2]] += x1
-        boxes.data[:, [1, 3]] += y1
+        box_data = boxes.data.clone() if hasattr(boxes.data, "clone") else boxes.data.copy()
+        box_data[:, [0, 2]] += x1
+        box_data[:, [1, 3]] += y1
+        boxes.data = box_data
         boxes.orig_shape = full_frame.shape[:2]
     keypoints = getattr(result, "keypoints", None)
     if keypoints is not None and getattr(keypoints, "data", None) is not None:
-        keypoints.data[..., 0] += x1
-        keypoints.data[..., 1] += y1
+        keypoint_data = (
+            keypoints.data.clone() if hasattr(keypoints.data, "clone") else keypoints.data.copy()
+        )
+        keypoint_data[..., 0] += x1
+        keypoint_data[..., 1] += y1
+        keypoints.data = keypoint_data
+        keypoints.__dict__.pop("xy", None)
+        keypoints.__dict__.pop("xyn", None)
+        keypoints.__dict__.pop("conf", None)
         keypoints.orig_shape = full_frame.shape[:2]
     result.orig_img = full_frame
     result.orig_shape = full_frame.shape[:2]
