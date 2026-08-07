@@ -32,6 +32,7 @@ auge-apply-adaptive-mask = "scripts.overlay_adaptive_mask:main"
 auge-inpaint-retinal-vessels = "scripts.inpaint_retinal_vessels:main"
 auge-extract-avi-frames = "scripts.extract_avi_frames:main"
 auge-mask-retinal-video = "scripts.mask_retinal_video:main"
+auge-classical-roi = "scripts.detect_classical_roi:main"
 auge-webui = "scripts.webui:main"
 
 [build-system]

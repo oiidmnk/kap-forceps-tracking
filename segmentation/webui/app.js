@@ -11,8 +11,8 @@ function escapeHtml(value) {
 }
 
 function titleCase(value) { return String(value).replaceAll('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase()) }
-function kindLabel(kind) { return kind === 'training' ? 'Model training' : kind === 'synthetic' ? 'Synthetic data' : kind === 'dataset_split' ? 'Dataset split' : kind === 'prediction' ? 'Media prediction' : 'Video mask' }
-function kindCategory(kind) { return kind === 'training' ? 'model' : kind === 'synthetic' ? 'generated' : kind === 'dataset_split' ? 'split' : kind === 'prediction' ? 'inference' : 'masked' }
+function kindLabel(kind) { return { training: 'Pose training', segmentation_training: 'Segmentation training', synthetic: 'Synthetic data', dataset_split: 'Dataset split', prediction: 'Media prediction', video_mask: 'Video mask', classical_roi: 'Classical ROI' }[kind] || titleCase(kind) }
+function kindCategory(kind) { return { training: 'pose model', segmentation_training: 'segment model', synthetic: 'generated', dataset_split: 'split', prediction: 'inference', video_mask: 'masked', classical_roi: 'opencv' }[kind] || kind }
 function formatDate(value, includeDate = false) {
   if (!value) return '—'
   const date = new Date(value)
@@ -140,10 +140,12 @@ function setKind(kind) {
   $$('.kind-option').forEach((button) => button.classList.toggle('active', button.dataset.kind === kind))
   const sections = {
     training: $('#training-fields'),
+    segmentation_training: $('#segmentation-training-fields'),
     synthetic: $('#synthetic-fields'),
     dataset_split: $('#dataset-split-fields'),
     prediction: $('#prediction-fields'),
     video_mask: $('#video-mask-fields'),
+    classical_roi: $('#classical-roi-fields'),
   }
   for (const [sectionKind, section] of Object.entries(sections)) {
     const active = sectionKind === kind
@@ -156,12 +158,16 @@ function setKind(kind) {
 
 function refreshDatasetOptions() {
   const runs = state.runs.filter((run) => ['synthetic', 'dataset_split'].includes(run.kind) && run.status === 'completed')
-  const options = runs.map((run) => `<option value="${run.id}">${escapeHtml(run.name)} · ${run.kind === 'synthetic' ? 'generated' : 'split'} · ${formatDate(run.created_at, true)}</option>`).join('')
-  $('#run-form').elements.dataset_run_id.innerHTML = `<option value="">Use dataset config below</option>${options}`
-  $('#run-form').elements.source_run_id.innerHTML = `<option value="">Select a completed dataset run</option>${options}`
+  const renderDatasetOptions = (items) => items.map((run) => `<option value="${run.id}">${escapeHtml(run.name)} · ${run.dataset_format || 'pose'} · ${formatDate(run.created_at, true)}</option>`).join('')
+  $('#run-form').elements.dataset_run_id.innerHTML = `<option value="">Use dataset config below</option>${renderDatasetOptions(runs.filter((run) => (run.dataset_format || 'pose') === 'pose'))}`
+  $('#run-form').elements.segmentation_dataset_run_id.innerHTML = `<option value="">Use dataset config below</option>${renderDatasetOptions(runs.filter((run) => run.dataset_format === 'segment'))}`
+  $('#run-form').elements.source_run_id.innerHTML = `<option value="">Select a completed dataset run</option>${renderDatasetOptions(runs)}`
   const modelOptions = state.runs.filter((run) => run.kind === 'training' && run.status === 'completed').map((run) => `<option value="${run.id}">${escapeHtml(run.name)} · ${formatDate(run.created_at, true)}</option>`).join('')
   $('#run-form').elements.starting_model_run_id.innerHTML = `<option value="">Use checkpoint or model YAML below</option>${modelOptions}`
-  $('#run-form').elements.model_run_id.innerHTML = `<option value="">Select a completed training run</option>${modelOptions}`
+  $('#run-form').elements.model_run_id.innerHTML = `<option value="">Select a completed pose training run</option>${modelOptions}`
+  const segmentationOptions = state.runs.filter((run) => run.kind === 'segmentation_training' && run.status === 'completed').map((run) => `<option value="${run.id}">${escapeHtml(run.name)} · ${formatDate(run.created_at, true)}</option>`).join('')
+  $('#run-form').elements.segmentation_starting_model_run_id.innerHTML = `<option value="">Use checkpoint below</option>${segmentationOptions}`
+  $('#run-form').elements.segmentation_model_run_id.innerHTML = `<option value="">Run pose on the full frame</option>${segmentationOptions}`
   const maskedOptions = state.runs.filter((run) => run.kind === 'video_mask' && run.status === 'completed').map((run) => `<option value="${run.id}">${escapeHtml(run.name)} · ${formatDate(run.created_at, true)}</option>`).join('')
   $('#run-form').elements.masked_video_run_id.innerHTML = `<option value="">Upload media or use a source path below</option>${maskedOptions}`
   $('#run-form').elements.realism_video_run_id.innerHTML = `<option value="">Upload a video or use a source path below</option>${maskedOptions}`
@@ -170,6 +176,7 @@ function refreshDatasetOptions() {
 function openDialog(kind = 'training', sourceRun = null) {
   $('#run-form').reset()
   $('#run-form').elements.model.disabled = false
+  $('#run-form').elements.segmentation_model.disabled = false
   refreshDatasetOptions()
   setKind(kind)
   if (sourceRun) populateForm(sourceRun)
@@ -191,8 +198,23 @@ function populateForm(run) {
         source: 'prediction_source', confidence: 'prediction_confidence', max_detections: 'prediction_max_detections',
         imgsz: 'prediction_imgsz', device: 'prediction_device', preprocess_preset: 'prediction_preprocess_preset',
         scene_filter: 'prediction_scene_filter', temporal_filter: 'prediction_temporal_filter',
+        segmentation_confidence: 'prediction_segmentation_confidence', roi_padding: 'prediction_roi_padding',
       }
       const field = form.elements[predictionFields[key]]
+      if (field) {
+        if (field.type === 'checkbox') field.checked = Boolean(value)
+        else field.value = value ?? ''
+        continue
+      }
+    }
+    if (run.kind === 'segmentation_training') {
+      const trainingFields = {
+        model: 'segmentation_model', config: 'segmentation_config', starting_model_run_id: 'segmentation_starting_model_run_id',
+        dataset_run_id: 'segmentation_dataset_run_id', epochs: 'segmentation_epochs', imgsz: 'segmentation_imgsz',
+        batch: 'segmentation_batch', patience: 'segmentation_patience', device: 'segmentation_device',
+        preprocess_preset: 'segmentation_preprocess_preset', rebuild_preprocessed: 'segmentation_rebuild_preprocessed',
+      }
+      const field = form.elements[trainingFields[key]]
       if (field) {
         if (field.type === 'checkbox') field.checked = Boolean(value)
         else field.value = value ?? ''
@@ -206,6 +228,20 @@ function populateForm(run) {
         size: 'mask_size', crf: 'mask_crf',
       }
       const field = form.elements[maskFields[key]]
+      if (field) {
+        if (field.type === 'checkbox') field.checked = Boolean(value)
+        else field.value = value ?? ''
+        continue
+      }
+    }
+    if (run.kind === 'classical_roi') {
+      const classicalFields = {
+        source: 'classical_source', forceps_max_saturation: 'classical_forceps_max_saturation',
+        forceps_max_value: 'classical_forceps_max_value', canny_low: 'classical_canny_low',
+        canny_high: 'classical_canny_high', temporal_smoothing: 'classical_temporal_smoothing',
+        temporal_alpha: 'classical_temporal_alpha', temporal_max_gap: 'classical_temporal_max_gap',
+      }
+      const field = form.elements[classicalFields[key]]
       if (field) {
         if (field.type === 'checkbox') field.checked = Boolean(value)
         else field.value = value ?? ''
@@ -227,6 +263,7 @@ function readRange(form, name) { return { minimum: readNumber(form, `${name}_min
 function syncStartingModelField() {
   const form = $('#run-form')
   form.elements.model.disabled = state.kind !== 'training' || Boolean(form.elements.starting_model_run_id.value)
+  form.elements.segmentation_model.disabled = state.kind !== 'segmentation_training' || Boolean(form.elements.segmentation_starting_model_run_id.value)
 }
 function readParameters(form, uploadedSource = null) {
   if (state.kind === 'training') return {
@@ -238,6 +275,15 @@ function readParameters(form, uploadedSource = null) {
     rebuild_preprocessed: form.elements.rebuild_preprocessed.checked,
     dataset_run_id: form.elements.dataset_run_id.value || null,
   }
+  if (state.kind === 'segmentation_training') return {
+    model: form.elements.segmentation_model.value.trim(), config: form.elements.segmentation_config.value.trim(),
+    starting_model_run_id: form.elements.segmentation_starting_model_run_id.value || null,
+    epochs: readNumber(form, 'segmentation_epochs'), imgsz: readNumber(form, 'segmentation_imgsz'), batch: readNumber(form, 'segmentation_batch'),
+    patience: readNumber(form, 'segmentation_patience'), device: form.elements.segmentation_device.value.trim() || null,
+    preprocess_preset: form.elements.segmentation_preprocess_preset.value.trim() || null,
+    rebuild_preprocessed: form.elements.segmentation_rebuild_preprocessed.checked,
+    dataset_run_id: form.elements.segmentation_dataset_run_id.value || null,
+  }
   if (state.kind === 'dataset_split') return {
     source_run_id: form.elements.source_run_id.value,
     train_ratio: readNumber(form, 'train_ratio'),
@@ -245,6 +291,7 @@ function readParameters(form, uploadedSource = null) {
   }
   if (state.kind === 'prediction') return {
     model_run_id: form.elements.model_run_id.value,
+    segmentation_model_run_id: form.elements.segmentation_model_run_id.value || null,
     masked_video_run_id: form.elements.masked_video_run_id.value || null,
     source: uploadedSource || form.elements.prediction_source.value.trim(),
     confidence: readNumber(form, 'prediction_confidence'),
@@ -254,6 +301,8 @@ function readParameters(form, uploadedSource = null) {
     preprocess_preset: form.elements.prediction_preprocess_preset.value.trim() || null,
     scene_filter: form.elements.prediction_scene_filter.checked,
     temporal_filter: form.elements.prediction_temporal_filter.checked,
+    segmentation_confidence: readNumber(form, 'prediction_segmentation_confidence'),
+    roi_padding: readNumber(form, 'prediction_roi_padding'),
   }
   if (state.kind === 'video_mask') return {
     source: uploadedSource || form.elements.mask_source.value.trim(),
@@ -264,10 +313,21 @@ function readParameters(form, uploadedSource = null) {
     erode: readNumber(form, 'mask_erode'), threshold: readNumber(form, 'mask_threshold'),
     size: readNumber(form, 'mask_size'), crf: readNumber(form, 'mask_crf'),
   }
+  if (state.kind === 'classical_roi') return {
+    source: uploadedSource || form.elements.classical_source.value.trim(),
+    forceps_max_saturation: readNumber(form, 'classical_forceps_max_saturation'),
+    forceps_max_value: readNumber(form, 'classical_forceps_max_value'),
+    canny_low: readNumber(form, 'classical_canny_low'),
+    canny_high: readNumber(form, 'classical_canny_high'),
+    temporal_smoothing: form.elements.classical_temporal_smoothing.checked,
+    temporal_alpha: readNumber(form, 'classical_temporal_alpha'),
+    temporal_max_gap: readNumber(form, 'classical_temporal_max_gap'),
+  }
   const seed = form.elements.seed.value.trim()
   const csv = (name) => form.elements[name].value.split(',').map((value) => value.trim()).filter(Boolean)
   const realismVideoRunId = form.elements.realism_video_run_id.value
   return {
+    label_format: form.elements.label_format.value,
     count: readNumber(form, 'count'), preview: readNumber(form, 'preview'), width: readNumber(form, 'width'), height: readNumber(form, 'height'),
     val_fraction: readNumber(form, 'val_fraction'), workers: readNumber(form, 'workers'), seed: seed === '' ? null : Number(seed), prefix: form.elements.prefix.value.trim(),
     backgrounds: csv('backgrounds'),
@@ -291,7 +351,7 @@ $('#run-form').addEventListener('submit', async (event) => {
   $('#form-error').textContent = ''
   try {
     let uploadedSource = null
-    if (state.kind === 'prediction' || state.kind === 'video_mask' || state.kind === 'synthetic') {
+    if (['prediction', 'video_mask', 'synthetic', 'classical_roi'].includes(state.kind)) {
       const useMaskedRun = state.kind === 'prediction'
         ? form.elements.masked_video_run_id.value
         : state.kind === 'synthetic' && form.elements.realism_video_run_id.value
@@ -299,7 +359,9 @@ $('#run-form').addEventListener('submit', async (event) => {
         ? form.elements.media_file.files[0]
         : state.kind === 'video_mask'
           ? form.elements.mask_media_file.files[0]
-          : form.elements.realism_video_file.files[0]
+          : state.kind === 'synthetic'
+            ? form.elements.realism_video_file.files[0]
+            : form.elements.classical_media_file.files[0]
       if (media && !useMaskedRun) {
         button.querySelector('span').textContent = 'Uploading…'
         const uploadBody = new FormData()
@@ -350,6 +412,7 @@ $('#run-form').elements.dataset_run_id.addEventListener('change', (event) => {
   if (form.elements.config.value === 'configs/forceps_seg.yaml') form.elements.config.value = 'configs/forceps_pose.yaml'
 })
 $('#run-form').elements.starting_model_run_id.addEventListener('change', syncStartingModelField)
+$('#run-form').elements.segmentation_starting_model_run_id.addEventListener('change', syncStartingModelField)
 $$('.dialog-close, .dialog-cancel').forEach((button) => button.addEventListener('click', () => $('#run-dialog').close()))
 $$('.filter').forEach((button) => button.addEventListener('click', () => { state.filter = button.dataset.filter; $$('.filter').forEach((item) => item.classList.toggle('active', item === button)); renderRunList() }))
 

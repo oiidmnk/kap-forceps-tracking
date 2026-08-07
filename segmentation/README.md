@@ -188,6 +188,23 @@ only the point markers. Completed-image rotations also restore image-frame
 left/right endpoint ordering after transforming the labels. Datasets generated
 by older versions should be regenerated before comparing models.
 
+For a training-free ROI baseline, the classical OpenCV detector finds a
+low-saturation, border-connected forceps component and a separate cluster of
+long parallel shadow edges:
+
+```bash
+python scripts/detect_classical_roi.py \
+  --source path/to/frame.png \
+  --output runs/classical_roi/annotated.png \
+  --json runs/classical_roi/boxes.json \
+  --debug-dir runs/classical_roi/debug
+```
+
+The JSON result contains `forceps_box`, `shadow_box`, and their padded union as
+`roi_box`, all in `[x1, y1, x2, y2]` image coordinates. This is a heuristic
+baseline: validate it across lighting conditions before using its ROI as a hard
+gate for pose inference.
+
 Train with a pose checkpoint and the pose config:
 
 ```bash
@@ -216,6 +233,12 @@ immutable artifacts. A dataset can also pass through a reproducible **Dataset
 split** run first; the child run copies and repartitions the paired images and
 labels, records its source run, and can then be selected as training input.
 
+Synthetic runs can write either pose labels or two-class YOLO segmentation
+polygons (`forceps`, `shadow`). Use the latter with **Segmentation training** to
+train a separate `yolo11n-seg.pt` object localizer. Pose and segmentation
+datasets and checkpoints are kept in separate selectors to prevent accidental
+task mismatches.
+
 The **Prediction** run type selects the `best.pt` weights from a completed
 training run and applies them to one uploaded image or video (a local source
 path can be used instead). Confidence, image size, device, preprocessing, scene
@@ -231,6 +254,12 @@ the Studio or pass `--no-temporal-filter` to `scripts/predict_media.py` for raw,
 frame-independent `model.predict()` output. Image inputs always use the raw
 single-image prediction path, regardless of this setting.
 
+Prediction optionally accepts both a completed pose-training run and a completed
+segmentation-training run. In that mode, segmentation first finds the union of
+the forceps and shadow, expands it by the configured ROI padding, and runs pose
+inference on that square crop. Pose coordinates are mapped back to the original
+frame. If no segmentation is found, pose inference falls back to the full frame.
+
 The **Video mask** run type implements the single-disc masking workflow from
 `open-a-eye`: it fits the largest bright circular contour on every frame,
 optionally calibrates the crisp inner retina boundary, fixes the radius to the
@@ -239,6 +268,11 @@ with black padding, and applies an anti-aliased circular mask. It writes an H.26
 `masked.mp4`, middle-frame `preview.png`, and `mask.json`. Completed masking runs
 appear as selectable inputs in Prediction runs. Stereo side-by-side selection is
 intentionally not exposed; this run type expects one retinal disc per frame.
+
+The **Classical ROI** run type applies the training-free OpenCV baseline to an
+uploaded image or video. Image runs write the annotated frame, forceps mask,
+shadow edges, and box JSON. Video runs additionally smooth boxes over time and
+write a browser-compatible annotated MP4 plus one JSON record per frame.
 
 You can also run it without installing the entry point:
 

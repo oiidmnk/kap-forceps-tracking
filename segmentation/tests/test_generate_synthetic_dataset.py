@@ -19,12 +19,29 @@ from scripts.generate_synthetic_dataset import (
     parse_args,
     pose_inside_circular_view,
     render_forceps,
+    segmentation_label_lines,
     rotate_image_and_pose,
     sample_roll_pair,
     select_background,
     select_image_rotation,
     shadow_clears_forceps,
 )
+
+
+def test_segmentation_labels_write_two_normalized_object_polygons() -> None:
+    square = np.array([[10, 10], [30, 10], [30, 30], [10, 30]], dtype=np.float32)
+    pose = Pose(
+        tip_polygons=[square, square, square],
+        shadow_polygons=[square + 40, square + 40, square + 40],
+        forceps_extent_polygons=[square],
+        shadow_extent_polygons=[square + 40],
+    )
+
+    lines = segmentation_label_lines(pose, 100, 100)
+
+    assert [line.split()[0] for line in lines] == ["0", "1"]
+    assert all(len(line.split()) >= 7 for line in lines)
+    assert all(0 <= float(value) <= 1 for line in lines for value in line.split()[1:])
 
 
 def test_pose_label_lines_write_forceps_and_shadow_objects() -> None:

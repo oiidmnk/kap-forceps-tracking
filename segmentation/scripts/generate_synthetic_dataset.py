@@ -96,6 +96,7 @@ class GenerationTask:
     video_degradation: bool = True
     circular_mask: bool = True
     image_rotations: tuple[float, ...] = (0.0,)
+    label_format: str = "pose"
 
 
 def unit(angle: float) -> np.ndarray:
@@ -1398,6 +1399,34 @@ def pose_label_lines(pose: Pose, width: int, height: int, visibility: int = 2) -
     return lines
 
 
+def segmentation_label_line(
+    class_id: int, polygons: list[np.ndarray], width: int, height: int
+) -> str:
+    """Create one coarse YOLO segmentation polygon around all object parts."""
+    points = np.concatenate(polygons).astype(np.float32)
+    hull = cv2.convexHull(points).reshape(-1, 2)
+    values: list[float | int] = [class_id]
+    for x, y in hull:
+        values.extend(
+            [
+                float(np.clip(x / width, 0.0, 1.0)),
+                float(np.clip(y / height, 0.0, 1.0)),
+            ]
+        )
+    return " ".join(format_yolo_value(float(value)) for value in values)
+
+
+def segmentation_label_lines(pose: Pose, width: int, height: int) -> list[str]:
+    return [
+        segmentation_label_line(
+            FORCEPS_CLASS_ID, pose.forceps_extent_polygons or pose.tip_polygons, width, height
+        ),
+        segmentation_label_line(
+            SHADOW_CLASS_ID, pose.shadow_extent_polygons or pose.shadow_polygons, width, height
+        ),
+    ]
+
+
 def normalized_box_xyxy(
     keypoint_polygons: list[np.ndarray],
     width: int,
@@ -1608,7 +1637,12 @@ def generate_one_image(task: GenerationTask) -> str:
     output_image = circular_png_image(image) if task.circular_mask else image
     if not cv2.imwrite(str(image_path), output_image):
         raise RuntimeError(f"failed to write image: {image_path}")
-    label_path.write_text("\n".join(pose_label_lines(pose, task.width, task.height)) + "\n")
+    labels = (
+        segmentation_label_lines(pose, task.width, task.height)
+        if task.label_format == "segment"
+        else pose_label_lines(pose, task.width, task.height)
+    )
+    label_path.write_text("\n".join(labels) + "\n")
 
     if task.index < task.preview:
         preview = render_preview(image, pose)
@@ -1622,6 +1656,12 @@ def generate_one_image(task: GenerationTask) -> str:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate synthetic retinal forceps pose data.")
     parser.add_argument("--count", type=int, default=100, help="Number of images to generate.")
+    parser.add_argument(
+        "--label-format",
+        choices=("pose", "segment"),
+        default="pose",
+        help="Write YOLO pose labels or two-class object segmentation polygons.",
+    )
     parser.add_argument("--out-dir", type=Path, default=Path("data"), help="Dataset root containing images/ and labels/.")
     parser.add_argument("--width", type=int, default=820, help="Output image width.")
     parser.add_argument("--height", type=int, default=920, help="Output image height.")
@@ -1892,6 +1932,7 @@ def main() -> int:
             video_degradation=args.video_degradation,
             circular_mask=args.circular_mask,
             image_rotations=tuple(float(angle % 360.0) for angle in args.image_rotations),
+            label_format=args.label_format,
         )
         for i in range(args.count)
     ]

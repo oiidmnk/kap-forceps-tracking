@@ -62,9 +62,9 @@ class NumberRange(BaseModel):
 
 
 class TrainingParameters(BaseModel):
-    model: str = Field(default="yolo11n-seg.pt", min_length=1, max_length=500)
+    model: str = Field(default="yolo11n-pose.pt", min_length=1, max_length=500)
     starting_model_run_id: str | None = Field(default=None, pattern=r"^[a-z0-9-]+$")
-    config: str = Field(default="configs/forceps_seg.yaml", min_length=1, max_length=500)
+    config: str = Field(default="configs/forceps_pose.yaml", min_length=1, max_length=500)
     epochs: int = Field(default=100, ge=1, le=10000)
     imgsz: int = Field(default=1024, ge=64, le=8192)
     batch: int = Field(default=8, ge=-1, le=4096)
@@ -82,7 +82,13 @@ class TrainingParameters(BaseModel):
         return None if value == "" else value
 
 
+class SegmentationTrainingParameters(TrainingParameters):
+    model: str = Field(default="yolo11n-seg.pt", min_length=1, max_length=500)
+    config: str = Field(default="configs/forceps_object_seg.yaml", min_length=1, max_length=500)
+
+
 class SyntheticParameters(BaseModel):
+    label_format: Literal["pose", "segment"] = "pose"
     count: int = Field(default=500, ge=1, le=1_000_000)
     width: int = Field(default=820, ge=128, le=8192)
     height: int = Field(default=920, ge=128, le=8192)
@@ -155,6 +161,7 @@ class DatasetSplitParameters(BaseModel):
 
 class PredictionParameters(BaseModel):
     model_run_id: str = Field(pattern=r"^[a-z0-9-]+$")
+    segmentation_model_run_id: str | None = Field(default=None, pattern=r"^[a-z0-9-]+$")
     source: str = Field(default="", max_length=2000)
     masked_video_run_id: str | None = Field(default=None, pattern=r"^[a-z0-9-]+$")
     confidence: float = Field(default=0.25, gt=0, le=1)
@@ -164,8 +171,10 @@ class PredictionParameters(BaseModel):
     preprocess_preset: str | None = Field(default=None, max_length=100)
     scene_filter: bool = True
     temporal_filter: bool = True
+    segmentation_confidence: float = Field(default=0.25, gt=0, le=1)
+    roi_padding: float = Field(default=0.25, ge=0, le=2)
 
-    @field_validator("device", "preprocess_preset", mode="before")
+    @field_validator("device", "preprocess_preset", "segmentation_model_run_id", mode="before")
     @classmethod
     def prediction_empty_to_none(cls, value: Any) -> Any:
         return None if value == "" else value
@@ -191,8 +200,27 @@ class VideoMaskParameters(BaseModel):
     crf: int = Field(default=18, ge=0, le=51)
 
 
+class ClassicalRoiParameters(BaseModel):
+    source: str = Field(min_length=1, max_length=2000)
+    forceps_max_saturation: int = Field(default=190, ge=0, le=255)
+    forceps_max_value: int = Field(default=165, ge=0, le=255)
+    canny_low: int = Field(default=25, ge=0, le=255)
+    canny_high: int = Field(default=70, ge=1, le=255)
+    temporal_smoothing: bool = True
+    temporal_alpha: float = Field(default=0.65, ge=0, le=1)
+    temporal_max_gap: int = Field(default=5, ge=0, le=1000)
+
+    @model_validator(mode="after")
+    def ordered_canny_thresholds(self) -> "ClassicalRoiParameters":
+        if self.canny_low >= self.canny_high:
+            raise ValueError("Canny low threshold must be smaller than the high threshold")
+        return self
+
+
 class CreateRunRequest(BaseModel):
-    kind: Literal["training", "synthetic", "dataset_split", "prediction", "video_mask"]
+    kind: Literal[
+        "training", "segmentation_training", "synthetic", "dataset_split", "prediction", "video_mask", "classical_roi"
+    ]
     name: str = Field(default="", max_length=100)
     parameters: dict[str, Any] = Field(default_factory=dict)
 
@@ -207,12 +235,14 @@ def build_command(
     run_dir: Path,
     source_dataset_root: Path | None = None,
     source_model_weights: Path | None = None,
+    segmentation_model_weights: Path | None = None,
     source_media: Path | None = None,
     starting_model_weights: Path | None = None,
     realism_video_source: Path | None = None,
 ) -> tuple[list[str], dict[str, Any]]:
-    if kind == "training":
-        parsed = TrainingParameters.model_validate(parameters)
+    if kind in {"training", "segmentation_training"}:
+        parameter_model = TrainingParameters if kind == "training" else SegmentationTrainingParameters
+        parsed = parameter_model.model_validate(parameters)
         params = parsed.model_dump()
         command = [
             sys.executable,
@@ -232,7 +262,7 @@ def build_command(
             "--project",
             str(run_dir / "artifacts"),
             "--name",
-            "training",
+            "segmentation_training" if kind == "segmentation_training" else "training",
         ]
         if parsed.device:
             command.extend(["--device", parsed.device])
@@ -270,6 +300,17 @@ def build_command(
             command.append("--no-scene-filter")
         if not parsed.temporal_filter:
             command.append("--no-temporal-filter")
+        if segmentation_model_weights is not None:
+            command.extend(
+                [
+                    "--segmentation-weights",
+                    str(segmentation_model_weights),
+                    "--segmentation-conf",
+                    str(parsed.segmentation_confidence),
+                    "--roi-padding",
+                    str(parsed.roi_padding),
+                ]
+            )
         return command, parsed.model_dump()
 
     if kind == "video_mask":
@@ -287,6 +328,34 @@ def build_command(
         ]
         if not parsed.track:
             command.append("--no-track")
+        return command, parsed.model_dump()
+
+    if kind == "classical_roi":
+        parsed = ClassicalRoiParameters.model_validate(parameters)
+        if source_media is None:
+            raise ValueError("A readable image or video source is required")
+        command = [
+            sys.executable,
+            "scripts/detect_classical_roi.py",
+            "--source",
+            str(source_media),
+            "--output-dir",
+            str(run_dir / "artifacts" / "classical_roi"),
+            "--forceps-max-saturation",
+            str(parsed.forceps_max_saturation),
+            "--forceps-max-value",
+            str(parsed.forceps_max_value),
+            "--canny-low",
+            str(parsed.canny_low),
+            "--canny-high",
+            str(parsed.canny_high),
+            "--temporal-alpha",
+            str(parsed.temporal_alpha),
+            "--temporal-max-gap",
+            str(parsed.temporal_max_gap),
+        ]
+        if not parsed.temporal_smoothing:
+            command.append("--no-temporal-smoothing")
         return command, parsed.model_dump()
 
     if kind == "dataset_split":
@@ -316,6 +385,8 @@ def build_command(
         "scripts/generate_synthetic_dataset.py",
         "--count",
         str(parsed.count),
+        "--label-format",
+        parsed.label_format,
         "--out-dir",
         str(run_dir / "artifacts" / "dataset"),
         "--width",
@@ -417,7 +488,7 @@ class RunManager:
         run_dir = self._run_dir(run_id)
         source_run_id = (
             request.parameters.get("dataset_run_id")
-            if request.kind == "training"
+            if request.kind in {"training", "segmentation_training"}
             else request.parameters.get("source_run_id")
             if request.kind == "dataset_split"
             else None
@@ -425,13 +496,21 @@ class RunManager:
         source_metadata = None
         source_dataset_root = None
         source_model_weights = None
+        segmentation_model_weights = None
         source_media = None
         starting_model_weights = None
         if source_run_id:
             source_metadata, source_dataset_root = self._resolve_dataset_run(str(source_run_id))
         model_run_id = request.parameters.get("model_run_id") if request.kind == "prediction" else None
+        segmentation_model_run_id = (
+            request.parameters.get("segmentation_model_run_id")
+            if request.kind == "prediction"
+            else None
+        )
         starting_model_run_id = (
-            request.parameters.get("starting_model_run_id") if request.kind == "training" else None
+            request.parameters.get("starting_model_run_id")
+            if request.kind in {"training", "segmentation_training"}
+            else None
         )
         masked_video_run_id = (
             request.parameters.get("masked_video_run_id") if request.kind == "prediction" else None
@@ -441,12 +520,16 @@ class RunManager:
         )
         realism_video_source = None
         if model_run_id:
-            source_model_weights = self._resolve_model_run(str(model_run_id))
+            source_model_weights = self._resolve_model_run(str(model_run_id), "training")
+        if segmentation_model_run_id:
+            segmentation_model_weights = self._resolve_model_run(
+                str(segmentation_model_run_id), "segmentation_training"
+            )
         if starting_model_run_id:
-            starting_model_weights = self._resolve_model_run(str(starting_model_run_id))
+            starting_model_weights = self._resolve_model_run(str(starting_model_run_id), request.kind)
         if masked_video_run_id:
             source_media = self._resolve_masked_video_run(str(masked_video_run_id))
-        elif request.kind in {"prediction", "video_mask"} and request.parameters.get("source"):
+        elif request.kind in {"prediction", "video_mask", "classical_roi"} and request.parameters.get("source"):
             source_media = self._resolve_media(str(request.parameters["source"]))
         if realism_video_run_id:
             realism_video_source = self._resolve_masked_video_run(str(realism_video_run_id))
@@ -458,24 +541,33 @@ class RunManager:
             run_dir,
             source_dataset_root=source_dataset_root,
             source_model_weights=source_model_weights,
+            segmentation_model_weights=segmentation_model_weights,
             source_media=source_media,
             starting_model_weights=starting_model_weights,
             realism_video_source=realism_video_source,
         )
         run_dir.mkdir(parents=True)
         (run_dir / "artifacts").mkdir()
-        if request.kind == "training" and source_dataset_root is not None:
+        if request.kind in {"training", "segmentation_training"} and source_dataset_root is not None:
+            expected_format = "pose" if request.kind == "training" else "segment"
+            actual_format = source_metadata.get("dataset_format", "pose")
+            if actual_format != expected_format:
+                raise ValueError(
+                    f"{request.kind.replace('_', ' ').title()} requires a {expected_format} dataset run"
+                )
             self._write_dataset_config(
                 run_dir / "input_dataset.yaml",
                 source_dataset_root,
-                source_metadata.get("dataset_format", "pose"),
+                actual_format,
             )
         default_names = {
             "training": "Model training",
+            "segmentation_training": "Object segmentation training",
             "synthetic": "Synthetic dataset",
             "dataset_split": "Dataset split",
             "prediction": "Media prediction",
             "video_mask": "Masked video",
+            "classical_roi": "Classical ROI",
         }
         metadata = {
             "id": run_id,
@@ -495,13 +587,14 @@ class RunManager:
                     source_run_id,
                     starting_model_run_id,
                     model_run_id,
+                    segmentation_model_run_id,
                     masked_video_run_id,
                     realism_video_run_id,
                 )
                 if run
             ],
             "dataset_format": (
-                "pose"
+                parameters.get("label_format", "pose")
                 if request.kind == "synthetic"
                 else source_metadata.get("dataset_format", "pose")
                 if request.kind == "dataset_split" and source_metadata
@@ -513,13 +606,14 @@ class RunManager:
         thread.start()
         return self.get(run_id)
 
-    def _resolve_model_run(self, run_id: str) -> Path:
+    def _resolve_model_run(self, run_id: str, expected_kind: str = "training") -> Path:
         try:
             metadata = self._load(run_id)
         except KeyError as exc:
             raise ValueError(f"Model run not found: {run_id}") from exc
-        if metadata.get("kind") != "training":
-            raise ValueError("Selected run does not produce a trained model")
+        if metadata.get("kind") != expected_kind:
+            task = "segmentation" if expected_kind == "segmentation_training" else "pose"
+            raise ValueError(f"Selected run does not produce a trained {task} model")
         if metadata.get("status") != "completed":
             raise ValueError("Training run must be completed before its model can be used")
         artifacts = self._run_dir(run_id) / "artifacts"
@@ -551,9 +645,9 @@ class RunManager:
             path = REPO_ROOT / path
         path = path.resolve()
         if not path.is_file():
-            raise ValueError(f"Prediction source does not exist: {value}")
+            raise ValueError(f"Media source does not exist: {value}")
         if path.suffix.lower() not in MEDIA_SUFFIXES:
-            raise ValueError(f"Unsupported prediction media type: {path.suffix or 'none'}")
+            raise ValueError(f"Unsupported media type: {path.suffix or 'none'}")
         return path
 
     @staticmethod
@@ -579,7 +673,7 @@ class RunManager:
 
     @staticmethod
     def _write_dataset_config(path: Path, dataset_root: Path, dataset_format: str) -> None:
-        if dataset_format != "pose":
+        if dataset_format not in {"pose", "segment"}:
             raise ValueError(f"Unsupported run dataset format: {dataset_format}")
         payload = {
             "path": str(dataset_root),
@@ -587,9 +681,9 @@ class RunManager:
             "val": "images/val",
             "nc": 2,
             "names": {0: "forceps", 1: "shadow"},
-            "kpt_shape": [3, 3],
-            "flip_idx": [1, 0, 2],
         }
+        if dataset_format == "pose":
+            payload.update({"kpt_shape": [3, 3], "flip_idx": [1, 0, 2]})
         path.write_text(yaml.safe_dump(payload, sort_keys=False))
 
     def _execute(self, run_id: str) -> None:
@@ -728,6 +822,11 @@ class RunManager:
             if scan_matches:
                 done, total = map(int, scan_matches[-1])
                 return round(done / total * 50, 1) if total else 0.0
+        elif metadata["kind"] == "classical_roi":
+            matches = re.findall(r"Classical ROI video: (\d+)/(\d+) frames", log)
+            if matches:
+                done, total = map(int, matches[-1])
+                return round(done / total * 100, 1) if total else 0.0
         else:
             epochs = int(metadata["parameters"]["epochs"])
             matches = re.findall(r"(?:^|\s)(\d+)\s*/\s*" + str(epochs) + r"(?:\s|$)", log, re.MULTILINE)
@@ -766,6 +865,14 @@ class RunManager:
                 "detections": mask_data.get("detections", 0),
                 "misses": mask_data.get("detection_misses", 0),
             }
+        if metadata["kind"] == "classical_roi":
+            summary_path = artifacts / "classical_roi" / "summary.json"
+            if summary_path.is_file():
+                try:
+                    return json.loads(summary_path.read_text())
+                except (OSError, json.JSONDecodeError):
+                    pass
+            return {}
         results_csv = next(artifacts.glob("**/results.csv"), None)
         summary: dict[str, Any] = {}
         if results_csv:
@@ -799,6 +906,7 @@ class RunManager:
                 if is_image and not (
                     "previews" in relative.parts
                     or "predictions" in relative.parts
+                    or "classical_roi" in relative.parts
                     or path.name in PREVIEW_NAMES
                     or path.name.startswith(("val_batch", "train_batch"))
                 ):

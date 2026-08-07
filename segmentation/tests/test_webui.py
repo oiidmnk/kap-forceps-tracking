@@ -234,6 +234,37 @@ def test_prediction_command_uses_model_run_weights_and_media(tmp_path: Path) -> 
     assert parameters["model_run_id"] == "20260101-120000-abcdef"
 
 
+def test_segmentation_training_and_crop_first_prediction_commands(tmp_path: Path) -> None:
+    segmentation_weights = tmp_path / "segmentation" / "best.pt"
+    pose_weights = tmp_path / "pose" / "best.pt"
+    source = tmp_path / "frame.png"
+    training_command, _ = build_command(
+        "segmentation_training",
+        {"dataset_run_id": "20260101-120000-abcdef", "epochs": 3},
+        tmp_path / "training-run",
+        source_dataset_root=tmp_path / "dataset",
+    )
+    prediction_command, parameters = build_command(
+        "prediction",
+        {
+            "model_run_id": "20260101-120000-poseaa",
+            "segmentation_model_run_id": "20260101-120000-segaaa",
+            "source": str(source),
+            "roi_padding": 0.4,
+        },
+        tmp_path / "prediction-run",
+        source_model_weights=pose_weights,
+        segmentation_model_weights=segmentation_weights,
+        source_media=source,
+    )
+
+    assert training_command[training_command.index("--name") + 1] == "segmentation_training"
+    assert training_command[training_command.index("--model") + 1] == "yolo11n-seg.pt"
+    assert prediction_command[prediction_command.index("--segmentation-weights") + 1] == str(segmentation_weights)
+    assert prediction_command[prediction_command.index("--roi-padding") + 1] == "0.4"
+    assert parameters["segmentation_model_run_id"] == "20260101-120000-segaaa"
+
+
 def test_prediction_ui_exposes_temporal_video_tracking() -> None:
     webui_root = Path(__file__).resolve().parents[1] / "webui"
     index = (webui_root / "index.html").read_text()
@@ -324,6 +355,67 @@ def test_video_mask_command_uses_single_disc_reference_parameters(tmp_path: Path
     assert command[command.index("--output-dir") + 1] == str(tmp_path / "run" / "artifacts" / "masking")
     assert "--no-track" in command
     assert parameters["size"] == 768
+
+
+def test_classical_roi_command_accepts_image_or_video_media(tmp_path: Path) -> None:
+    source = tmp_path / "frame.png"
+    command, parameters = build_command(
+        "classical_roi",
+        {
+            "source": str(source),
+            "forceps_max_saturation": 180,
+            "canny_low": 20,
+            "canny_high": 80,
+            "temporal_smoothing": False,
+        },
+        tmp_path / "run",
+        source_media=source,
+    )
+
+    assert command[1] == "scripts/detect_classical_roi.py"
+    assert command[command.index("--source") + 1] == str(source)
+    assert command[command.index("--output-dir") + 1] == str(
+        tmp_path / "run" / "artifacts" / "classical_roi"
+    )
+    assert command[command.index("--forceps-max-saturation") + 1] == "180"
+    assert "--no-temporal-smoothing" in command
+    assert parameters["canny_high"] == 80
+
+
+def test_classical_roi_run_resolves_uploaded_media(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manager = RunManager(tmp_path / "runs")
+    source = tmp_path / "uploaded.mov"
+    source.write_bytes(b"video")
+    monkeypatch.setattr("scripts.webui.threading.Thread.start", lambda _self: None)
+
+    run = manager.create(CreateRunRequest(kind="classical_roi", parameters={
+        "source": str(source),
+    }))
+
+    assert run["kind"] == "classical_roi"
+    assert run["name"] == "Classical ROI"
+    assert run["command"][run["command"].index("--source") + 1] == str(source.resolve())
+
+
+def test_classical_roi_ui_exposes_frame_and_video_controls() -> None:
+    webui_root = Path(__file__).resolve().parents[1] / "webui"
+    index = (webui_root / "index.html").read_text()
+    app = (webui_root / "app.js").read_text()
+
+    assert 'data-kind="classical_roi"' in index
+    assert 'data-quick-kind="classical_roi"' in index
+    for field_name in (
+        "classical_media_file",
+        "classical_source",
+        "classical_forceps_max_saturation",
+        "classical_canny_low",
+        "classical_temporal_smoothing",
+    ):
+        assert f'name="{field_name}"' in index
+    assert "classical_roi: $('#classical-roi-fields')" in app
+    assert "form.elements.classical_media_file.files[0]" in app
 
 
 def test_prediction_can_resolve_completed_mask_run(tmp_path: Path) -> None:

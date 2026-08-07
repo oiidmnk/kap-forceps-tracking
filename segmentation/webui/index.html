@@ -55,11 +55,13 @@
           <span class="visual-label bottom">04 keypoints tracked</span>
         </div>
         <div class="quick-grid">
-          <button class="quick-card" data-quick-kind="training"><span class="quick-icon">↗</span><small>YOLO pipeline</small><strong>Train a model</strong><p>Fit a segmentation or pose checkpoint on your prepared data.</p></button>
+          <button class="quick-card" data-quick-kind="training"><span class="quick-icon">↗</span><small>YOLO pose</small><strong>Train pose model</strong><p>Fit the keypoint model for forceps and shadow pose.</p></button>
+          <button class="quick-card coral" data-quick-kind="segmentation_training"><span class="quick-icon">▱</span><small>YOLO segment</small><strong>Train object segmenter</strong><p>Learn forceps and shadow masks for crop-first prediction.</p></button>
           <button class="quick-card coral" data-quick-kind="synthetic"><span class="quick-icon">✦</span><small>Data engine</small><strong>Generate samples</strong><p>Render controlled retinal scenes with paired pose labels.</p></button>
           <button class="quick-card blue" data-quick-kind="dataset_split"><span class="quick-icon">⌘</span><small>Dataset lineage</small><strong>Split a dataset</strong><p>Create a reproducible train/validation child run.</p></button>
           <button class="quick-card violet" data-quick-kind="prediction"><span class="quick-icon">▶</span><small>Inference</small><strong>Predict media</strong><p>Run trained weights on a single frame or video.</p></button>
           <button class="quick-card amber" data-quick-kind="video_mask"><span class="quick-icon">◉</span><small>Scope preparation</small><strong>Mask a video</strong><p>Track one retinal disc, crop it square, and black out its surround.</p></button>
+          <button class="quick-card blue" data-quick-kind="classical_roi"><span class="quick-icon">◇</span><small>OpenCV baseline</small><strong>Detect classical ROI</strong><p>Find forceps and shadow boxes in a frame or video without ML.</p></button>
         </div>
       </div>
 
@@ -111,20 +113,22 @@
     <form id="run-form" method="dialog">
       <div class="dialog-head"><div><span class="eyebrow">New experiment</span><h2>Configure a run</h2></div><button type="button" class="dialog-close" aria-label="Close">×</button></div>
       <div class="kind-switch" role="tablist">
-        <button type="button" class="kind-option active" data-kind="training"><span>↗</span><div><strong>Model training</strong><small>YOLO segmentation / pose</small></div></button>
+        <button type="button" class="kind-option active" data-kind="training"><span>↗</span><div><strong>Pose training</strong><small>YOLO keypoints</small></div></button>
+        <button type="button" class="kind-option" data-kind="segmentation_training"><span>▱</span><div><strong>Segmentation training</strong><small>Forceps + shadow objects</small></div></button>
         <button type="button" class="kind-option" data-kind="synthetic"><span>✦</span><div><strong>Synthetic data</strong><small>Rendered images + labels</small></div></button>
         <button type="button" class="kind-option" data-kind="dataset_split"><span>⌘</span><div><strong>Dataset split</strong><small>Train / validation child run</small></div></button>
         <button type="button" class="kind-option" data-kind="prediction"><span>▶</span><div><strong>Prediction</strong><small>Single frame / video</small></div></button>
         <button type="button" class="kind-option" data-kind="video_mask"><span>◉</span><div><strong>Video mask</strong><small>Single retinal disc</small></div></button>
+        <button type="button" class="kind-option" data-kind="classical_roi"><span>◇</span><div><strong>Classical ROI</strong><small>Frame / video · no ML</small></div></button>
       </div>
 
       <div class="form-scroll">
         <label class="field full"><span>Run name <small>optional</small></span><input name="name" placeholder="e.g. Pose baseline 04"></label>
         <div id="training-fields" class="form-grid">
           <label class="field full"><span>Starting model <small>optional — use weights from a completed run</small></span><select name="starting_model_run_id"><option value="">Use checkpoint or model YAML below</option></select></label>
-          <label class="field full"><span>Checkpoint or model YAML <small>used when no training run is selected</small></span><input name="model" value="yolo11n-seg.pt"></label>
+          <label class="field full"><span>Checkpoint or model YAML <small>used when no training run is selected</small></span><input name="model" value="yolo11n-pose.pt"></label>
           <label class="field full"><span>Dataset run <small>optional — uses its generated train/val data</small></span><select name="dataset_run_id"><option value="">Use dataset config below</option></select></label>
-          <label class="field full"><span>Dataset config <small>used when no dataset run is selected</small></span><input name="config" value="configs/forceps_seg.yaml"></label>
+          <label class="field full"><span>Dataset config <small>used when no dataset run is selected</small></span><input name="config" value="configs/forceps_pose.yaml"></label>
           <label class="field"><span>Epochs</span><input name="epochs" type="number" value="100" min="1"></label>
           <label class="field"><span>Image size</span><input name="imgsz" type="number" value="1024" min="64"></label>
           <label class="field"><span>Batch size</span><input name="batch" type="number" value="8" min="-1"></label>
@@ -134,7 +138,22 @@
           <label class="check-field full"><input name="rebuild_preprocessed" type="checkbox"><span><strong>Rebuild preprocessed dataset</strong><small>Regenerate derived images before training.</small></span></label>
         </div>
 
+        <div id="segmentation-training-fields" class="form-grid hidden">
+          <label class="field full"><span>Starting segmentation model <small>optional</small></span><select name="segmentation_starting_model_run_id"><option value="">Use checkpoint below</option></select></label>
+          <label class="field full"><span>Checkpoint or model YAML</span><input name="segmentation_model" value="yolo11n-seg.pt"></label>
+          <label class="field full"><span>Segmentation dataset run <small>must contain object polygons</small></span><select name="segmentation_dataset_run_id"><option value="">Use dataset config below</option></select></label>
+          <label class="field full"><span>Dataset config</span><input name="segmentation_config" value="configs/forceps_object_seg.yaml"></label>
+          <label class="field"><span>Epochs</span><input name="segmentation_epochs" type="number" value="100" min="1"></label>
+          <label class="field"><span>Image size</span><input name="segmentation_imgsz" type="number" value="1024" min="64"></label>
+          <label class="field"><span>Batch size</span><input name="segmentation_batch" type="number" value="8" min="-1"></label>
+          <label class="field"><span>Patience</span><input name="segmentation_patience" type="number" value="20" min="0"></label>
+          <label class="field"><span>Device</span><input name="segmentation_device" placeholder="auto, cpu, mps, 0"></label>
+          <label class="field"><span>Preprocess preset</span><input name="segmentation_preprocess_preset" placeholder="none"></label>
+          <label class="check-field full"><input name="segmentation_rebuild_preprocessed" type="checkbox"><span><strong>Rebuild preprocessed dataset</strong><small>Regenerate derived images before training.</small></span></label>
+        </div>
+
         <div id="synthetic-fields" class="form-grid hidden">
+          <label class="field full"><span>Label type</span><select name="label_format"><option value="pose">Pose keypoints</option><option value="segment">Object segmentation — forceps + shadow</option></select></label>
           <label class="field"><span>Images</span><input name="count" type="number" value="500" min="1"></label>
           <label class="field"><span>Preview count</span><input name="preview" type="number" value="12" min="0"></label>
           <label class="field"><span>Width</span><input name="width" type="number" value="820" min="128"></label>
@@ -172,11 +191,14 @@
         </div>
 
         <div id="prediction-fields" class="form-grid hidden">
-          <label class="field full"><span>Model run</span><select name="model_run_id"><option value="">Select a completed training run</option></select></label>
+          <label class="field full"><span>Pose model run</span><select name="model_run_id"><option value="">Select a completed pose training run</option></select></label>
+          <label class="field full"><span>Segmentation model run <small>optional — detects the crop first</small></span><select name="segmentation_model_run_id"><option value="">Run pose on the full frame</option></select></label>
           <label class="field full"><span>Masked video run <small>optional — use its output directly</small></span><select name="masked_video_run_id"><option value="">Upload media or use a source path below</option></select></label>
           <label class="field full"><span>Upload frame or video</span><input name="media_file" type="file" accept="image/*,video/*,.mov,.mkv,.avi,.m4v,.webm"></label>
           <label class="field full"><span>Or source path <small>relative to segmentation/ or absolute</small></span><input name="prediction_source" placeholder="data/testing/frame_001.png"></label>
           <label class="field"><span>Confidence</span><input name="prediction_confidence" type="number" value="0.25" min="0.01" max="1" step="0.01"></label>
+          <label class="field"><span>Segmentation confidence</span><input name="prediction_segmentation_confidence" type="number" value="0.25" min="0.01" max="1" step="0.01"></label>
+          <label class="field"><span>ROI padding</span><input name="prediction_roi_padding" type="number" value="0.25" min="0" max="2" step="0.05"></label>
           <label class="field"><span>Maximum detections</span><input name="prediction_max_detections" type="number" value="300" min="1"></label>
           <label class="field"><span>Image size</span><input name="prediction_imgsz" type="number" value="1024" min="64"></label>
           <label class="field"><span>Device</span><input name="prediction_device" placeholder="auto, cpu, mps, 0"></label>
@@ -199,6 +221,19 @@
           <label class="field"><span>H.264 quality (CRF)</span><input name="mask_crf" type="number" value="18" min="0" max="51"></label>
           <label class="check-field full"><input name="mask_track" type="checkbox" checked><span><strong>Track the disc center</strong><small>Use a fixed median radius and a smoothed center for every frame.</small></span></label>
           <div class="lineage-note full"><span>→</span><p>The masked H.264 video becomes a selectable input for Prediction runs.</p></div>
+        </div>
+
+        <div id="classical-roi-fields" class="form-grid hidden">
+          <label class="field full"><span>Upload frame or video</span><input name="classical_media_file" type="file" accept="image/*,video/*,.mov,.mkv,.avi,.m4v,.webm"></label>
+          <label class="field full"><span>Or source path <small>relative to segmentation/ or absolute</small></span><input name="classical_source" placeholder="data/testing/frame.png"></label>
+          <label class="field"><span>Forceps maximum saturation</span><input name="classical_forceps_max_saturation" type="number" value="190" min="0" max="255"></label>
+          <label class="field"><span>Forceps maximum brightness</span><input name="classical_forceps_max_value" type="number" value="165" min="0" max="255"></label>
+          <label class="field"><span>Canny low threshold</span><input name="classical_canny_low" type="number" value="25" min="0" max="254"></label>
+          <label class="field"><span>Canny high threshold</span><input name="classical_canny_high" type="number" value="70" min="1" max="255"></label>
+          <label class="field"><span>Video smoothing</span><input name="classical_temporal_alpha" type="number" value="0.65" min="0" max="1" step="0.05"></label>
+          <label class="field"><span>Hold missing boxes <small>frames</small></span><input name="classical_temporal_max_gap" type="number" value="5" min="0"></label>
+          <label class="check-field full"><input name="classical_temporal_smoothing" type="checkbox" checked><span><strong>Smooth boxes in videos</strong><small>Blend boxes across frames and briefly retain them after missed detections. Images are unaffected.</small></span></label>
+          <div class="lineage-note full"><span>→</span><p>Outputs include annotated media, forceps/shadow boxes, a combined pose ROI, and frame-level JSON detections.</p></div>
         </div>
       </div>
 
