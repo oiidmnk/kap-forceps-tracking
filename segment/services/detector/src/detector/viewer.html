@@ -1,0 +1,18 @@
+<!doctype html><meta charset="utf-8"><title>Forceps Detector – live</title>
+<style>
+ body{margin:0;background:#111;color:#ddd;font:14px system-ui;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
+ img{width:min(78vh,100%);aspect-ratio:1;background:#000;border-radius:8px}
+ pre{background:#1b1b1b;padding:12px;border-radius:8px;min-width:340px}
+ .k{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:6px}
+ a{color:#7cf}
+</style>
+<div><img src="/live.mjpg" alt="live"></div>
+<div>
+ <p><span class="k" style="background:cyan"></span>left tip &nbsp;<span class="k" style="background:magenta"></span>right tip &nbsp;<span class="k" style="background:yellow"></span>jaw junction<br>
+ green = forceps, orange = shadow</p>
+ <pre id="s">…</pre>
+ <p><a href="http://localhost:8080" target="_blank">3D viz</a> · <a href="http://localhost:8090" target="_blank">orchestrator</a></p>
+</div>
+<script>
+async function tick(){try{const j=await (await fetch('/state')).json();document.getElementById('s').textContent=JSON.stringify(j,null,1)}catch(e){}setTimeout(tick,500)}tick()
+</script>

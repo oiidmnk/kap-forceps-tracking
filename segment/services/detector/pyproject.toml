@@ -1,0 +1,23 @@
+[project]
+name = "detector"
+version = "1.0.0"
+description = "Classical-CV forceps/shadow jaw-tip detector with live source and orchestrator push"
+requires-python = ">=3.10"
+dependencies = ["fastapi>=0.115", "httpx>=0.27", "numpy>=1.23", "opencv-python-headless>=4.8", "python-multipart>=0.0.9", "uvicorn[standard]>=0.30"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+detector = ["viewer.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

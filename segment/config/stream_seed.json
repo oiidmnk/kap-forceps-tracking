@@ -1,0 +1,32 @@
+{
+  "light_rot_up": 0.68104,
+  "light_rot_clock": 2.70767,
+  "light_depth_mm": 0.0,
+  "forceps_rot_up": 0.73695,
+  "forceps_rot_clock": 0.57493,
+  "eye_center_px": [
+    540.0,
+    540.0
+  ],
+  "eye_radius_px": 500.0,
+  "eye_radius_mm": 24.0,
+  "jaw_length_mm": 3.0,
+  "left_tip_px": [
+    310,
+    468
+  ],
+  "right_tip_px": [
+    321,
+    442
+  ],
+  "left_shadow_px": [
+    399,
+    397
+  ],
+  "right_shadow_px": [
+    408,
+    368
+  ],
+  "light_aim_tilt": 0.0,
+  "light_aim_clock": 0.0
+}
