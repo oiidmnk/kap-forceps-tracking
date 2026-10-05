@@ -1,38 +1,30 @@
-# Dependencies
-node_modules/
-
-# Build output (produced by Vite / Docker image build)
-microforceps-viz/dist/
-
 # Python
+.venv/
+venv/
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
-venv/
-.venv/
-env/
+*.egg-info/
+.pytest_cache/
+
+# Node / build
+node_modules/
+dist/
+
+# Env / local config
 .env
 .env.*
 !.env.example
+.claude
+CLAUDE.md
 
 # OS / editor
 .DS_Store
 Thumbs.db
 *.swp
-*.swo
 *~
 .idea/
 .vscode/
 *.code-workspace
-.claude
-
-# Local AI / tool config
-.claude/settings.local.json
-
-# Archives (source drops — not part of the repo)
-*.zip
 
 # Logs & temp
 *.log
@@ -40,19 +32,12 @@ npm-debug.log*
 .cache/
 tmp/
 temp/
+artifacts/
+*.zip
 
-# Local orchestrator state
-orchestrator/data/
+# Local service state
+services/orchestrator/data/
 
-# Segmentation training artifacts
-segmentation/.venv/
-segmentation/*.egg-info/
-segmentation/data/
-segmentation/data_preprocessed/
-segmentation/configs/generated/
-segmentation/runs/
-segmentation/*.pt
-CLAUDE.md
-segmentation/models/
-out/
-runs/
+# Large sample data (not tracked): data/video/forceps_lev1.mp4, data/annotated/ (LabelMe frames)
+data/annotated/
+data/video/*.mp4
