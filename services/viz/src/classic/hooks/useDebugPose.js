@@ -45,15 +45,13 @@ export function useDebugPose(active) {
     if (!active) return
 
     const onKeyDown = (e) => {
-      if (e.target.closest('input, select, textarea, [contenteditable="true"]') || !KEY_MAP[e.code]) return
+      if (!KEY_MAP[e.code]) return
       pressed.current.add(e.code)
       e.preventDefault()
     }
     const onKeyUp = (e) => {
       pressed.current.delete(e.code)
     }
-    const onBlur = () => pressed.current.clear()
-    window.addEventListener('blur', onBlur)
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
 
@@ -105,8 +103,6 @@ export function useDebugPose(active) {
     raf = requestAnimationFrame(tick)
 
     return () => {
-      pressed.current.clear()
-      window.removeEventListener('blur', onBlur)
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
       cancelAnimationFrame(raf)

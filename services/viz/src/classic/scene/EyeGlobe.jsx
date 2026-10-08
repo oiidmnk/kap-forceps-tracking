@@ -10,8 +10,8 @@ import { EYE_RADIUS_MM, LIMBUS_RADIUS_MM } from '../config.js'
 // primary depth cue; colors stay on the neutral steel / muted-anatomical
 // palette so it reads clinical.
 
-const PARALLEL_STEP_DEG = 30
-const MERIDIAN_STEP_DEG = 30
+const PARALLEL_STEP_DEG = 15
+const MERIDIAN_STEP_DEG = 20
 const SEGMENTS = 96
 
 // theta = polar angle from +Y (0 at top pole). Grid spans limbus → near -Y pole.
@@ -52,73 +52,37 @@ export default function EyeGlobe({ showRetina = true }) {
   const R = EYE_RADIUS_MM
   const limbusY = Math.sqrt(R * R - LIMBUS_RADIUS_MM * LIMBUS_RADIUS_MM)
   const limbusTheta = Math.asin(LIMBUS_RADIUS_MM / R)
-  const { parallels, meridians } = useMemo(
-    () => gridLines(R, limbusTheta),
-    [R, limbusTheta]
-  )
+  const { parallels, meridians } = useMemo(() => gridLines(R, limbusTheta), [R, limbusTheta])
 
   return (
     <group>
       {/* Glassy shell — interior backface slightly stronger for volume depth */}
       <mesh>
-        <sphereGeometry
-          args={[R, 64, 32, 0, Math.PI * 2, limbusTheta, Math.PI - limbusTheta]}
-        />
-        <meshPhysicalMaterial
-          color="#9db4cc"
-          transparent
-          opacity={0.05}
-          roughness={0.15}
-          side={BackSide}
-          depthWrite={false}
-        />
+        <sphereGeometry args={[R, 64, 32, 0, Math.PI * 2, limbusTheta, Math.PI - limbusTheta]} />
+        <meshPhysicalMaterial color="#9db4cc" transparent opacity={0.05} roughness={0.15} side={BackSide} depthWrite={false} />
       </mesh>
       <mesh>
-        <sphereGeometry
-          args={[R, 64, 32, 0, Math.PI * 2, limbusTheta, Math.PI - limbusTheta]}
-        />
-        <meshPhysicalMaterial
-          color="#9db4cc"
-          transparent
-          opacity={0.03}
-          roughness={0.15}
-          depthWrite={false}
-        />
+        <sphereGeometry args={[R, 64, 32, 0, Math.PI * 2, limbusTheta, Math.PI - limbusTheta]} />
+        <meshPhysicalMaterial color="#9db4cc" transparent opacity={0.03} roughness={0.15} depthWrite={false} />
       </mesh>
 
       {/* Reference grid — parallels + meridians as crisp screen-space lines */}
       {parallels.map((pts, i) => (
-        <Line
-          key={`par-${i}`}
-          points={pts}
-          color="#64778c"
-          lineWidth={0.75}
-          transparent
-          opacity={0.27}
-        />
+        <Line key={`par-${i}`} points={pts} color="#64778c" lineWidth={0.75} transparent opacity={0.45} />
       ))}
       {meridians.map((pts, i) => (
-        <Line
-          key={`mer-${i}`}
-          points={pts}
-          color="#64778c"
-          lineWidth={0.75}
-          transparent
-          opacity={0.19}
-        />
+        <Line key={`mer-${i}`} points={pts} color="#64778c" lineWidth={0.75} transparent opacity={0.3} />
       ))}
 
       {/* Retina — lower (-Y) hemisphere: smooth, muted anatomical rose */}
       {showRetina && (
         <mesh>
-          <sphereGeometry
-            args={[R - 0.08, 64, 28, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2]}
-          />
+          <sphereGeometry args={[R - 0.08, 64, 28, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2]} />
           <meshStandardMaterial
             color="#8b3a4a"
             emissive="#1a060c"
             transparent
-            opacity={0.13}
+            opacity={0.22}
             roughness={0.85}
             depthWrite={false}
             side={DoubleSide}
@@ -133,30 +97,9 @@ export default function EyeGlobe({ showRetina = true }) {
       </mesh>
 
       {/* Principal axes — dim reference only */}
-      <Line
-        color="#3c4a63"
-        lineWidth={0.75}
-        points={[
-          [-R, 0, 0],
-          [R, 0, 0],
-        ]}
-      />
-      <Line
-        color="#3c4a63"
-        lineWidth={0.75}
-        points={[
-          [0, -R, 0],
-          [0, R, 0],
-        ]}
-      />
-      <Line
-        color="#3c4a63"
-        lineWidth={0.75}
-        points={[
-          [0, 0, -R],
-          [0, 0, R],
-        ]}
-      />
+      <Line color="#3c4a63" lineWidth={0.75} points={[[-R, 0, 0], [R, 0, 0]]} />
+      <Line color="#3c4a63" lineWidth={0.75} points={[[0, -R, 0], [0, R, 0]]} />
+      <Line color="#3c4a63" lineWidth={0.75} points={[[0, 0, -R], [0, 0, R]]} />
     </group>
   )
 }

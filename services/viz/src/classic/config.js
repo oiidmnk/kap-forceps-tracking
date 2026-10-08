@@ -9,18 +9,17 @@ export const LIMBUS_RADIUS_MM = 6 // limbus circle radius
 export const DIST_SAFE_MM = 2.0
 export const DIST_WARN_MM = 0.5
 
-// The persistent proximity panel activates its close-up inside this range;
-// outside it, a standby state keeps the workstation layout stable.
+// The proximity scope only appears once a tip is within this range of the
+// retina — otherwise it's dead screen real estate for most of the procedure.
 export const DIST_SCOPE_SHOW_MM = 5.0
 
 // Live tracking feed (Python) — see feed/synthetic_feed.py
 // Live tracking feed — proxied through nginx at /ws in Docker; override via VITE_WS_URL.
 function defaultWsUrl() {
-  if (typeof window === 'undefined') return ''
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   return `${proto}//${window.location.host}/ws`
 }
-export const WS_URL = import.meta.env?.VITE_WS_URL || defaultWsUrl()
+export const WS_URL = import.meta.env.VITE_WS_URL || defaultWsUrl()
 
 // Physical size hints for rendering the instrument (mm). A real 23–25 gauge
 // microforceps shaft is ~0.5–0.6 mm diameter with fine jaws that taper to a point.

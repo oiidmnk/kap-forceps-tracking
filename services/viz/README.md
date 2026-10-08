@@ -41,8 +41,10 @@ pip install -r feed/requirements.txt
 python feed/synthetic_feed.py
 ```
 
-Then click **"Use live feed"** in the dashboard (defaults to `ws://localhost:8765`,
-configurable in `src/config.js`).
+Then select **Live tracking** in the Data source selector. The default endpoint is
+`/ws` on the current host (proxied by nginx in Docker). To connect directly to
+the optional Python feed during development, run
+`VITE_WS_URL=ws://localhost:8765 npm run dev`.
 
 ## Key files
 
@@ -55,3 +57,29 @@ configurable in `src/config.js`).
 | `src/components/HUD.jsx` | 2D overlay: safety readout + controls |
 | `feed/synthetic_feed.py` | Stand-in Python live feed |
 ```
+
+## UI versions
+
+The **workstation is the active default** at `/`. The original visualization
+is preserved independently in `src/classic/` and is available at `/?ui=classic`
+in both development and production. Return to `/` for the workstation.
+Only the selected version is loaded, keeping their styles isolated.
+
+## Workstation controls
+
+- **Data source:** Simulation, Live tracking, or Manual simulation. Simulated
+  confidence is not presented as measured telemetry. Calibration is unknown
+  unless the live source explicitly reports a `calibrated` boolean.
+- **Views:** Overview, Surgeon, and Sagittal (keys 1–3); Reset view restores
+  the selected framing. Display contains scene-layer and scope controls.
+- **Depth profile:** toggle between 0–10 mm and a magnified 0–3 mm scale.
+  The dashed markers use the configured 0.5 mm and 2 mm thresholds.
+- **Proximity scope:** keeps its space when the tips are outside 5 mm, when
+  disabled, or while tracking is unavailable. Drag the active close-up to rotate.
+- **Live state:** only complete, finite forceps coordinates produce measurements.
+  Missing or malformed tracking clears readouts. A 1.5-second interruption
+  marks data stale; a complete new frame restores tracking automatically.
+  Native millimeter frames and normalized upstream `positions` are supported.
+
+Run `npm test` for feed validation, freshness, and threshold-boundary tests;
+run `npm run build` for a production build.

@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react'
-import { useThree } from '@react-three/fiber'
 import { CameraControls } from '@react-three/drei'
 import { VIEW_PRESETS, EYE_RADIUS_MM } from '../config.js'
 
@@ -14,7 +13,6 @@ import { VIEW_PRESETS, EYE_RADIUS_MM } from '../config.js'
 // exactly down the Y axis, so a constant up needs no gimbal handling.
 export default function CameraRig({ view, snapNonce }) {
   const ref = useRef()
-  const { width, height } = useThree((state) => state.size)
 
   // Disable right-drag pan once, matching the previous OrbitControls behavior.
   useEffect(() => {
@@ -26,13 +24,10 @@ export default function CameraRig({ view, snapNonce }) {
     const c = ref.current
     const preset = VIEW_PRESETS[view]
     if (!c || !preset) return
-    const fit = 0.88 * Math.max(1, height / width)
-    const animate = !window.matchMedia('(prefers-reduced-motion: reduce)')
-      .matches
-    c.setLookAt(...preset.pos.map((n) => n * fit), 0, 0, 0, animate)
+    c.setLookAt(preset.pos[0], preset.pos[1], preset.pos[2], 0, 0, 0, true)
     // snapNonce is intentionally a dependency: re-selecting the same preset
     // (nonce bumps, view doesn't) re-snaps the framing after free orbit/zoom.
-  }, [view, snapNonce, width, height])
+  }, [view, snapNonce])
 
   return (
     <CameraControls

@@ -7,24 +7,7 @@ import { color } from './theme.js'
 // stays legible under red-green color vision deficiency (the most common kind).
 // Hues come from the shared theme — these are the only saturated colors in the UI.
 export function distanceStatus(mm) {
-  if (mm < DIST_WARN_MM)
-    return {
-      level: 'danger',
-      color: color.danger,
-      label: 'Critical proximity',
-      symbol: '■',
-    }
-  if (mm < DIST_SAFE_MM)
-    return {
-      level: 'warn',
-      color: color.warn,
-      label: 'Approaching retina',
-      symbol: '▲',
-    }
-  return {
-    level: 'safe',
-    color: color.safe,
-    label: 'Above warning threshold',
-    symbol: '●',
-  }
+  if (mm < DIST_WARN_MM) return { level: 'danger', color: color.danger, label: 'DANGER', symbol: '■' }
+  if (mm < DIST_SAFE_MM) return { level: 'warn', color: color.warn, label: 'WARN', symbol: '▲' }
+  return { level: 'safe', color: color.safe, label: 'SAFE', symbol: '●' }
 }

@@ -24,18 +24,14 @@ function smoothstep(edge0, edge1, x) {
 }
 
 const PATCH_HALF_MM = 6 // approx half-width of the rendered patch, measured along the sphere surface
-const GRID_STEP_MM = 2
+const GRID_STEP_MM = 1
 const WALL_RADIUS_MM = EYE_RADIUS_MM - 0.08 // matches EyeGlobe's retina inset, avoids z-fighting with the main sphere
 const CAP_ANGLE = PATCH_HALF_MM / WALL_RADIUS_MM // small-angle arc-length approximation
 
 // Point on the sphere in a "pole = local +Y" frame: theta is the polar angle
 // from the pole (0 = pole itself), phi sweeps around it.
 function sphericalPoint(theta, phi, radius) {
-  return [
-    radius * Math.sin(theta) * Math.cos(phi),
-    radius * Math.cos(theta),
-    radius * Math.sin(theta) * Math.sin(phi),
-  ]
+  return [radius * Math.sin(theta) * Math.cos(phi), radius * Math.cos(theta), radius * Math.sin(theta) * Math.sin(phi)]
 }
 
 // Precomputed once: the lat/long ruler lines over the cap, in the unrotated
@@ -48,9 +44,7 @@ const LAT_LINES = (() => {
   for (let theta = dTheta; theta <= CAP_ANGLE + 1e-6; theta += dTheta) {
     const ring = []
     for (let s = 0; s <= segments; s++) {
-      ring.push(
-        sphericalPoint(theta, (s / segments) * Math.PI * 2, GRID_RADIUS_MM)
-      )
+      ring.push(sphericalPoint(theta, (s / segments) * Math.PI * 2, GRID_RADIUS_MM))
     }
     lines.push(ring)
   }
@@ -128,16 +122,8 @@ export default function ProximityWall({ frame }) {
   return (
     <group ref={groupRef}>
       <mesh>
-        <sphereGeometry
-          args={[WALL_RADIUS_MM, 48, 24, 0, Math.PI * 2, 0, CAP_ANGLE]}
-        />
-        <meshStandardMaterial
-          color="#654451"
-          emissive="#20151b"
-          emissiveIntensity={0.6}
-          roughness={0.8}
-          side={THREE.DoubleSide}
-        />
+        <sphereGeometry args={[WALL_RADIUS_MM, 48, 24, 0, Math.PI * 2, 0, CAP_ANGLE]} />
+        <meshStandardMaterial color="#8e3a4e" emissive="#3d0e1b" emissiveIntensity={0.6} roughness={0.8} side={THREE.DoubleSide} />
       </mesh>
       {LAT_LINES.map((pts, i) => (
         <Line
@@ -145,8 +131,8 @@ export default function ProximityWall({ frame }) {
           points={pts}
           color="#f0c3cf"
           transparent
-          opacity={0.18}
-          lineWidth={0.7}
+          opacity={0.45}
+          lineWidth={1.2}
           depthTest={false}
           renderOrder={1}
         />
@@ -157,24 +143,16 @@ export default function ProximityWall({ frame }) {
           points={pts}
           color="#f0c3cf"
           transparent
-          opacity={0.18}
-          lineWidth={0.7}
+          opacity={0.45}
+          lineWidth={1.2}
           depthTest={false}
           renderOrder={1}
         />
       ))}
       {/* Contact-point marker, sitting right at the cap's pole */}
-      <mesh
-        position={[0, WALL_RADIUS_MM + 0.02, 0]}
-        rotation={[-Math.PI / 2, 0, 0]}
-      >
+      <mesh position={[0, WALL_RADIUS_MM + 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[0.12, 0.2, 24]} />
-        <meshBasicMaterial
-          color="#ffffff"
-          transparent
-          opacity={0.85}
-          side={THREE.DoubleSide}
-        />
+        <meshBasicMaterial color="#ffffff" transparent opacity={0.85} side={THREE.DoubleSide} />
       </mesh>
     </group>
   )

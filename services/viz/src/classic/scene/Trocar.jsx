@@ -10,21 +10,17 @@ export default function Trocar({ position }) {
   return (
     <group>
       <Cannula position={position} tint="#8fb3d9" />
-      <Html
-
-        position={[position[0], position[1] + 1.6, position[2]]}
-        center
-      >
-        <div style={labelStyle}>Trocar</div>
+      <Html distanceFactor={50} position={[position[0], position[1] + 1.6, position[2]]} center>
+        <div style={labelStyle}>TCR</div>
       </Html>
     </group>
   )
 }
 
 const labelStyle = {
-  color: '#b3c6d8',
-  font: '500 11px Inter, sans-serif',
-  letterSpacing: '0.02em',
+  color: 'rgba(147,197,253,0.55)',
+  font: '500 8px -apple-system, sans-serif',
+  letterSpacing: '0.12em',
   whiteSpace: 'nowrap',
   pointerEvents: 'none',
   textShadow: '0 0 3px rgba(0,0,0,0.8)',
