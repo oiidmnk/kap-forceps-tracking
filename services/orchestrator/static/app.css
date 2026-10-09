@@ -125,3 +125,13 @@ button.pick-left-shadow { --pick-color:#67c1d2; } button.pick-right-shadow { --p
 .circle-stage.square img { width:100%; height:100%; object-fit:contain; }
 .inline-readout { display:inline-block; margin:0 0 0 auto; padding:6px 9px; font:11px ui-monospace,SFMono-Regular,Menlo,monospace; background:var(--inset); border:1px solid var(--border); border-radius:5px; color:#bdcad7; }
 .hint.small { font-size:11px; margin:10px 0 0; }
+.source-setup { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; margin: 16px 0; }
+.source-library { min-width: 0; display: grid; gap: 8px; }
+.source-library select { width: 100%; }
+.source-library .hint { margin: 0; }
+.source-upload-card { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px; background: var(--inset); border: 1px solid var(--border); border-radius: 8px; }
+.source-upload-info { display: grid; gap: 5px; }
+.source-upload-card .hint.small { margin: 0; }
+.source-upload-card button { justify-self: start; }
+.source-upload-card .status { grid-column: 1 / -1; margin: 0; }
+@media (max-width: 680px) { .source-upload-card { grid-template-columns: minmax(0, 1fr); } }

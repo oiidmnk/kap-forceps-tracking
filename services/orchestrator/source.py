@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi import HTTPException, Response
+from fastapi import File, HTTPException, Response, UploadFile
 from fastapi.responses import StreamingResponse
 
 
@@ -109,6 +109,23 @@ def add_source_routes(service, apply_calibration, store: DetectorStore, transpor
     async def reset_detector() -> dict[str, Any]:
         """Restart the video from the start with a clean detector state (background knowledge discarded)."""
         return {"config": check(await call("POST", "/reset"))}
+
+    @service.post("/api/source/upload")
+    async def upload_source(file: UploadFile = File(...)) -> dict[str, Any]:
+        try:
+            if Path(file.filename or "").suffix.lower() != ".mp4":
+                raise HTTPException(400, "upload an MP4 video")
+            size = file.file.seek(0, 2)
+            await file.seek(0)
+            if size == 0:
+                raise HTTPException(400, "uploaded video is empty")
+            if size > 512 * 1024 * 1024:
+                raise HTTPException(413, "video must be 512 MiB or smaller")
+            config = check(await call("POST", "/source/upload", timeout=1200.0,
+                                      files={"file": (Path(file.filename.replace("\\", "/")).name, file.file, "video/mp4")}))
+            return {"config": config}
+        finally:
+            await file.close()
 
     @service.get("/api/source/preview.jpg")
     async def preview() -> Response:

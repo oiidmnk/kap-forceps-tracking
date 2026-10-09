@@ -36,10 +36,15 @@ Calibrate eye/trocars in the orchestrator (`:8090`); defaults live in `config/de
 
 ### Source & eye circle (orchestrator UI, `http://localhost:8090`)
 
-The top panel **Source & eye circle** controls the detector at runtime:
+The orchestrator shows only **Source & eye circle** and controls the detector at runtime:
 
-* **Source** – pick a video file from `data/video`, scan local capture devices, or type a device index / file path /
-  `rtsp://` / `http://` URL. Switching the source relearns the background (~8 s).
+* **Source** – pick a video file from `data/video` or scan local capture devices. Switching the source relearns
+  the background (~8 s).
+* **Video library** – choose any saved video in the source dropdown to switch processing immediately.
+* **Add a video** – upload an MP4 (up to 512 MiB) using the compact upload row below source selection. It is saved
+  in `data/video` with its original filename and selected automatically. Duplicate names get a numbered suffix
+  instead of overwriting existing videos. The selected detector uses `VIDEO_DIR` for its video folder.
+  Uploading clears the previous eye circle; draw and apply a new one for the uploaded footage.
 * **Circle** – drag it around the retina (drag inside = move, drag the edge or scroll = resize, drag on empty area =
   new circle, *Auto-detect* fits the bright retina). *Apply circle* sends it to the detector.
 * **What the pipeline gets** – only the circle content, everything outside black, as a **1:1 square** (1080², shown on
@@ -53,9 +58,8 @@ Source and circle are persisted (`detector-state` volume / `.detector_state.json
 
 The detector, calibration workspace, and stream viewer use the Viz workstation's
 dark palette and link to the other services on the current hostname (default ports).
-Calibration supports camera selection, freeze, zoom/pan, and a scrollable focus mode
-on small screens. Camera access requires localhost or HTTPS. Image stretch only
-affects the display; clicks remain in native camera pixels. Stream diagnostics clear
+The orchestrator retains source selection, MP4 upload, and the eye-circle editor; single-frame processing,
+manual point entry, and the additional calibration panels are no longer shown. Stream diagnostics clear
 invalid or disconnected measurements and mark a feed stale after 1.5 seconds.
 
 ### Live footage

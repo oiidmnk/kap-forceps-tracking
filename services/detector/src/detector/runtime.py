@@ -77,7 +77,8 @@ def list_video_files(directory: str | None = None) -> list[str]:
     d = Path(directory or os.environ.get("VIDEO_DIR", "/data/video"))
     if not d.is_dir():
         return []
-    return sorted(str(p) for p in d.iterdir() if p.suffix.lower() in VIDEO_SUFFIXES)
+    return sorted(str(p) for p in d.iterdir()
+                  if p.is_file() and not p.name.startswith(".") and p.suffix.lower() in VIDEO_SUFFIXES)
 
 
 def scan_cameras(skip: set[int], limit: int = 4) -> list[dict]:

@@ -345,7 +345,8 @@ def test_index_renders_template_with_static_assets(tmp_path):
     assert response.status_code == 200
     assert "Forceps Orchestrator" in response.text
     assert "/static/app.css" in response.text
-    assert "/static/app.js" in response.text
+    assert "/static/source.js" in response.text
+    assert "/static/app.js" not in response.text
 
 
 def test_status_reports_missing_weights(tmp_path):

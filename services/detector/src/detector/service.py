@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 import cv2
 import numpy as np
@@ -111,6 +112,61 @@ def create_app(cfg: Settings | None = None) -> FastAPI:
                 "frame_size": None if raw is None else [raw.shape[1], raw.shape[0]],
                 "background": detector.bg.state}
 
+    upload_dir = Path(os.getenv("VIDEO_DIR", "/data/video"))
+
+    @app.post("/source/upload")
+    def upload_source(file: UploadFile = File(...)) -> dict:
+        destination = None
+        staged_path = None
+        try:
+            filename = Path((file.filename or "").replace("\\", "/")).name
+            if Path(filename).suffix.lower() != ".mp4" or filename.startswith("."):
+                raise HTTPException(400, "upload an MP4 video")
+            upload_dir.mkdir(parents=True, exist_ok=True)
+            size = 0
+            with NamedTemporaryFile(dir=upload_dir, prefix=".", suffix=".mp4", delete=False) as output:
+                staged_path = Path(output.name)
+                while chunk := file.file.read(1024 * 1024):
+                    size += len(chunk)
+                    if size > 512 * 1024 * 1024:
+                        raise HTTPException(413, "video must be 512 MiB or smaller")
+                    output.write(chunk)
+            if size == 0:
+                raise HTTPException(400, "uploaded video is empty")
+            capture = cv2.VideoCapture(str(staged_path))
+            try:
+                readable, frame = capture.read()
+                if not readable or frame is None:
+                    raise HTTPException(400, "uploaded file is not a readable MP4 video")
+            finally:
+                capture.release()
+            original = Path(filename)
+            duplicate = 1
+            while True:
+                candidate = upload_dir / (filename if duplicate == 1 else f"{original.stem} ({duplicate}){original.suffix}")
+                try:
+                    os.link(staged_path, candidate)
+                    destination = candidate
+                    break
+                except FileExistsError:
+                    duplicate += 1
+            runtime.update(source=str(destination.resolve()), circle=None)
+            detector.roi = None
+            runtime.restart()
+            return _config()
+        except OSError as exc:
+            if destination is not None:
+                destination.unlink(missing_ok=True)
+            raise HTTPException(500, "could not store uploaded video") from exc
+        except Exception:
+            if destination is not None:
+                destination.unlink(missing_ok=True)
+            raise
+        finally:
+            if staged_path is not None:
+                staged_path.unlink(missing_ok=True)
+            file.file.close()
+
     @app.get("/config")
     def get_config() -> dict:
         return _config()
@@ -145,7 +201,7 @@ def create_app(cfg: Settings | None = None) -> FastAPI:
     @app.get("/sources")
     def sources(scan: bool = False) -> dict:
         cur = runtime.source
-        out = {"current": cur, "files": list_video_files(),
+        out = {"current": cur, "files": list_video_files(str(upload_dir)),
                "cameras": [], "note": "cameras are only visible when the detector runs natively on the host"}
         if scan:
             skip = {int(cur)} if cur.isdigit() else set()

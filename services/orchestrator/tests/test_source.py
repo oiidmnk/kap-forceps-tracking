@@ -29,6 +29,12 @@ def make_client(tmp_path):
             return httpx.Response(200, json=state["config"])
         if path == "/reset":
             return httpx.Response(200, json=state["config"])
+        if path == "/source/upload":
+            assert b'filename="clip.mp4"' in request.content
+            assert b"video payload" in request.content
+            state["config"]["source"] = "/data/video/clip.mp4"
+            state["config"]["circle"] = None
+            return httpx.Response(200, json=state["config"])
         if path == "/sources":
             return httpx.Response(200, json={"current": "x", "files": ["/data/video/a.mp4"],
                                              "cameras": [{"index": 0, "width": 1920, "height": 1080}]})
@@ -95,3 +101,32 @@ def test_reset_is_proxied(tmp_path):
     client, calls, _ = make_client(tmp_path)
     assert client.post("/api/source/reset").status_code == 200
     assert ("POST", "/reset") in calls
+
+
+def test_video_upload_is_forwarded_to_selected_detector(tmp_path):
+    client, calls, cal = make_client(tmp_path)
+    client.put("/api/source/detector-url", json={"url": "http://host.docker.internal:8001"})
+    response = client.post("/api/source/upload", files={"file": ("clip.mp4", b"video payload", "video/mp4")})
+    assert response.status_code == 200
+    assert response.json()["config"]["source"] == "/data/video/clip.mp4"
+    assert ("POST", "/source/upload") in calls
+    assert json.loads(cal.read_text()) == CAL
+
+
+def test_invalid_uploads_do_not_reach_detector(tmp_path):
+    client, calls, _ = make_client(tmp_path)
+    for filename, content in [("frame.png", b"image"), ("empty.mp4", b"")]:
+        response = client.post("/api/source/upload", files={"file": (filename, content)})
+        assert response.status_code == 400
+    assert ("POST", "/source/upload") not in calls
+
+
+def test_workspace_only_shows_source_and_circle(tmp_path):
+    client, _, _ = make_client(tmp_path)
+    response = client.get("/")
+    assert response.status_code == 200
+    assert 'id="source-upload-form"' in response.text
+    assert 'id="circle-canvas"' in response.text
+    for removed in ['id="process-form"', 'id="result"', 'id="calibration-form"', 'id="source-custom"', 'id="source-use"']:
+        assert removed not in response.text
+    assert '/static/app.js' not in response.text

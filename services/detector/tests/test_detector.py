@@ -71,6 +71,85 @@ def test_segment_endpoint_matches_orchestrator_contract():
     assert client.get("/health").json()["weights_available"] is True
 
 
+def test_uploaded_mp4_becomes_persisted_live_source(tmp_path, monkeypatch):
+    video_dir = tmp_path / "video"
+    monkeypatch.setenv("VIDEO_DIR", str(video_dir))
+    video = tmp_path / "clip.mp4"
+    writer = cv2.VideoWriter(str(video), cv2.VideoWriter_fourcc(*"mp4v"), 10, (64, 64))
+    assert writer.isOpened()
+    writer.write(np.full((64, 64, 3), 100, np.uint8))
+    writer.release()
+    state_path = tmp_path / "state" / "config.json"
+    app = create_app(Settings(background_path="", source="previous.mp4", state_path=str(state_path)))
+    app.state.runtime.update(circle={"cx": 32, "cy": 32, "r": 25})
+    client = TestClient(app)
+    response = client.post("/source/upload", files={"file": ("../../clip.MP4", video.read_bytes(), "video/mp4")})
+    assert response.status_code == 200
+    config = response.json()
+    stored = Path(config["source"])
+    assert stored == video_dir / "clip.MP4"
+    assert stored.read_bytes() == video.read_bytes()
+    assert config["circle"] is None and app.state.detector.roi is None
+    assert app.state.runtime.reset_count == 1
+    assert stored.as_posix() in client.get("/sources").json()["files"]
+    restored = create_app(Settings(background_path="", state_path=str(state_path)))
+    assert restored.state.runtime.source == str(stored)
+    duplicate = client.post("/source/upload", files={"file": ("clip.MP4", video.read_bytes(), "video/mp4")})
+    assert duplicate.status_code == 200
+    assert duplicate.json()["source"] == str(video_dir / "clip (2).MP4")
+    assert stored.read_bytes() == video.read_bytes()
+    assert sorted(Path(source).name for source in client.get("/sources").json()["files"]) == ["clip (2).MP4", "clip.MP4"]
+    response = client.post("/config", json={"source": str(stored)})
+    assert response.status_code == 200 and response.json()["source"] == str(stored)
+
+
+def test_invalid_video_upload_preserves_source_and_removes_partial_file(tmp_path, monkeypatch):
+    video_dir = tmp_path / "video"
+    monkeypatch.setenv("VIDEO_DIR", str(video_dir))
+    state_path = tmp_path / "state" / "config.json"
+    app = create_app(Settings(background_path="", source="previous.mp4", state_path=str(state_path)))
+    client = TestClient(app)
+    for filename, content in [("image.png", b"image"), ("empty.mp4", b""), ("broken.mp4", b"not a video")]:
+        response = client.post("/source/upload", files={"file": (filename, content)})
+        assert response.status_code == 400
+        assert app.state.runtime.source == "previous.mp4"
+        assert app.state.runtime.reset_count == 0
+    assert list(video_dir.glob("*")) == []
+
+
+def test_video_library_excludes_staged_uploads_and_directories(tmp_path, monkeypatch):
+    monkeypatch.setenv("VIDEO_DIR", str(tmp_path))
+    (tmp_path / "saved.mp4").write_bytes(b"existing video")
+    (tmp_path / ".upload.mp4").write_bytes(b"partial video")
+    (tmp_path / "directory.mp4").mkdir()
+    app = create_app(Settings(background_path="", state_path=""))
+    files = TestClient(app).get("/sources").json()["files"]
+    assert files == [str(tmp_path / "saved.mp4")]
+
+
+def test_missing_source_retries_can_be_cancelled_for_upload(monkeypatch):
+    from detector import sources
+
+    cancelled = False
+    released = []
+
+    class MissingCapture:
+        def isOpened(self):
+            return False
+
+        def release(self):
+            released.append(True)
+
+    def cancel_after_retry(delay):
+        nonlocal cancelled
+        cancelled = True
+
+    monkeypatch.setattr(sources, "open_capture", lambda source: MissingCapture())
+    monkeypatch.setattr(sources.time, "sleep", cancel_after_retry)
+    assert list(sources.frames("missing.mp4", should_stop=lambda: cancelled)) == []
+    assert released == [True]
+
+
 def test_background_learning_from_samples():
     bg = Background(None, 64)
     frame = np.full((64, 64, 3), (40, 60, 140), np.uint8)

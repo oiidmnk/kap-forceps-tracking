@@ -1,13 +1,22 @@
 // Source selection + eye-circle editor. Talks to the detector through /api/source/*.
 (() => {
   const $ = (sel) => document.querySelector(sel)
-  const select = $('#source-select'), custom = $('#source-custom')
+  const select = $('#source-select')
   const statusEl = $('#source-status')
   const canvas = $('#circle-canvas'), ctx = canvas.getContext('2d')
   const readout = $('#circle-readout')
   const applyBtn = $('#circle-apply'), autoBtn = $('#circle-auto'), clearBtn = $('#circle-clear')
   const normView = $('#normalized-view')
   const detectorUrl = $('#detector-url')
+  const uploadForm = $('#source-upload-form'), uploadInput = $('#source-upload')
+  const uploadButton = $('#source-upload-button'), uploadStatus = $('#source-upload-status')
+
+  document.querySelectorAll('[data-service-port]').forEach((link) => {
+    const url = new URL(link.href)
+    url.hostname = location.hostname
+    url.protocol = location.protocol
+    link.href = url.href
+  })
 
   let frame = null            // ImageBitmap of the last raw frame
   let frameSize = null        // [w, h] of the raw source frame
@@ -15,6 +24,7 @@
   let savedCircle = null      // what the detector currently uses
   let drag = null, dirty = false
   let loaded = false
+  let switchingSource = false
 
   const setStatus = (msg, ok = true) => { statusEl.textContent = msg; statusEl.className = `status ${ok ? 'ok' : 'error'}` }
   async function api(path, opts) {
@@ -24,6 +34,7 @@
     return body
   }
   const post = (path, body) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  const sourceLabel = (source) => source.includes('://') || /^\d+$/.test(source) ? source : source.split(/[\\/]/).pop()
 
   // ---- source list ------------------------------------------------------
   function fillSources(sources, current) {
@@ -35,9 +46,8 @@
     }
     for (const f of sources.files || []) add(f, f.split('/').pop(), 'Video files')
     for (const c of sources.cameras || []) add(String(c.index), `Camera ${c.index}` + (c.width ? ` (${c.width}x${c.height})` : ' (in use)'), 'Capture devices')
-    if (current && ![...select.options].some((o) => o.value === current)) add(current, current, 'Current')
+    if (current && ![...select.options].some((o) => o.value === current)) add(current, sourceLabel(current), 'Current')
     select.value = current || ''
-    custom.value = ''
   }
 
   async function loadSource() {
@@ -48,15 +58,41 @@
     savedCircle = data.config.circle
     if (!dirty) circle = savedCircle ? { ...savedCircle } : null
     updateReadout()
-    setStatus(data.config.source ? `source: ${data.config.source} · background: ${data.config.background}` : 'no source selected', !!data.config.source)
+    setStatus(data.config.source ? `source: ${sourceLabel(data.config.source)} · background: ${data.config.background}` : 'no source selected', !!data.config.source)
     if (!loaded) { loaded = true; normView.src = '/api/source/live.mjpg' }
   }
 
-  $('#source-use').addEventListener('click', async () => {
-    const value = custom.value.trim() || select.value
+  async function useSource(value) {
     if (!value) return
+    switchingSource = true
+    select.disabled = true
     try { await post('/api/source/config', { source: value }); setStatus('source switched, background relearns', true); await loadSource() }
     catch (e) { setStatus(e.message, false) }
+    finally { switchingSource = false; select.disabled = false }
+  }
+  select.addEventListener('change', () => useSource(select.value))
+  uploadForm.addEventListener('submit', async (event) => {
+    event.preventDefault()
+    const file = uploadInput.files[0]
+    if (!file) return
+    const showUploadStatus = (message, ok) => {
+      uploadStatus.textContent = message
+      uploadStatus.className = `status ${ok ? 'ok' : 'error'}`
+    }
+    if (!file.name.toLowerCase().endsWith('.mp4')) { showUploadStatus('Choose an MP4 video.', false); return }
+    if (!file.size || file.size > 512 * 1024 * 1024) { showUploadStatus('Choose a non-empty MP4 up to 512 MiB.', false); return }
+    uploadButton.disabled = true
+    showUploadStatus('Uploading video…', true)
+    try {
+      const body = new FormData()
+      body.append('file', file)
+      await api('/api/source/upload', { method: 'POST', body })
+      dirty = false; circle = null; savedCircle = null
+      uploadForm.reset()
+      await loadSource()
+      showUploadStatus('Video uploaded. Live processing started; draw and apply the eye circle.', true)
+    } catch (error) { showUploadStatus(error.message, false) }
+    finally { uploadButton.disabled = false }
   })
   $('#source-reset').addEventListener('click', async () => {
     try {
@@ -164,6 +200,6 @@
     setTimeout(refreshFrame, drag ? 400 : 700)
   }
   loadSource().catch((e) => setStatus(e.message, false))
-  setInterval(() => { if (!dirty && !drag) loadSource().catch(() => {}) }, 5000)
+  setInterval(() => { if (!dirty && !drag && !switchingSource) loadSource().catch(() => {}) }, 5000)
   refreshFrame()
 })()

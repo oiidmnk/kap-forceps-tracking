@@ -17,8 +17,10 @@ services:
       PUSH_HZ: ${PUSH_HZ:-15}
       SMOOTHING: ${SMOOTHING:-0.5}
       DETECTOR_STATE: /state/config.json      # source + eye circle chosen in the orchestrator UI (wins over SOURCE)
+      VIDEO_DIR: /data/video
     volumes:
       - ./data:/data:ro
+      - ./data/video:/data/video
       - detector-state:/state
     ports:
       - "8000:8000"

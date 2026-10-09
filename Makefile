@@ -18,9 +18,9 @@ down:
 logs:
 	docker compose logs -f --tail 50
 live-cam:         ## local webcam/capture card (index 0) -> stack running in docker; learns the background
-	DETECTOR_STATE=.detector_state.json SOURCE=$${CAM:-0} BACKGROUND_PATH= ORCHESTRATOR_URL=http://localhost:8090 .venv/bin/uvicorn detector.service:app --port 8001
+	VIDEO_DIR="$(CURDIR)/data/video" DETECTOR_STATE=.detector_state.json SOURCE=$${CAM:-0} BACKGROUND_PATH= ORCHESTRATOR_URL=http://localhost:8090 .venv/bin/uvicorn detector.service:app --port 8001
 live-url:         ## URL=rtsp://... or http://... MJPEG
-	DETECTOR_STATE=.detector_state.json SOURCE=$(URL) BACKGROUND_PATH= ORCHESTRATOR_URL=http://localhost:8090 .venv/bin/uvicorn detector.service:app --port 8001
+	VIDEO_DIR="$(CURDIR)/data/video" DETECTOR_STATE=.detector_state.json SOURCE=$(URL) BACKGROUND_PATH= ORCHESTRATOR_URL=http://localhost:8090 .venv/bin/uvicorn detector.service:app --port 8001
 render:           ## overlay video + csv of the sample video -> artifacts/
 	mkdir -p artifacts && $(PY) scripts/render_video.py data/video/forceps_lev1.mp4 artifacts/result
 background:       ## rebuild data/background.png (median of a tool-free-ish video)

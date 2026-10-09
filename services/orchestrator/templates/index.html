@@ -10,11 +10,9 @@
 <header class="device-header"><div class="brand"><img class="brand-logo" src="/static/maps-logo.png" alt="MAPS" width="34" height="34"><h1>Microforceps <span class="brand-subtitle"> / Calibration</span></h1></div><nav class="service-nav" aria-label="Tracking services"><a data-service-port="8000" href="http://localhost:8000/">Detector</a><a data-service-port="8090" href="http://localhost:8090/" aria-current="page">Calibration</a><a data-service-port="8765" href="http://localhost:8765/viewer">Stream</a><a data-service-port="8080" href="http://localhost:8080/">3D Viz</a></nav></header>
   <main>
     <header class="page-header">
-      <div class="page-header-top">
-        <div><span class="eyebrow">Pipeline setup</span><h1>Calibration workspace</h1></div>
-        <div id="service-status" class="service-status" role="status">Checking services...</div>
-      </div>
-      <p>Align the eye, place the trocars, and apply calibration to the live tracking pipeline.</p>
+      <span class="eyebrow">Pipeline setup</span>
+      <h1>Source workspace</h1>
+      <p>Choose or upload a video and align the eye circle for live processing.</p>
     </header>
 
     <section class="panel source-panel" id="source-panel">
@@ -27,12 +25,24 @@
         circle content, everything outside black, as a square 1:1 image.
       </p>
 
+      <div class="source-setup">
+        <div class="source-library">
+          <label for="source-select">Video library &amp; sources</label>
+          <select id="source-select" aria-describedby="source-library-hint"></select>
+          <p id="source-library-hint" class="hint small">Choose a saved video to start processing. Uploads appear here with their filenames.</p>
+        </div>
+        <form id="source-upload-form" class="source-upload-card">
+          <div class="source-upload-info">
+            <label for="source-upload">Add a video</label>
+            <p class="hint small">MP4 &middot; up to 512 MiB</p>
+          </div>
+          <input id="source-upload" name="file" type="file" accept=".mp4,video/mp4" required>
+          <button id="source-upload-button" type="submit">Upload &amp; use video</button>
+          <span id="source-upload-status" class="status" role="status" aria-live="polite"></span>
+        </form>
+      </div>
+
       <div class="source-controls">
-        <label class="inline">Source
-          <select id="source-select"></select>
-        </label>
-        <input id="source-custom" type="text" placeholder="device index, file path, rtsp:// or http:// URL">
-        <button id="source-use" type="button">Use source</button>
         <button id="source-reset" type="button" class="secondary" title="Restart the video from the beginning and discard the learned background">Reset &amp; relearn</button>
         <button id="source-scan" type="button" class="secondary" title="Probe capture devices (needs a detector running on the host)">Scan cameras</button>
         <details class="detector-url">
@@ -64,192 +74,8 @@
         </div>
       </div>
     </section>
-
-    <div class="layout">
-      <section class="panel">
-        <h2>Upload</h2>
-        <form id="process-form">
-          <div class="grid">
-            <label class="wide">Image or video
-              <input id="file" name="file" type="file" accept="image/*,video/*" required>
-            </label>
-            <label>Video frame time (seconds)
-              <input id="frame_time_s" name="frame_time_s" type="number" min="0" step="0.001" value="0">
-            </label>
-          </div>
-          <div class="actions">
-            <button id="process-button" type="submit">Process and update stream</button>
-          </div>
-        </form>
-        <div id="process-status" class="status"></div>
-      </section>
-
-      <section class="panel">
-        <h2>Result</h2>
-        <pre id="result">{}</pre>
-      </section>
-    </div>
-
-    <section class="panel calibration-panel">
-      <div class="section-heading"><h2>Live calibration</h2><span class="badge">01 / Align &amp; calibrate</span></div>
-      <p class="hint">
-        Zoom until the limbus sits on the solid ring, then set the trocars.
-        Scroll/wheel over the image to zoom in for precision, drag to pan.
-        Freeze the frame before clicking for a still target.
-      </p>
-
-      <div class="labeling-stage" id="labeling-stage">
-        <div class="live-calib-grid">
-          <div class="stage-col">
-            <div class="stage-toolbar">
-              <label class="inline">Camera
-                <select id="camera-select"><option value="">Default camera</option></select>
-              </label>
-              <button id="camera-start" type="button">Start camera</button>
-              <button id="camera-stop" type="button" class="secondary" disabled>Stop</button>
-              <button id="freeze-toggle" type="button" class="secondary" disabled title="Hotkey: F">Freeze frame</button>
-              <button id="zoom-reset" type="button" class="secondary small">Reset zoom</button>
-              <button id="focus-mode-toggle" type="button" class="secondary" title="Hotkey: G">Focus mode</button>
-            </div>
-            <div class="calib-stage">
-              <canvas id="calib-canvas" width="640" height="480" aria-label="Calibration image: select a point then click to place it"></canvas><div id="camera-empty" class="camera-empty"><span aria-hidden="true">⌖</span><strong>Camera preview</strong><p>Start a camera to align the eye and place points.</p></div>
-            </div>
-          </div>
-
-          <div class="control-col">
-            <div class="control-group ring-display-group">
-              <h3>Ring &amp; display</h3>
-              <label class="inline">Ring radius
-                <input id="ring-radius" type="range" min="0.15" max="0.49" step="0.005" value="0.42">
-              </label>
-              <label class="inline">Vertical stretch
-                <input id="vertical-stretch" type="range" min="0.6" max="1.4" step="0.005" value="1">
-              </label>
-              <button id="stretch-reset" type="button" class="secondary small">Reset stretch</button>
-            </div>
-
-            <div class="control-group">
-              <h3>Trocars</h3>
-              <div class="pick-row">
-                <button id="pick-forceps" type="button" class="pick pick-forceps" title="Hotkey: 1">
-                  <span class="dot"></span><span class="label">Forceps trocar</span>
-                </button>
-                <button id="pick-light" type="button" class="pick pick-light" title="Hotkey: 2">
-                  <span class="dot"></span><span class="label">Light trocar</span>
-                </button>
-              </div>
-              <pre id="calib-readout" class="calib-readout"></pre>
-              <div class="actions">
-                <button id="calib-apply" type="button" disabled>Apply &amp; save</button>
-              </div>
-              <div id="calib-mode-status" class="status" role="status"></div>
-            </div>
-
-            <details class="control-group" id="manual-points-details">
-              <summary class="disclosure">
-                <h3>Manual forceps points</h3>
-                <span class="badge">bypasses segmentation</span>
-              </summary>
-              <p class="hint">Hand-clicked stand-ins for segmentation, on this same frame — not saved to calibration.</p>
-              <div class="pick-row">
-                <button id="pick-left-tip" type="button" class="pick pick-left-tip" title="Hotkey: 3">
-                  <span class="dot"></span><span class="label">Left tip</span>
-                </button>
-                <button id="pick-right-tip" type="button" class="pick pick-right-tip" title="Hotkey: 4">
-                  <span class="dot"></span><span class="label">Right tip</span>
-                </button>
-                <button id="pick-left-shadow" type="button" class="pick pick-left-shadow" title="Hotkey: 5">
-                  <span class="dot"></span><span class="label">Left shadow</span>
-                </button>
-                <button id="pick-right-shadow" type="button" class="pick pick-right-shadow" title="Hotkey: 6">
-                  <span class="dot"></span><span class="label">Right shadow</span>
-                </button>
-              </div>
-              <pre id="points-readout" class="calib-readout"></pre>
-              <div class="actions">
-                <button id="points-push" type="button" disabled>Push points to stream</button>
-                <button id="points-clear" type="button" class="secondary">Clear points</button>
-              </div>
-              <div id="points-status" class="status" role="status"></div>
-            </details>
-          </div>
-        </div>
-      </div>
-
-      <video id="calib-video" playsinline muted></video>
-    </section>
-
-    <div class="layout">
-      <section class="panel">
-        <h2>Process a frame</h2>
-        <form id="process-form">
-          <div class="grid">
-            <label class="wide">Image or video
-              <input id="file" name="file" type="file" accept="image/*,video/*" required>
-            </label>
-            <label>Video frame time (seconds)
-              <input id="frame_time_s" name="frame_time_s" type="number" min="0" step="0.001" value="0">
-            </label>
-          </div>
-          <div class="actions">
-            <button id="process-button" type="submit">Process and update stream</button>
-          </div>
-        </form>
-        <div id="process-status" class="status" role="status"></div>
-      </section>
-
-      <section class="panel">
-        <h2>Processing result</h2>
-        <pre id="result">No frame processed yet.</pre>
-      </section>
-    </div>
-
-    <details class="panel calibration-panel">
-      <summary class="disclosure">
-        <h2>Raw calibration values</h2>
-        <span class="badge">advanced</span>
-      </summary>
-      <p class="hint">Usually set automatically by Live calibration above — edit directly only if you need to.</p>
-      <form id="calibration-form">
-        <fieldset>
-          <legend>Light</legend>
-          <div class="grid">
-            <label>Rotation up (rad)<input name="light_rot_up" type="number" step="any"></label>
-            <label>Rotation clock (rad)<input name="light_rot_clock" type="number" step="any"></label>
-            <label>Depth (mm)<input name="light_depth_mm" type="number" step="any"></label>
-          </div>
-        </fieldset>
-
-        <fieldset>
-          <legend>Forceps</legend>
-          <div class="grid">
-            <label>Rotation up (rad)<input name="forceps_rot_up" type="number" step="any"></label>
-            <label>Rotation clock (rad)<input name="forceps_rot_clock" type="number" step="any"></label>
-            <label>Jaw length (mm)<input name="jaw_length_mm" type="number" step="any"></label>
-          </div>
-        </fieldset>
-
-        <fieldset>
-          <legend>Eye</legend>
-          <div class="grid">
-            <label>Center X (px)<input name="eye_center_px_0" type="number" step="any"></label>
-            <label>Center Y (px)<input name="eye_center_px_1" type="number" step="any"></label>
-            <label>Radius (px)<input name="eye_radius_px" type="number" step="any"></label>
-            <label>Radius (mm)<input name="eye_radius_mm" type="number" step="any"></label>
-          </div>
-        </fieldset>
-
-        <div class="actions">
-          <button type="submit">Save calibration</button>
-          <button class="secondary" id="reload-calibration" type="button">Reload</button>
-        </div>
-        <div id="calibration-status" class="status" role="status"></div>
-      </form>
-    </details>
-    <footer class="system-footer">Calibration uses native camera pixels · Scroll to zoom · Drag to pan · F Freeze · G Focus · Esc Exit</footer>
   </main>
 
-  <script src="{{ url_for('static', path='app.js') }}" defer></script>
   <script src="{{ url_for('static', path='source.js') }}" defer></script>
 </body>
 </html>
