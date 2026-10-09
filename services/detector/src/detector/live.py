@@ -81,7 +81,9 @@ class LiveWorker(threading.Thread):
                 time.sleep(0.3)
                 continue
             self._apply(version, source, circle)
-            gen = frames(source, self.cfg.source_loop, self.cfg.source_realtime)
+            gen = frames(source, self.cfg.source_loop, self.cfg.source_realtime,
+                         should_stop=lambda: self._stop.is_set() or self.rt.version != version,
+                         on_error=lambda msg: self.stats.update(source_error=msg))
             try:
                 self._consume(gen, version, client)
             finally:
@@ -95,14 +97,15 @@ class LiveWorker(threading.Thread):
                 return
             self.raw = frame
             self.stats["source_error"] = None
-            work, _ = self.det._prepare(frame)
+            prepared = self.det._prepare(frame)
+            work = prepared[0]
             if self.det.bg.state != "static":              # learn the empty retina from the live feed
                 now = time.monotonic()
                 if now - last_boot >= cfg.bootstrap_seconds / 30:
                     last_boot = now
                     self.det.bg.add_sample(work)
             try:
-                d = self.det.detect(frame, adapt=True)
+                d = self.det.detect(frame, adapt=True, prepared=prepared)
             except Exception as exc:  # noqa: BLE001 - one bad frame must not kill the live loop
                 self.stats["detect_error"] = repr(exc)[:200]
                 continue

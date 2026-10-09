@@ -131,7 +131,7 @@ def test_config_endpoints(tmp_path):
     client = TestClient(create_app(Settings(background_path="", source="", state_path=str(tmp_path / "c.json"))))
     with client:
         assert client.get("/config").json()["circle"] is None
-        r = client.post("/config", json={"circle": {"cx": 500, "cy": 400, "r": 300}, "source": "/data/video/x.mp4"})
+        r = client.post("/config", json={"circle": {"cx": 500, "cy": 400, "r": 300}, "source": "0"})
         assert r.status_code == 200 and r.json()["circle"]["r"] == 300 and r.json()["normalized_size"] == 1080
         assert client.post("/config", json={"circle": {"cx": 1, "cy": 1, "r": 2}}).status_code == 400
         assert client.post("/config", json={"clear_circle": True}).json()["circle"] is None
@@ -159,3 +159,22 @@ def test_hard_reset_discards_background(tmp_path):
     rt.restart()
     w._apply(*rt.snapshot())
     assert det.bg.state == "none" and det.bg.v is None
+
+
+def test_frames_gives_up_on_unopenable_source_when_asked_to_stop():
+    import time
+    from detector.sources import frames
+    errors, t0 = [], time.monotonic()
+    stop_at = t0 + 0.5
+    out = list(frames("/definitely/not/here.mp4", should_stop=lambda: time.monotonic() > stop_at, on_error=errors.append))
+    assert out == [] and errors and "file not found" in errors[0]
+    assert time.monotonic() - t0 < 3
+
+
+def test_config_rejects_missing_file(tmp_path):
+    client = TestClient(create_app(Settings(background_path="", source="", state_path=str(tmp_path / "c.json"))))
+    with client:
+        r = client.post("/config", json={"source": "/Users/someone/Desktop/video.mp4"})
+        assert r.status_code == 400 and "copy the video to data/video" in r.json()["detail"]
+        assert client.post("/config", json={"source": "rtsp://cam/stream"}).status_code == 200
+        assert client.post("/config", json={"source": "0"}).status_code == 200

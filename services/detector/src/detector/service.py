@@ -1,6 +1,7 @@
 """HTTP API. `/segment` is contract-compatible with the YOLO segmentation service the orchestrator expects."""
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from .config import Settings
 from .live import LiveWorker
 from .pipeline import Detector, annotate
 from .runtime import RuntimeConfig, list_video_files, scan_cameras
+from .sources import is_file_source
 
 CLASSES = {"tip_left": ("forceps", "left_tip"), "tip_right": ("forceps", "right_tip"),
            "shadow_left": ("shadow", "left_tip"), "shadow_right": ("shadow", "right_tip")}
@@ -118,7 +120,11 @@ def create_app(cfg: Settings | None = None) -> FastAPI:
         """Change source and/or eye circle (raw-frame px). The pipeline input becomes the circle content, 1:1."""
         kw = {}
         if body.source is not None:
-            kw["source"] = body.source
+            src = body.source.strip()
+            if src and is_file_source(src) and not os.path.isfile(src):
+                raise HTTPException(400, f"file not found in the detector: {src}. In Docker only ./data is visible "
+                                         f"(as /data) - copy the video to data/video and pick it from the list.")
+            kw["source"] = src
         if body.clear_circle:
             kw["circle"] = None
         elif body.circle is not None:

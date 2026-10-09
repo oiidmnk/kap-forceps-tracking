@@ -90,9 +90,10 @@ class Detector:
         scale = s / n
         return work, (lambda p: (p[0] * scale + ox, p[1] * scale + oy))
 
-    def detect(self, frame: np.ndarray, adapt: bool = False) -> Detection:
+    def detect(self, frame: np.ndarray, adapt: bool = False, prepared=None) -> Detection:
+        """`prepared` = (work, mapper) from _prepare(), if the caller already normalised the frame."""
         t0 = cv2.getTickCount()
-        work, back = self._prepare(frame)
+        work, back = prepared or self._prepare(frame)
         ref, from_model = self.bg.reference(work)
         eye = self.bg.disc if from_model else None
         forceps_m, shadow_m, _ = compute_masks(work, ref, from_model, self.cfg, eye, self.bg.bgr if from_model else None)

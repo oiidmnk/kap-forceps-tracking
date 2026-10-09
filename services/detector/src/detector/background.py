@@ -77,11 +77,12 @@ class Background:
         """Slowly follow illumination changes, only where no tool/shadow is."""
         if self.v is None:
             return
-        v = value_channel(bgr)
-        free = cv2.erode(1 - tool_mask, np.ones((9, 9), np.uint8)) > 0
-        self.v[free] += alpha * (v[free] - self.v[free])
-        cur = cv2.GaussianBlur(bgr.astype(np.float32), (0, 0), 1.5)
-        self.bgr[free] += alpha * (cur[free] - self.bgr[free])
+        self._n = getattr(self, "_n", 0) + 1
+        if self._n % 3:                          # 10 updates/s are plenty for slow drift (and 3x cheaper)
+            return
+        free = cv2.erode(1 - tool_mask, np.ones((9, 9), np.uint8))
+        cv2.accumulateWeighted(value_channel(bgr), self.v, 3 * alpha, free)
+        cv2.accumulateWeighted(bgr, self.bgr, 3 * alpha, free)
 
     def reference(self, bgr: np.ndarray) -> tuple[np.ndarray, bool]:
         """Returns (reference V, is_background_model)."""
