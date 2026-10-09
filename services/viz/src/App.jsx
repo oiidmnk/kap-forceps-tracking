@@ -56,10 +56,7 @@ export default function App() {
           aria-label="Three-dimensional instrument view"
         >
           <div className="viewport-toolbar">
-            <div className="view-identity">
-              <span className="eyebrow">Digital twin</span>
-              <span>Instrument overview</span>
-            </div>
+            <div className="view-identity">3D view</div>
             <ViewPresets view={view} onSelect={selectView} />
             <ToggleBar toggles={toggles} onToggle={onToggle} />
           </div>

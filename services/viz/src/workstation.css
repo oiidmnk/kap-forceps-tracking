@@ -55,50 +55,43 @@ button:hover {
   background: var(--bg);
 }
 .device-header {
-  min-height: 86px;
-  padding: 16px 24px;
+  min-height: 48px;
+  flex-shrink: 0;
+  padding: 6px 16px;
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 20px;
   border-bottom: 1px solid var(--border);
   background: #111820;
 }
 .brand {
   display: flex;
   align-items: center;
-  gap: 13px;
+  gap: 10px;
   margin-right: auto;
+  flex-shrink: 0;
 }
-.brand-mark {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border: 1px solid #536c80;
-  border-radius: 9px;
-  color: #b9d1e4;
-  font-size: 28px;
-  font-weight: 300;
+.brand-logo {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  border-radius: 3px;
 }
 h1 {
-  font-size: 17px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: -0.02em;
   margin: 0;
+  white-space: nowrap;
 }
 .brand-divider {
   color: #596c7d;
-  margin: 0 5px;
+  margin: 0 4px;
   font-weight: 400;
 }
 .brand-subtitle {
   color: #bdcad7;
   font-weight: 400;
-}
-.brand p {
-  color: var(--muted);
-  font-size: 12px;
-  margin: 6px 0 0;
 }
 .eyebrow {
   display: block;
@@ -110,21 +103,40 @@ h1 {
 }
 .telemetry {
   display: flex;
-  gap: 25px;
-  padding-right: 24px;
+  align-items: center;
+  gap: 16px;
+  padding-right: 16px;
   border-right: 1px solid var(--border);
 }
+.telemetry > div {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  white-space: nowrap;
+}
+.telemetry .eyebrow,
+.source-control .eyebrow {
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
 .telemetry strong {
-  display: block;
   font-size: 12px;
   font-weight: 500;
-  margin-top: 7px;
   white-space: nowrap;
 }
 .source-control {
   display: flex;
-  flex-direction: column;
-  gap: 5px;
+  align-items: center;
+  gap: 8px;
+}
+.source-control > label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
 }
 .source-control select {
   width: 178px;
@@ -162,8 +174,8 @@ h1 {
 .workspace {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
-  gap: 16px;
-  padding: 18px 20px 0;
+  gap: 12px;
+  padding: 10px 12px 0;
   flex: 1;
   min-height: 0;
 }
@@ -356,7 +368,8 @@ h2 {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 14px 18px;
+  padding: 6px 12px;
+  min-height: 48px;
   border-bottom: 1px solid var(--border);
   background: #151e28;
   z-index: 10;
@@ -364,11 +377,8 @@ h2 {
 .view-identity {
   margin-right: auto;
   white-space: nowrap;
-}
-.view-identity > span:last-child {
-  display: block;
-  margin-top: 5px;
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 12px;
   font-weight: 500;
 }
 .view-presets {
@@ -403,7 +413,7 @@ h2 {
   align-items: center;
   border: 1px solid #354554;
   border-radius: 6px;
-  padding: 10px;
+  padding: 8px 10px;
   background: #192531;
   font-size: 12px;
 }
@@ -520,7 +530,7 @@ h2 {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 18px;
+  padding: 5px 12px;
   border-top: 1px solid var(--border);
   color: var(--muted);
   font-size: 11px;
@@ -542,7 +552,7 @@ h2 {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 22px;
+  padding: 6px 14px;
   font-size: 10px;
   color: #93a5b5;
 }
@@ -574,40 +584,35 @@ h2 {
 }
 @media (max-width: 1150px) {
   .device-header {
-    gap: 16px;
-    padding: 14px 20px;
+    gap: 12px;
+    padding: 6px 12px;
   }
   .brand-subtitle,
   .brand-divider {
     display: none;
   }
   .telemetry {
-    gap: 16px;
-    padding-right: 16px;
+    gap: 12px;
+    padding-right: 12px;
   }
   .connection {
-    min-width: 110px;
+    min-width: 0;
     font-size: 11px;
   }
   .workspace {
     grid-template-columns: 290px minmax(0, 1fr);
-    gap: 12px;
-    padding: 14px 14px 0;
   }
-  .viewport-toolbar {
-    flex-wrap: wrap;
-    gap: 10px;
-    padding: 12px;
+}
+@media (min-width: 761px) and (max-width: 950px) {
+  .telemetry > div {
+    flex-direction: column;
+    gap: 2px;
   }
-  .view-identity {
-    flex: 1;
+  .source-control select {
+    width: 158px;
   }
-  .view-presets {
-    order: 3;
-    width: 100%;
-  }
-  .view-presets button {
-    flex: 1;
+  .brand h1 {
+    display: none;
   }
 }
 @media (max-width: 760px) {
@@ -624,13 +629,56 @@ h2 {
   }
   .device-header {
     flex-wrap: wrap;
-    gap: 16px;
+    gap: 8px 12px;
+    padding: 6px 12px;
   }
   .brand {
-    width: 100%;
+    margin-right: auto;
+  }
+  .source-control {
+    order: 1;
+  }
+  .source-control select {
+    width: 158px;
   }
   .telemetry {
-    margin-right: auto;
+    order: 2;
+    border: 0;
+    padding: 0;
+    gap: 12px;
+  }
+  .telemetry > div {
+    gap: 5px;
+  }
+  .connection {
+    order: 3;
+    margin-left: auto;
+  }
+  .device-header h1 {
+    font-size: 12px;
+  }
+  .brand-logo {
+    width: 28px;
+    height: 28px;
+  }
+  .viewport-toolbar {
+    gap: 8px;
+  }
+  .view-identity {
+    display: none;
+  }
+  .view-presets {
+    flex: 1;
+  }
+  .view-presets button {
+    flex: 1;
+    padding: 7px 8px;
+    font-size: 11px;
+  }
+  .display-button {
+    gap: 5px;
+    padding: 8px 7px;
+    font-size: 11px;
   }
   .connection {
     min-width: auto;

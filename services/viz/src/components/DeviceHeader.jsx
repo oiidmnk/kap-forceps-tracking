@@ -30,16 +30,11 @@ export default function DeviceHeader({
   return (
     <header className="device-header">
       <div className="brand">
-        <span className="brand-mark" aria-hidden>
-          ＋
-        </span>
-        <div>
-          <h1>
-            Microforceps<span className="brand-divider"> / </span>
-            <span className="brand-subtitle">Depth guidance</span>
-          </h1>
-          <p>Vitreoretinal tracking workstation</p>
-        </div>
+        <img className="brand-logo" src="/maps-logo.png" alt="MAPS" />
+        <h1>
+          Microforceps<span className="brand-divider"> / </span>
+          <span className="brand-subtitle">Depth guidance</span>
+        </h1>
       </div>
       <div className="telemetry">
         <div>
