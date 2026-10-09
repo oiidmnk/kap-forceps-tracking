@@ -35,6 +35,8 @@ temp/
 artifacts/
 *.zip
 
+segmentation/out
+
 # Local service state
 services/orchestrator/data/
 
