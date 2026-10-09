@@ -3,4 +3,3 @@ __pycache__
 .git
 venv
 ws_client_test.py
-viewer.html
