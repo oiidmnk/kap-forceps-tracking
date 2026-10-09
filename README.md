@@ -26,6 +26,8 @@ in retina-simulator footage – offline *and* live – and feeds them into the 3
 make up                      # docker compose up -d --build
 open http://localhost:8000   # annotated live view + state
 open http://localhost:8080   # 3D viz, driven live by the detector
+open http://localhost:8090   # calibration workspace
+open http://localhost:8765/viewer  # live 3D position diagnostics
 ```
 
 By default the stack plays `data/video/forceps_lev1.mp4` in a loop at real-time speed – i.e. it behaves like a camera.
@@ -48,6 +50,13 @@ The top panel **Source & eye circle** controls the detector at runtime:
   macOS; stop the Docker detector first: `docker compose stop detector`).
 
 Source and circle are persisted (`detector-state` volume / `.detector_state.json` natively).
+
+The detector, calibration workspace, and stream viewer use the Viz workstation's
+dark palette and link to the other services on the current hostname (default ports).
+Calibration supports camera selection, freeze, zoom/pan, and a scrollable focus mode
+on small screens. Camera access requires localhost or HTTPS. Image stretch only
+affects the display; clicks remain in native camera pixels. Stream diagnostics clear
+invalid or disconnected measurements and mark a feed stale after 1.5 seconds.
 
 ### Live footage
 
@@ -113,3 +122,5 @@ services/  detector, orchestrator, stream, viz
 ```
 
 Tests: `make setup && make test`. Das frühere YOLO-Segmentierungs-Setup (`segmentation/`) ist aus der Git-History weiterhin abrufbar (vor Commit "Make repo root the segment project").
+
+Service UI regression checks (Node.js): `node --test tests/service-ui.test.cjs`.

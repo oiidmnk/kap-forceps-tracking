@@ -1,18 +1,104 @@
-<!doctype html><meta charset="utf-8"><title>Forceps Detector – live</title>
-<style>
- body{margin:0;background:#111;color:#ddd;font:14px system-ui;display:flex;gap:16px;padding:16px;flex-wrap:wrap}
- img{width:min(78vh,100%);aspect-ratio:1;background:#000;border-radius:8px}
- pre{background:#1b1b1b;padding:12px;border-radius:8px;min-width:340px}
- .k{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:6px}
- a{color:#7cf}
-</style>
-<div><img src="/live.mjpg" alt="live"></div>
-<div>
- <p><span class="k" style="background:cyan"></span>left tip &nbsp;<span class="k" style="background:magenta"></span>right tip &nbsp;<span class="k" style="background:yellow"></span>jaw junction<br>
- green = forceps, orange = shadow</p>
- <pre id="s">…</pre>
- <p><a href="http://localhost:8080" target="_blank">3D viz</a> · <a href="http://localhost:8090" target="_blank">orchestrator</a></p>
-</div>
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Microforceps / Detector</title><style>
+:root { color-scheme:dark; --bg:#0c1117; --surface:#131b24; --inset:#10171f; --border:#293541; --text:#e5edf5; --muted:#a0afbe; --accent:#aac7de; --safe:#64c69a; --warn:#e7b75b; --danger:#f27a80; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font:13px Inter,system-ui,sans-serif; font-variant-numeric:tabular-nums; }
+a { color:var(--accent); }
+.device-header { min-height:58px; padding:10px 24px; display:flex; align-items:center; gap:24px; border-bottom:1px solid var(--border); background:#111820; flex-wrap:wrap; }
+.brand { display:flex; align-items:center; gap:10px; margin-right:auto; }
+.brand-logo { width:34px; height:34px; object-fit:contain; border-radius:3px; flex-shrink:0; }
+.brand h1 { font-size:13px; font-weight:600; margin:0; }
+.brand-subtitle { color:var(--muted); font-weight:400; }
+.service-nav { display:flex; gap:4px; flex-wrap:wrap; }
+.service-nav a { text-decoration:none; color:var(--muted); padding:7px 10px; border:1px solid transparent; border-radius:5px; font-size:12px; }
+.service-nav a:hover { background:#263747; color:var(--text); }
+.service-nav a[aria-current=page] { background:#223241; border-color:#435b70; color:var(--text); }
+main { max-width:1480px; margin:auto; padding:24px; }
+h1 { font-size:24px; font-weight:500; letter-spacing:-.025em; margin:0 0 8px; }
+h2 { font-size:13px; font-weight:600; margin:0 0 14px; }
+h3,.eyebrow { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.09em; color:var(--muted); }
+p { color:var(--muted); line-height:1.6; }
+.panel { min-width:0; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:20px; }
+button,input,select { font:inherit; }
+button,select,input { border:1px solid #3b4d5d; border-radius:5px; padding:9px 12px; color:var(--text); background:#1b2834; max-width:100%; }
+button { cursor:pointer; font-weight:500; background:#aac7de; color:#10171f; }
+button:hover:not(:disabled) { background:#c5deef; }
+button.secondary { background:#202e3b; color:var(--text); }
+button.secondary:hover:not(:disabled) { background:#2d4153; }
+button:disabled { opacity:.4; cursor:not-allowed; }
+:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+pre { margin:12px 0 0; padding:14px; background:var(--inset); border:1px solid var(--border); border-radius:6px; color:#bdcad7; font:11px/1.7 ui-monospace,SFMono-Regular,monospace; white-space:pre-wrap; overflow-wrap:anywhere; overflow:auto; max-height:360px; }
+.hint { color:var(--muted); font-size:12px; line-height:1.6; }
+.status { font-size:12px; line-height:1.6; margin-top:10px; overflow-wrap:anywhere; }
+.status:empty { display:none; }
+.ok,.connected { color:var(--safe); }
+.error,.disconnected { color:var(--danger); }
+.page-header { margin-bottom:22px; }
+.page-header-top { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+.service-status { color:var(--muted); font-size:12px; max-width:100%; overflow-wrap:anywhere; }
+.service-status.ok { color:var(--safe); }
+.service-status.error { color:var(--danger); }
+.section-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
+.section-heading h2 { margin:0; }
+.badge { font-size:10px; color:var(--accent); border:1px solid #354b5d; border-radius:4px; padding:3px 7px; }
+.system-footer { margin-top:20px; color:var(--muted); font-size:11px; line-height:1.6; }
+@media(max-width:680px) { .brand-logo { width:28px; height:28px; } main { padding:16px; } .device-header { padding:12px 16px; gap:12px; } .service-nav { width:100%; } .service-nav a { flex:1; text-align:center; padding:7px 5px; } .panel { padding:16px; } }
+
+.layout { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:16px; align-items:start; }
+.preview { position:relative; background:var(--inset); border:1px solid var(--border); border-radius:7px; overflow:hidden; min-height:240px; }
+.preview img { display:block; width:100%; max-height:70vh; object-fit:contain; }
+.preview-message { position:absolute; inset:0; display:grid; place-content:center; text-align:center; padding:24px; color:var(--muted); background:var(--inset); line-height:1.6; }
+.preview-message[hidden] { display:none; }
+.stats { display:grid; grid-template-columns:1fr 1fr; gap:20px 12px; margin:20px 0; }
+.stat span { display:block; color:var(--muted); font-size:11px; margin-bottom:6px; }
+.stat strong { font-size:24px; font-weight:500; }
+.source { overflow-wrap:anywhere; font:11px/1.6 ui-monospace,monospace; color:var(--muted); }
+.legend { display:flex; flex-wrap:wrap; gap:14px; color:var(--muted); font-size:11px; margin-top:16px; }
+.legend i { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:5px; }
+summary { cursor:pointer; color:var(--muted); font-size:12px; }
+@media(max-width:850px) { .layout { grid-template-columns:1fr; } }
+</style></head><body><header class="device-header"><div class="brand"><img class="brand-logo" src="/maps-logo.png" alt="MAPS" width="34" height="34"><h1>Microforceps <span class="brand-subtitle"> / Detector</span></h1></div><nav class="service-nav" aria-label="Tracking services"><a data-service-port="8000" href="http://localhost:8000/" aria-current="page">Detector</a><a data-service-port="8090" href="http://localhost:8090/">Calibration</a><a data-service-port="8765" href="http://localhost:8765/viewer">Stream</a><a data-service-port="8080" href="http://localhost:8080/">3D Viz</a></nav></header>
+<main><div class="page-header"><span class="eyebrow">Image acquisition</span><h1>Live detection</h1><p>Forceps and shadow keypoints from the current video source.</p></div>
+<div class="layout"><section class="panel"><div class="section-heading"><h2>Annotated camera feed</h2><span class="badge">2D / Native pixels</span></div>
+<div class="preview"><img id="live-image" src="/live.mjpg" alt="Live image with forceps and shadow keypoints"><div id="preview-message" class="preview-message">Waiting for camera frames…</div></div>
+<div class="legend"><span><i style="background:cyan"></i>Left tip</span><span><i style="background:magenta"></i>Right tip</span><span><i style="background:yellow"></i>Jaw junction</span><span><i style="background:#64c69a"></i>Forceps</span><span><i style="background:#e7b75b"></i>Shadow</span></div></section>
+<aside class="panel"><h2>Tracking telemetry</h2><div id="connection" role="status" class="status">Connecting…</div>
+<div class="stats"><div class="stat"><span>Detection FPS</span><strong id="fps">—</strong></div><div class="stat"><span>Frames</span><strong id="frames">—</strong></div><div class="stat"><span>Updates sent</span><strong id="pushed">—</strong></div><div class="stat"><span>Background</span><strong id="background" style="font-size:16px">—</strong></div></div>
+<h3>Source</h3><p id="source" class="source">Waiting for source information</p><div id="push-error" role="status" class="status error"></div>
+<details><summary>Raw detection data</summary><pre id="s">Awaiting data</pre></details></aside></div>
+<footer class="system-footer">Detector → Calibration → Stream → 3D Viz · Only complete tip detections are forwarded.</footer></main>
 <script>
-async function tick(){try{const j=await (await fetch('/state')).json();document.getElementById('s').textContent=JSON.stringify(j,null,1)}catch(e){}setTimeout(tick,500)}tick()
-</script>
+document.querySelectorAll('[data-service-port]').forEach(link => { const url = new URL(link.href); url.hostname = location.hostname; url.protocol = location.protocol; link.href = url.href; });
+const byId = id => document.getElementById(id);
+let lastFrame = null, lastAdvance = performance.now(), imageFailed = false;
+const image = byId('live-image');
+image.addEventListener('error', () => { imageFailed = true; });
+async function tick() {
+  let delay = 500;
+  try {
+    const response = await fetch('/state', { signal: AbortSignal.timeout(4000) });
+    const state = await response.json();
+    if (!response.ok) throw new Error(state.detail || 'Detector unavailable');
+    if (state.frames !== lastFrame) { lastAdvance = performance.now(); lastFrame = state.frames; }
+    const stale = !state.frames || performance.now() - lastAdvance > 2500;
+    byId('connection').textContent = stale ? 'Awaiting new frames' : 'Receiving frames';
+    byId('connection').className = 'status ' + (stale ? '' : 'ok');
+    byId('fps').textContent = stale ? '—' : (Number.isFinite(state.fps) ? state.fps.toFixed(1) : '—');
+    for (const key of ['frames','pushed','background','source']) byId(key).textContent = state[key] ?? '—';
+    byId('s').textContent = stale ? 'No current detection data' : JSON.stringify(state.detection, null, 2);
+    byId('push-error').textContent = state.push_error ? 'Stream update failed: ' + state.push_error : '';
+    byId('preview-message').hidden = !stale;
+    byId('preview-message').textContent = 'Waiting for new camera frames…';
+    if (imageFailed && !stale) { imageFailed = false; image.src = '/live.mjpg?retry=' + Date.now(); }
+  } catch (error) {
+    delay = 5000;
+    byId('connection').textContent = error.message;
+    byId('connection').className = 'status error';
+    for (const key of ['fps','frames','pushed','background']) byId(key).textContent = '—';
+    byId('s').textContent = 'No current detection data';
+    byId('preview-message').hidden = false;
+    byId('preview-message').textContent = error.message;
+  } finally { setTimeout(tick, delay); }
+}
+tick();
+</script></body></html>

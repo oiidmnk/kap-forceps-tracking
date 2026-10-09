@@ -7,7 +7,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import HTMLResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 
 from pydantic import BaseModel
 
@@ -184,6 +184,10 @@ def create_app(cfg: Settings | None = None) -> FastAPI:
     @app.get("/live.mjpg")
     def live_mjpg() -> StreamingResponse:
         return StreamingResponse(_need_live().mjpeg(), media_type="multipart/x-mixed-replace; boundary=frame")
+
+    @app.get("/maps-logo.png", include_in_schema=False)
+    def maps_logo() -> FileResponse:
+        return FileResponse(Path(__file__).with_name("maps-logo.png"), media_type="image/png")
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:

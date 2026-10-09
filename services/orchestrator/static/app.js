@@ -54,7 +54,7 @@ async function pushCalibrationToStream() {
 }
 
 async function loadServiceStatus() {
-  const response = await fetch('/api/status')
+  const response = await fetch('/api/status', { signal: AbortSignal.timeout(5000) })
   const data = await response.json()
   if (!response.ok) throw new Error(data.detail || response.statusText)
 
@@ -119,11 +119,12 @@ processForm.addEventListener('submit', async (event) => {
     const body = new FormData(processForm)
     const response = await fetch('/api/process', { method: 'POST', body })
     const data = await response.json()
+    if (!response.ok) throw new Error(data.detail || response.statusText)
     result.textContent = JSON.stringify({
       predicted_points: data.predicted_points,
       stream_result: data.stream_result,
     }, null, 2)
-    if (!response.ok) throw new Error(data.detail || response.statusText)
+    if (data.stream_result?.error) throw new Error(data.stream_result.error)
     setStatus(processStatus, 'Stream updated.', true)
   } catch (error) {
     setStatus(processStatus, error.message, false)
@@ -220,6 +221,10 @@ const PICK_LABELS = {
 }
 let pickTarget = null
 let cameraStream = null
+let calibrationSaving = false
+let pointsSending = false
+let cameraStarting = false
+let cameraGeneration = 0
 let frozenFrame = null // ImageBitmap snapshot, or null while showing the live feed
 
 // Zoom/pan view, applied only as a canvas DRAW transform (canvasPx = worldPx *
@@ -253,22 +258,26 @@ function resetView() {
 // aspect ratio — getBoundingClientRect() still reports the FULL box in that
 // case, not the visible image area, so using it directly would offset every
 // click by the size of the letterbox bar. Outside focus mode there's no
-// object-fit and this returns the same box getBoundingClientRect() would.
+// object-fit has the same behavior. Remove CSS stretch before computing the
+// letterbox, then reapply it to the resulting image rectangle.
 function canvasContentRect() {
   const rect = calibCanvas.getBoundingClientRect()
-  const boxAspect = rect.width / rect.height
+  const stretch = Number(verticalStretchInput.value)
+  const unscaledHeight = rect.height / stretch
+  const boxAspect = rect.width / unscaledHeight
   const contentAspect = calibCanvas.width / calibCanvas.height
-  let { width, height } = rect
+  let width = rect.width
+  let height = unscaledHeight
   let offsetX = 0
   let offsetY = 0
   if (boxAspect > contentAspect) {
-    width = rect.height * contentAspect
+    width = unscaledHeight * contentAspect
     offsetX = (rect.width - width) / 2
   } else if (boxAspect < contentAspect) {
     height = rect.width / contentAspect
-    offsetY = (rect.height - height) / 2
+    offsetY = (unscaledHeight - height) / 2
   }
-  return { left: rect.left + offsetX, top: rect.top + offsetY, width, height }
+  return { left: rect.left + offsetX, top: rect.top + offsetY * stretch, width, height: height * stretch }
 }
 
 // Screen (CSS) coordinates -> canvas backing-store pixel coordinates. Already
@@ -296,6 +305,8 @@ function statusElFor(which) {
 }
 
 function updateFreezeButtonState() {
+  document.querySelector("#camera-empty").hidden = !!(cameraStream || frozenFrame)
+  freezeButton.setAttribute("aria-pressed", String(!!frozenFrame))
   if (frozenFrame) {
     freezeButton.disabled = false
     freezeButton.textContent = 'Resume live'
@@ -322,7 +333,15 @@ async function toggleFreeze() {
     setStatus(calibModeStatus, 'Start the camera first.', false)
     return
   }
-  frozenFrame = await createImageBitmap(calibVideo)
+  const generation = cameraGeneration
+  try {
+    const snapshot = await createImageBitmap(calibVideo)
+    if (generation !== cameraGeneration || !cameraStream || frozenFrame) { snapshot.close(); return }
+    frozenFrame = snapshot
+  } catch (error) {
+    setStatus(calibModeStatus, `Could not freeze frame: ${error.message}`, false)
+    return
+  }
   updateFreezeButtonState()
   setStatus(calibModeStatus, 'Frame frozen — click precisely, then "Resume live" when done.', true)
 }
@@ -387,7 +406,7 @@ function drawFrame() {
 
   // Background in screen space so panned-out areas don't show stale pixels.
   calibCtx.setTransform(1, 0, 0, 1, 0, 0)
-  calibCtx.fillStyle = '#0f172a'
+  calibCtx.fillStyle = '#10171f'
   calibCtx.fillRect(0, 0, width, height)
 
   // Everything below is drawn in WORLD (native camera pixel) space; this
@@ -485,7 +504,7 @@ function updateReadout() {
     )
   }
   calibReadout.textContent = lines.join('\n')
-  calibApply.disabled = !ready
+  calibApply.disabled = calibrationSaving || !ready || !hasCameraFrame()
   updatePickButtonStates()
 }
 
@@ -502,7 +521,7 @@ function updatePointsReadout() {
     lines.push(`${key.padEnd(13)}: ${marker.x.toFixed(1)}, ${marker.y.toFixed(1)} px`)
   }
   pointsReadout.textContent = lines.join('\n')
-  pointsPushButton.disabled = !allSet
+  pointsPushButton.disabled = pointsSending || !allSet || !hasCameraFrame()
   updatePickButtonStates()
 }
 
@@ -516,6 +535,7 @@ function setPickTarget(which) {
   pickTarget = which
   for (const [key, button] of Object.entries(PICK_BUTTONS)) {
     button.classList.toggle('active', key === which)
+    button.setAttribute('aria-pressed', String(key === which))
   }
   if (which) {
     // A point-pick target (e.g. via keyboard shortcut) needs the section
@@ -529,47 +549,79 @@ async function populateCameras() {
   const devices = await navigator.mediaDevices.enumerateDevices()
   const cameras = devices.filter((device) => device.kind === 'videoinput')
   const previous = cameraSelect.value
-  cameraSelect.innerHTML = ''
+  cameraSelect.replaceChildren()
+  if (!cameras.length) cameraSelect.add(new Option('Default camera', ''))
   cameras.forEach((camera, index) => {
     const option = document.createElement('option')
     option.value = camera.deviceId
     option.textContent = camera.label || `Camera ${index + 1}`
     cameraSelect.appendChild(option)
   })
-  if (previous) cameraSelect.value = previous
+  if (cameras.some(camera => camera.deviceId === previous)) cameraSelect.value = previous
 }
 
 async function startCamera() {
+  if (cameraStarting) return
+  cameraStarting = true
+  cameraStartButton.disabled = true
+  cameraSelect.disabled = true
+  cameraStartButton.textContent = 'Starting…'
   try {
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('Camera access requires HTTPS or localhost')
     stopCamera()
-    if (frozenFrame) {
-      // A new stream is about to replace the picture — an old frozen frame
-      // would be stale and confusing to keep showing.
-      frozenFrame.close?.()
-      frozenFrame = null
-    }
+    cameraStartButton.textContent = 'Starting…'
     const deviceId = cameraSelect.value || undefined
     cameraStream = await navigator.mediaDevices.getUserMedia({
       video: deviceId ? { deviceId: { exact: deviceId } } : true,
       audio: false,
     })
+    cameraStream.getVideoTracks().forEach(track => track.addEventListener('ended', () => {
+      stopCamera()
+      setStatus(calibModeStatus, 'Camera disconnected. Reconnect it and start again.', false)
+    }))
     calibVideo.srcObject = cameraStream
-    await calibVideo.play()
-    await populateCameras()
+    let playbackTimeout
+    try {
+      await Promise.race([
+        calibVideo.play(),
+        new Promise((_, reject) => { playbackTimeout = setTimeout(() => reject(new Error('No video frames received')), 10000) }),
+      ])
+    } finally { clearTimeout(playbackTimeout) }
+    await populateCameras().catch(() => {})
+    for (const key of Object.keys(markers)) markers[key] = null
+    setPickTarget(null)
+    updateReadout()
+    updatePointsReadout()
     cameraStopButton.disabled = false
     updateFreezeButtonState()
     setStatus(calibModeStatus, 'Camera started. Align the limbus to the ring, then set the trocars.', true)
   } catch (error) {
-    setStatus(calibModeStatus, `Camera error: ${error.message}. On http a non-localhost host blocks camera access.`, false)
+    stopCamera()
+    setStatus(calibModeStatus, `Camera unavailable: ${error.message}`, false)
+  } finally {
+    cameraStarting = false
+    cameraStartButton.disabled = false
+    cameraSelect.disabled = false
+    cameraStartButton.textContent = cameraStream ? 'Restart camera' : 'Start camera'
   }
 }
 
+function hasCameraFrame() { return !!frozenFrame || !!(cameraStream && calibVideo.readyState >= 2) }
+
 function stopCamera() {
+  cameraGeneration++
+  frozenFrame?.close?.()
+  frozenFrame = null
+  setPickTarget(null)
   if (cameraStream) {
     cameraStream.getTracks().forEach((track) => track.stop())
     cameraStream = null
   }
   calibVideo.srcObject = null
+  cameraStartButton.textContent = 'Start camera'
+  setStatus(calibModeStatus, 'Camera stopped.', true)
+  updateReadout()
+  updatePointsReadout()
   cameraStopButton.disabled = true
   updateFreezeButtonState()
 }
@@ -606,12 +658,19 @@ const DRAG_THRESHOLD_PX = 4
 let dragState = null
 
 function placePointAt(event) {
+  if (!hasCameraFrame()) {
+    setStatus(calibModeStatus, 'Start a camera before placing points.', false)
+    return
+  }
   if (!pickTarget) {
-    setStatus(calibModeStatus, 'Choose a "Set ..." button first (or press its number key).', false)
+    setStatus(calibModeStatus, 'Choose a point button first (or press its number key).', false)
     return
   }
   const canvasPt = canvasPointFromEvent(event)
-  markers[pickTarget] = worldFromCanvasPoint(canvasPt)
+  if (canvasPt.x < 0 || canvasPt.y < 0 || canvasPt.x > calibCanvas.width || canvasPt.y > calibCanvas.height) return
+  const point = worldFromCanvasPoint(canvasPt)
+  if (point.x < 0 || point.y < 0 || point.x > calibCanvas.width || point.y > calibCanvas.height) return
+  markers[pickTarget] = point
   setPickTarget(null)
   updateReadout()
   updatePointsReadout()
@@ -689,6 +748,10 @@ calibCanvas.addEventListener(
 zoomResetButton.addEventListener('click', resetView)
 
 calibApply.addEventListener('click', async () => {
+  if (calibApply.disabled) return
+  calibrationSaving = true
+  calibApply.disabled = true
+  calibApply.textContent = 'Saving…'
   const ring = ringGeometry()
   const forceps = pixelToTrocarAngles(markers.forceps, ring)
   const light = pixelToTrocarAngles(markers.light, ring)
@@ -722,6 +785,10 @@ calibApply.addEventListener('click', async () => {
     }
   } catch (error) {
     setStatus(calibModeStatus, error.message, false)
+  } finally {
+    calibrationSaving = false
+    calibApply.textContent = 'Apply & save'
+    updateReadout()
   }
 })
 
@@ -730,6 +797,10 @@ calibApply.addEventListener('click', async () => {
 // segmentation service. Lets the viz be exercised end-to-end before the YOLO
 // model has trained weights.
 pointsPushButton.addEventListener('click', async () => {
+  if (pointsPushButton.disabled) return
+  pointsSending = true
+  pointsPushButton.disabled = true
+  pointsPushButton.textContent = 'Sending…'
   const payload = {}
   for (const key of POINT_KEYS) {
     payload[`${key}_px`] = [markers[key].x, markers[key].y]
@@ -742,14 +813,20 @@ pointsPushButton.addEventListener('click', async () => {
     })
     const data = await response.json()
     if (!response.ok) throw new Error(data.detail || response.statusText)
+    if (data.stream_result?.error) throw new Error(data.stream_result.error)
     setStatus(pointsStatus, 'Points pushed to the live stream — check the viz.', true)
   } catch (error) {
     setStatus(pointsStatus, error.message, false)
+  } finally {
+    pointsSending = false
+    pointsPushButton.textContent = 'Push points to stream'
+    updatePointsReadout()
   }
 })
 
 pointsClearButton.addEventListener('click', () => {
   for (const key of POINT_KEYS) markers[key] = null
+  if (POINT_KEYS.includes(pickTarget)) setPickTarget(null)
   updatePointsReadout()
   setStatus(pointsStatus, 'Points cleared.', true)
 })
@@ -786,6 +863,9 @@ function enterFocusMode() {
   if (labelingStage.classList.contains('focus-mode')) return
   labelingStage.classList.add('focus-mode')
   focusModeButton.textContent = 'Exit focus mode'
+  focusModeButton.setAttribute('aria-pressed', 'true')
+  for (const child of document.querySelector('main').children) { if (!child.contains(labelingStage)) child.inert = true }
+  document.querySelector('.device-header').inert = true
   manualPointsWasOpenBeforeFocusMode = manualPointsDetails.open
   manualPointsDetails.open = true
   document.body.style.overflow = 'hidden'
@@ -795,6 +875,9 @@ function exitFocusMode() {
   if (!labelingStage.classList.contains('focus-mode')) return
   labelingStage.classList.remove('focus-mode')
   focusModeButton.textContent = 'Focus mode'
+  focusModeButton.setAttribute('aria-pressed', 'false')
+  document.querySelectorAll('[inert]').forEach(el => { el.inert = false })
+  focusModeButton.focus()
   manualPointsDetails.open = manualPointsWasOpenBeforeFocusMode
   document.body.style.overflow = ''
 }
@@ -823,6 +906,12 @@ const HOTKEYS = {
 }
 
 document.addEventListener('keydown', (event) => {
+  if (event.ctrlKey || event.metaKey || event.altKey || event.repeat || event.target.isContentEditable) return
+  if (event.key === 'Escape') {
+    if (labelingStage.classList.contains('focus-mode')) exitFocusMode()
+    else if (pickTarget) setPickTarget(null)
+    return
+  }
   const tag = event.target.tagName
   if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
 
@@ -841,13 +930,7 @@ document.addEventListener('keydown', (event) => {
     toggleFocusMode()
     return
   }
-  if (event.key === 'Escape') {
-    if (labelingStage.classList.contains('focus-mode')) {
-      exitFocusMode()
-    } else if (pickTarget) {
-      setPickTarget(null)
-    }
-  }
+
 })
 
 applyVerticalStretch()
@@ -857,7 +940,17 @@ updateFreezeButtonState()
 requestAnimationFrame(drawFrame)
 
 loadCalibration().catch((error) => setStatus(calibrationStatus, error.message, false))
-loadServiceStatus().catch((error) => {
-  serviceStatus.textContent = error.message
-  serviceStatus.className = 'service-status error'
-})
+async function pollServices() {
+  try { await loadServiceStatus() } catch (error) {
+    serviceStatus.textContent = `Services unavailable: ${error.message}`
+    serviceStatus.className = 'service-status error'
+  } finally { setTimeout(pollServices, 5000) }
+}
+pollServices()
+if (navigator.mediaDevices?.enumerateDevices) {
+  populateCameras().catch(() => {})
+  navigator.mediaDevices.addEventListener('devicechange', () => populateCameras().catch(() => {}))
+}
+window.addEventListener('pagehide', stopCamera)
+
+document.querySelectorAll('[data-service-port]').forEach(link => { const url = new URL(link.href); url.hostname = location.hostname; url.protocol = location.protocol; link.href = url.href; });

@@ -3,89 +3,76 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tool Positions Stream</title>
-  <style>
-    * { box-sizing: border-box; }
-    body {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      margin: 0;
-      padding: 1.5rem;
-      background: #0f1117;
-      color: #e6edf3;
-    }
-    h1 { font-size: 1.1rem; font-weight: 600; margin: 0 0 1rem; }
-    h2 { font-size: 0.75rem; font-weight: 500; color: #8b949e; margin: 0 0 0.5rem; text-transform: uppercase; letter-spacing: 0.04em; }
-    .stats {
-      display: flex;
-      gap: 1.5rem;
-      margin-bottom: 1rem;
-      flex-wrap: wrap;
-    }
-    .stat { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 0.75rem 1rem; }
-    .stat label { display: block; font-size: 0.75rem; color: #8b949e; margin-bottom: 0.25rem; }
-    .stat span { font-size: 1.25rem; font-weight: 600; }
-    .connected { color: #3fb950; }
-    .disconnected { color: #f85149; }
-    .error-box {
-      background: #2d1214;
-      border: 1px solid #f85149;
-      color: #ffa198;
-      padding: 0.75rem 1rem;
-      border-radius: 8px;
-      margin-bottom: 1rem;
-      display: none;
-    }
-    .layout {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1rem;
-      margin-bottom: 1rem;
-    }
-    @media (max-width: 900px) {
-      .layout { grid-template-columns: 1fr; }
-    }
-    .panel {
-      background: #161b22;
-      border: 1px solid #30363d;
-      border-radius: 8px;
-      padding: 0.75rem;
-    }
-    canvas {
-      display: block;
-      width: 100%;
-      height: auto;
-      border-radius: 4px;
-      background: #0d1117;
-    }
-    .legend {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.75rem 1.25rem;
-      margin-bottom: 1rem;
-      font-size: 0.75rem;
-      color: #8b949e;
-    }
-    .legend-item { display: flex; align-items: center; gap: 0.4rem; }
-    .legend-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-    table { width: 100%; border-collapse: collapse; background: #161b22; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; }
-    th, td { text-align: left; padding: 0.6rem 0.9rem; border-bottom: 1px solid #21262d; }
-    th { background: #21262d; color: #8b949e; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
-    tr:last-child td { border-bottom: none; }
-    td.num { text-align: right; font-variant-numeric: tabular-nums; }
-  </style>
+  <title>Microforceps / Stream</title>
+<style>
+:root { color-scheme:dark; --bg:#0c1117; --surface:#131b24; --inset:#10171f; --border:#293541; --text:#e5edf5; --muted:#a0afbe; --accent:#aac7de; --safe:#64c69a; --warn:#e7b75b; --danger:#f27a80; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font:13px Inter,system-ui,sans-serif; font-variant-numeric:tabular-nums; }
+a { color:var(--accent); }
+.device-header { min-height:58px; padding:10px 24px; display:flex; align-items:center; gap:24px; border-bottom:1px solid var(--border); background:#111820; flex-wrap:wrap; }
+.brand { display:flex; align-items:center; gap:10px; margin-right:auto; }
+.brand-logo { width:34px; height:34px; object-fit:contain; border-radius:3px; flex-shrink:0; }
+.brand h1 { font-size:13px; font-weight:600; margin:0; }
+.brand-subtitle { color:var(--muted); font-weight:400; }
+.service-nav { display:flex; gap:4px; flex-wrap:wrap; }
+.service-nav a { text-decoration:none; color:var(--muted); padding:7px 10px; border:1px solid transparent; border-radius:5px; font-size:12px; }
+.service-nav a:hover { background:#263747; color:var(--text); }
+.service-nav a[aria-current=page] { background:#223241; border-color:#435b70; color:var(--text); }
+main { max-width:1480px; margin:auto; padding:24px; }
+h1 { font-size:24px; font-weight:500; letter-spacing:-.025em; margin:0 0 8px; }
+h2 { font-size:13px; font-weight:600; margin:0 0 14px; }
+h3,.eyebrow { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.09em; color:var(--muted); }
+p { color:var(--muted); line-height:1.6; }
+.panel { min-width:0; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:20px; }
+button,input,select { font:inherit; }
+button,select,input { border:1px solid #3b4d5d; border-radius:5px; padding:9px 12px; color:var(--text); background:#1b2834; max-width:100%; }
+button { cursor:pointer; font-weight:500; background:#aac7de; color:#10171f; }
+button:hover:not(:disabled) { background:#c5deef; }
+button.secondary { background:#202e3b; color:var(--text); }
+button.secondary:hover:not(:disabled) { background:#2d4153; }
+button:disabled { opacity:.4; cursor:not-allowed; }
+:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+pre { margin:12px 0 0; padding:14px; background:var(--inset); border:1px solid var(--border); border-radius:6px; color:#bdcad7; font:11px/1.7 ui-monospace,SFMono-Regular,monospace; white-space:pre-wrap; overflow-wrap:anywhere; overflow:auto; max-height:360px; }
+.hint { color:var(--muted); font-size:12px; line-height:1.6; }
+.status { font-size:12px; line-height:1.6; margin-top:10px; overflow-wrap:anywhere; }
+.status:empty { display:none; }
+.ok,.connected { color:var(--safe); }
+.error,.disconnected { color:var(--danger); }
+.page-header { margin-bottom:22px; }
+.page-header-top { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+.service-status { color:var(--muted); font-size:12px; max-width:100%; overflow-wrap:anywhere; }
+.service-status.ok { color:var(--safe); }
+.service-status.error { color:var(--danger); }
+.section-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
+.section-heading h2 { margin:0; }
+.badge { font-size:10px; color:var(--accent); border:1px solid #354b5d; border-radius:4px; padding:3px 7px; }
+.system-footer { margin-top:20px; color:var(--muted); font-size:11px; line-height:1.6; }
+@media(max-width:680px) { .brand-logo { width:28px; height:28px; } main { padding:16px; } .device-header { padding:12px 16px; gap:12px; } .service-nav { width:100%; } .service-nav a { flex:1; text-align:center; padding:7px 5px; } .panel { padding:16px; } }
+
+.stats { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:20px; }
+.stat { min-width:150px; background:var(--surface); border:1px solid var(--border); border-radius:7px; padding:14px 18px; }
+.stat label { display:block; font-size:11px; color:var(--muted); margin-bottom:8px; }
+.stat span { font-size:20px; font-weight:500; }
+.error-box { display:none; background:#301f28; border:1px solid #74414d; color:var(--danger); padding:14px; border-radius:7px; margin-bottom:16px; overflow-wrap:anywhere; }
+.layout { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:16px 0; }
+canvas { display:block; width:100%; max-height:52vh; object-fit:contain; background:var(--inset); border-radius:6px; }
+.legend { display:flex; flex-wrap:wrap; gap:12px 20px; font-size:11px; color:var(--muted); }
+.legend-item { display:flex; align-items:center; gap:6px; }.legend-dot { width:7px; height:7px; border-radius:50%; }
+.table-wrap { overflow:auto; border:1px solid var(--border); border-radius:7px; }
+table { width:100%; border-collapse:collapse; background:var(--surface); white-space:nowrap; }
+th,td { padding:10px 16px; border-bottom:1px solid var(--border); text-align:left; font-size:12px; }
+th { background:var(--inset); color:var(--muted); font-weight:500; }
+.num { text-align:right; font-family:ui-monospace,monospace; }
+tr:last-child td { border-bottom:0; }
+@media(max-width:700px) { .layout { grid-template-columns:1fr; } .stat { min-width:0; flex:1; } .stat span { font-size:16px; } }
+</style>
 </head>
-<body>
-  <h1>Tool Positions Stream</h1>
+<body><header class="device-header"><div class="brand"><img class="brand-logo" src="/maps-logo.png" alt="MAPS" width="34" height="34"><h1>Microforceps <span class="brand-subtitle"> / Stream</span></h1></div><nav class="service-nav" aria-label="Tracking services"><a data-service-port="8000" href="http://localhost:8000/">Detector</a><a data-service-port="8090" href="http://localhost:8090/">Calibration</a><a data-service-port="8765" href="http://localhost:8765/viewer" aria-current="page">Stream</a><a data-service-port="8080" href="http://localhost:8080/">3D Viz</a></nav></header><main><div class="page-header"><span class="eyebrow">3D reconstruction</span><h1>Position stream</h1><p>Live tool geometry · Coordinates normalized to the eye radius (1 = eye surface).</p></div>
 
   <div class="stats">
     <div class="stat">
       <label>Status</label>
-      <span id="status" class="disconnected">disconnected</span>
+      <span id="status" role="status" class="disconnected">disconnected</span>
     </div>
     <div class="stat">
       <label>Receive FPS</label>
@@ -97,7 +84,7 @@
     </div>
   </div>
 
-  <div id="error" class="error-box"></div>
+  <div id="error" class="error-box" role="status"></div>
 
   <div class="legend" id="legend"></div>
 
@@ -112,7 +99,7 @@
     </div>
   </div>
 
-  <table>
+  <div class="table-wrap"><table>
     <thead>
       <tr>
         <th>Point</th>
@@ -122,7 +109,7 @@
       </tr>
     </thead>
     <tbody id="positions"></tbody>
-  </table>
+  </table></div><footer class="system-footer">Top and side projections · Values clear when data is invalid, stale, or disconnected.</footer></main>
 
   <script>
     const statusEl = document.getElementById("status");
@@ -136,7 +123,9 @@
     const ctxTop = canvasTop.getContext("2d");
     const ctxSide = canvasSide.getContext("2d");
 
-    const wsUrl = `ws://${location.hostname}:8765`;
+    const wsUrl = `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws`;
+    let lastMessageAt = 0;
+    let connected = false;
     let framesSinceUpdate = 0;
     let lastFpsTick = performance.now();
     let lastPositions = null;
@@ -177,13 +166,13 @@
 
     function drawGrid(ctx, w, h) {
       ctx.clearRect(0, 0, w, h);
-      ctx.fillStyle = "#0d1117";
+      ctx.fillStyle = "#10171f";
       ctx.fillRect(0, 0, w, h);
 
       const [cx, cy] = toCanvas(0, 0, w, h);
       const r = Math.min(w, h) * SCALE;
 
-      ctx.strokeStyle = "#21262d";
+      ctx.strokeStyle = "#23313e";
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(PAD, cy);
@@ -192,18 +181,18 @@
       ctx.lineTo(cx, h - PAD);
       ctx.stroke();
 
-      ctx.strokeStyle = "#30363d";
+      ctx.strokeStyle = "#354554";
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
       ctx.stroke();
 
-      ctx.fillStyle = "#484f58";
+      ctx.fillStyle = "#758da2";
       ctx.beginPath();
       ctx.arc(cx, cy, 3, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.fillStyle = "#484f58";
+      ctx.fillStyle = "#758da2";
       ctx.font = "11px monospace";
       ctx.fillText("eye center", cx + 6, cy - 6);
     }
@@ -231,13 +220,11 @@
       ctx.arc(px, py, radius, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.strokeStyle = "#0d1117";
+      ctx.strokeStyle = "#10171f";
       ctx.lineWidth = 1.5;
       ctx.stroke();
 
-      ctx.fillStyle = "#c9d1d9";
-      ctx.font = "10px monospace";
-      ctx.fillText(style.label, px + radius + 4, py + 3);
+
     }
 
     function projectTop(coords, w, h) {
@@ -261,8 +248,30 @@
         }
       }
 
+      const labels = [];
       for (const [name, coords] of Object.entries(positions)) {
         drawPoint(ctx, name, coords, w, h, project);
+        if (!POINTS[name]) continue;
+        const [px, py] = project(coords, w, h);
+        ctx.font = '10px monospace';
+        const text = POINTS[name].label;
+        const width = ctx.measureText(text).width;
+        const x = Math.max(8, Math.min(w - width - 8, px + 12));
+        let y = Math.max(16, Math.min(h - 20, py));
+        for (let attempt = 0; attempt < 24; attempt++) {
+          const offset = Math.ceil(attempt / 2) * 15 * (attempt % 2 ? -1 : 1);
+          const candidate = Math.max(16, Math.min(h - 20, py + offset));
+          if (!labels.some(label => x < label.x + label.width + 4 && x + width + 4 > label.x && Math.abs(candidate - label.y) < 14)) {
+            y = candidate;
+            break;
+          }
+        }
+        labels.push({ x, y, width });
+        ctx.strokeStyle = '#526d82';
+        ctx.lineWidth = 0.6;
+        ctx.beginPath(); ctx.moveTo(px + 6, py); ctx.lineTo(x - 3, y - 3); ctx.stroke();
+        ctx.fillStyle = '#bdcad7';
+        ctx.fillText(text, x, y);
       }
 
       ctx.fillStyle = "#6e7681";
@@ -284,7 +293,7 @@
       const now = performance.now();
       const elapsed = (now - lastFpsTick) / 1000;
       if (elapsed >= 0.5) {
-        fpsEl.textContent = (framesSinceUpdate / elapsed).toFixed(1);
+        fpsEl.textContent = connected ? (framesSinceUpdate / elapsed).toFixed(1) : "—";
         framesSinceUpdate = 0;
         lastFpsTick = now;
       }
@@ -297,7 +306,7 @@
       for (const name of Object.keys(POINTS)) {
         const row = document.createElement("tr");
         row.innerHTML = `
-          <td>${name}</td>
+          <td>${POINTS[name].label}</td>
           <td class="num" data-coord="x">—</td>
           <td class="num" data-coord="y">—</td>
           <td class="num" data-coord="z">—</td>
@@ -325,31 +334,54 @@
     function connect() {
       const ws = new WebSocket(wsUrl);
 
-      ws.onopen = () => setStatus(true);
+      ws.onopen = () => { connected = true; lastMessageAt = performance.now(); statusEl.textContent = "Awaiting data"; statusEl.className = ""; };
 
       ws.onclose = () => {
+        connected = false;
         setStatus(false);
+        renderPositions(null);
+        frameEl.textContent = "—";
+        fpsEl.textContent = "—";
+        framesSinceUpdate = 0;
         setTimeout(connect, 1000);
       };
 
       ws.onerror = () => ws.close();
 
       ws.onmessage = (event) => {
-        framesSinceUpdate++;
-        const msg = JSON.parse(event.data);
-        frameEl.textContent = msg.frame;
-
-        if (msg.error) {
-          errorEl.style.display = "block";
-          errorEl.textContent = msg.error;
+        lastMessageAt = performance.now();
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.error) throw new Error(msg.error);
+          const positions = msg.positions;
+          if (!positions || !Object.keys(POINTS).every(name => Array.isArray(positions[name]) && positions[name].length === 3 && positions[name].every(Number.isFinite))) {
+            throw new Error('Incomplete or invalid position data');
+          }
+          framesSinceUpdate++;
+          setStatus(true);
+          frameEl.textContent = Number.isFinite(msg.frame) ? msg.frame : '—';
+          errorEl.style.display = 'none';
+          renderPositions(positions);
+        } catch (error) {
+          statusEl.textContent = 'Invalid data';
+          statusEl.className = 'disconnected';
+          errorEl.style.display = 'block';
+          errorEl.textContent = error.message;
+          frameEl.textContent = '—';
           renderPositions(null);
-        } else {
-          errorEl.style.display = "none";
-          renderPositions(msg.positions);
         }
       };
     }
 
+    setInterval(() => {
+      if (connected && performance.now() - lastMessageAt > 1500) {
+        statusEl.textContent = 'Stale data';
+        statusEl.className = 'disconnected';
+        renderPositions(null);
+        frameEl.textContent = '—';
+      }
+    }, 500);
+    document.querySelectorAll('[data-service-port]').forEach(link => { const url = new URL(link.href); url.hostname = location.hostname; url.protocol = location.protocol; link.href = url.href; });
     buildLegend();
     ensureRows();
     drawVisualization(null);

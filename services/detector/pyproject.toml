@@ -16,7 +16,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-detector = ["viewer.html"]
+detector = ["viewer.html", "maps-logo.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

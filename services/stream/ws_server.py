@@ -256,6 +256,14 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
     return ws
 
 
+async def viewer(request: web.Request) -> web.FileResponse:
+    return web.FileResponse(Path(__file__).with_name("viewer.html"))
+
+
+async def maps_logo(request: web.Request) -> web.FileResponse:
+    return web.FileResponse(Path(__file__).with_name("maps-logo.png"))
+
+
 def build_app(input_path: Path, interval: float) -> web.Application:
     app = web.Application()
     app["input_path"] = input_path
@@ -263,6 +271,8 @@ def build_app(input_path: Path, interval: float) -> web.Application:
     app.add_routes(
         [
             web.get("/health", health),
+            web.get("/viewer", viewer),
+            web.get("/maps-logo.png", maps_logo),
             # WebSocket feed served at both the root (the viz connects directly
             # to ws://host:8765 via the baked VITE_WS_URL) and /ws (the nginx
             # proxy path), matching how the old websockets server accepted any

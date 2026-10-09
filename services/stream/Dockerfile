@@ -7,7 +7,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY tool_positions.py ws_server.py input_example.json ./
+COPY tool_positions.py ws_server.py input_example.json viewer.html maps-logo.png ./
 
 EXPOSE 8765
 

@@ -64,3 +64,21 @@ def test_put_inputs_rejects_missing_required_fields(tmp_path):
             raise AssertionError("missing required field should fail")
 
     asyncio.run(exercise())
+
+
+def test_viewer_and_websocket_routes_coexist(tmp_path):
+    from aiohttp.test_utils import TestClient, TestServer
+    from ws_server import build_app
+
+    async def exercise():
+        input_path = tmp_path / "inputs.json"
+        input_path.write_text(json.dumps(VALID_INPUTS), encoding="utf-8")
+        async with TestClient(TestServer(build_app(input_path, 0.01))) as client:
+            response = await client.get('/viewer')
+            assert response.status == 200
+            assert response.content_type == 'text/html'
+            assert 'Position stream' in await response.text()
+            paths = {route.resource.canonical for route in client.server.app.router.routes()}
+            assert {'/', '/ws', '/viewer'} <= paths
+
+    asyncio.run(exercise())
