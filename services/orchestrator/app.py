@@ -18,6 +18,16 @@ from fastapi.templating import Jinja2Templates
 from .source import DEFAULT_PATH as DETECTOR_STATE_PATH
 from .source import DetectorStore, add_source_routes
 
+
+class RevalidatingStaticFiles(StaticFiles):
+    """Static assets change with every deploy: make browsers revalidate (ETag) instead of reusing stale CSS/JS."""
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 CALIBRATION_KEYS = [
     "light_rot_up",
     "light_rot_clock",
@@ -427,7 +437,7 @@ def create_app(
     detector_state_path: Path = DETECTOR_STATE_PATH,
 ) -> FastAPI:
     service = FastAPI(title="Forceps Orchestrator", version="0.1.0")
-    service.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    service.mount("/static", RevalidatingStaticFiles(directory=STATIC_DIR), name="static")
     service.state.calibration_store = CalibrationStore(calibration_path, default_calibration_source)
     service.state.segmentation_url = segmentation_url
     service.state.stream_url = stream_url
