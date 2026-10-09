@@ -55,10 +55,32 @@ class Detector:
     def __init__(self, cfg: Settings | None = None, background: Background | None = None):
         self.cfg = cfg or Settings()
         self.bg = background or Background(self.cfg.background_path, self.cfg.work_size)
-        self.analysis_disc = disc(self.cfg.work_size, self.cfg.disc_radius)
+        self._disc_cache: tuple = ("unset", None)
+        self.roi: tuple[float, float, float] | None = None   # eye circle (cx, cy, r) in raw frame px
+        self.view: np.ndarray | None = None                  # image the last detection refers to
 
     # --- geometry of the work frame <-> original frame ---
+    def normalize(self, frame: np.ndarray) -> np.ndarray:
+        """Content of the eye circle, everything outside black, as a work_size x work_size square (1:1)."""
+        cx, cy, r = self.roi
+        side = max(2, int(round(2 * r)))
+        x0, y0 = int(round(cx - r)), int(round(cy - r))
+        h, w = frame.shape[:2]
+        canvas = np.zeros((side, side, 3), np.uint8)
+        fx0, fy0, fx1, fy1 = max(x0, 0), max(y0, 0), min(x0 + side, w), min(y0 + side, h)
+        if fx1 > fx0 and fy1 > fy0:
+            canvas[fy0 - y0:fy1 - y0, fx0 - x0:fx1 - x0] = frame[fy0:fy1, fx0:fx1]
+        circle = np.zeros((side, side), np.uint8)
+        cv2.circle(circle, (side // 2, side // 2), side // 2, 255, -1)
+        canvas[circle == 0] = 0
+        n = self.cfg.work_size
+        return cv2.resize(canvas, (n, n), interpolation=cv2.INTER_AREA)
+
     def _prepare(self, frame: np.ndarray):
+        """-> (work image, mapper from work coords to output coords).
+        With an eye circle the output space IS the normalised square; without, the original frame."""
+        if self.roi is not None:
+            return self.normalize(frame), (lambda p: (float(p[0]), float(p[1])))
         h, w = frame.shape[:2]
         s = min(h, w)
         ox, oy = (w - s) // 2, (h - s) // 2
@@ -72,16 +94,22 @@ class Detector:
         t0 = cv2.getTickCount()
         work, back = self._prepare(frame)
         ref, from_model = self.bg.reference(work)
-        forceps_m, shadow_m, _ = compute_masks(work, ref, from_model, self.cfg)
+        eye = self.bg.disc if from_model else None
+        forceps_m, shadow_m, _ = compute_masks(work, ref, from_model, self.cfg, eye, self.bg.bgr if from_model else None)
+        if self._disc_cache[0] != eye:
+            self._disc_cache = (eye, disc(self.cfg.work_size, self.cfg.disc_eye if eye else self.cfg.disc_radius, eye))
+        analysis = self._disc_cache[1]
         res = {}
         for name, m in (("forceps", forceps_m), ("shadow", shadow_m)):
-            j: Jaws = analyze(m * self.analysis_disc)
+            j: Jaws = analyze(m * analysis)
             res[name] = (ToolPose(True, "", *(back(getattr(j, k)) for k in POINTS)) if j.ok
                          else ToolPose(False, j.reason))
         if adapt and from_model:
             self.bg.adapt(work, cv2.dilate(forceps_m | shadow_m, np.ones((15, 15), np.uint8)))
         ms = (cv2.getTickCount() - t0) / cv2.getTickFrequency() * 1000
-        return Detection(res["forceps"], res["shadow"], frame.shape[1::-1], self.bg.state, ms)
+        self.view = work if self.roi is not None else frame
+        size = work.shape[1::-1] if self.roi is not None else frame.shape[1::-1]
+        return Detection(res["forceps"], res["shadow"], size, self.bg.state, ms)
 
 
 def annotate(frame: np.ndarray, det: Detection) -> np.ndarray:

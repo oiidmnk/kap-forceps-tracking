@@ -41,3 +41,5 @@ services/orchestrator/data/
 # Large sample data (not tracked): data/video/forceps_lev1.mp4, data/annotated/ (LabelMe frames)
 data/annotated/
 data/video/*.mp4
+
+.detector_state.json

@@ -18,12 +18,16 @@ class Settings:
     # --- detection ---
     work_size: int = 1080                 # frames are center-cropped/resized to this square
     disc_radius: float = 0.435            # analysis disc radius, fraction of work_size
+    disc_eye: float = 0.94                # analysis disc as fraction of the detected eye radius
+    mask_disc_eye: float = 0.98
     mask_disc_radius: float = 0.458       # mask disc radius, fraction of work_size
     shadow_ratio: float = field(default_factory=lambda: _f("SHADOW_RATIO", 0.88))
     fallback_rel: float = field(default_factory=lambda: _f("FALLBACK_REL", 0.90))
+    forceps_angle: float = field(default_factory=lambda: _f("FORCEPS_ANGLE", 0.0))   # deg; 0 disables the chroma cue
     forceps_sat_max: int = 150
     forceps_val_max: int = 135
     background_path: str = field(default_factory=lambda: os.environ.get("BACKGROUND_PATH", "/data/background.png"))  # empty = learn from live feed
+    state_path: str = field(default_factory=lambda: os.environ.get("DETECTOR_STATE", "/state/config.json"))
     # --- live source ---
     source: str = field(default_factory=lambda: _s("SOURCE"))          # file | rtsp/http url | camera index
     source_loop: bool = field(default_factory=lambda: _s("SOURCE_LOOP", "1") != "0")

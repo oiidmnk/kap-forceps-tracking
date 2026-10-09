@@ -64,7 +64,10 @@ def analyze(mask: np.ndarray, min_area: int = 800) -> Jaws:
     P = np.stack([xs, ys], 1).astype(np.float32)
     c = P.mean(0)
     Q = P - c
-    d = np.linalg.eigh(Q.T @ Q)[1][:, -1]          # principal axis (2x2 eigenproblem, cheap)
+    evals, evecs = np.linalg.eigh(Q.T @ Q)
+    d = evecs[:, -1]                                # principal axis (2x2 eigenproblem, cheap)
+    if np.sqrt(evals[-1] / max(evals[0], 1e-9)) < 4:     # a tool is long and thin, not a blob
+        return Jaws(False, "blob is not tool-shaped")
     proj = (P - c) @ d
     # the tool enters from the rim, so the tip is the end closer to the image centre
     centre = np.array([w / 2, h / 2])

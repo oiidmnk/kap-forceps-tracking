@@ -508,3 +508,23 @@ button.pick.pick-right-shadow { --pick-color: #9d174d; }
     align-items: flex-start;
   }
 }
+
+/* --- source & eye circle ------------------------------------------------ */
+.source-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.source-head h2 { margin: 0; }
+.source-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 8px 0 16px; }
+.source-controls select, .source-controls input[type="text"] { min-width: 200px; }
+.source-controls #source-custom { flex: 1 1 260px; }
+.detector-url { margin-left: auto; font-size: 13px; color: var(--text-muted); }
+.detector-url summary { cursor: pointer; }
+.detector-url input { width: 260px; margin: 6px 6px 0 0; }
+.source-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: var(--gap); }
+@media (max-width: 860px) { .source-grid { grid-template-columns: 1fr; } }
+.source-col h3 { margin: 0 0 8px; font-size: 14px; color: var(--text-muted); font-weight: 600; }
+.circle-stage { background: #05070a; border-radius: var(--radius-md); overflow: hidden; line-height: 0; }
+.circle-stage canvas, .circle-stage img { width: 100%; height: auto; display: block; touch-action: none; }
+.circle-stage canvas { cursor: crosshair; }
+.circle-stage.square { aspect-ratio: 1; }
+.circle-stage.square img { width: 100%; height: 100%; object-fit: contain; }
+.inline-readout { padding: 4px 8px; font-size: 12px; margin-left: auto; }
+.hint.small { font-size: 12px; margin: 8px 0 0; }

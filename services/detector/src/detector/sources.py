@@ -22,17 +22,19 @@ def frames(source: str, loop: bool = True, realtime: bool = True) -> Iterator[np
             continue
         fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
         t0, n = time.monotonic(), 0
-        while True:
-            ok, frame = cap.read()
-            if not ok:
-                break
-            if is_file and realtime:                       # pace files like a camera would
-                delay = t0 + n / fps - time.monotonic()
-                if delay > 0:
-                    time.sleep(delay)
-            n += 1
-            yield frame
-        cap.release()
+        try:
+            while True:
+                ok, frame = cap.read()
+                if not ok:
+                    break
+                if is_file and realtime:                   # pace files like a camera would
+                    delay = t0 + n / fps - time.monotonic()
+                    if delay > 0:
+                        time.sleep(delay)
+                n += 1
+                yield frame
+        finally:
+            cap.release()           # also runs when the consumer closes the generator (source switch)
         if is_file and not loop:
             return
         time.sleep(0.2)

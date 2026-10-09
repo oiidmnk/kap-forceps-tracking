@@ -32,6 +32,23 @@ By default the stack plays `data/video/forceps_lev1.mp4` in a loop at real-time 
 Calibrate eye/trocars in the orchestrator (`:8090`); defaults live in `config/default_calibration.json`
 (eye centre/radius are set for the 1080² sample footage – adjust for other cameras).
 
+### Source & eye circle (orchestrator UI, `http://localhost:8090`)
+
+The top panel **Source & eye circle** controls the detector at runtime:
+
+* **Source** – pick a video file from `data/video`, scan local capture devices, or type a device index / file path /
+  `rtsp://` / `http://` URL. Switching the source relearns the background (~8 s).
+* **Circle** – drag it around the retina (drag inside = move, drag the edge or scroll = resize, drag on empty area =
+  new circle, *Auto-detect* fits the bright retina). *Apply circle* sends it to the detector.
+* **What the pipeline gets** – only the circle content, everything outside black, as a **1:1 square** (1080², shown on
+  the right). Detections, the live view, and the points sent to the stream are all in that normalised space, so the
+  eye calibration is re-based automatically (centre = 540/540, radius = 540).
+* **Detector** (collapsible) – which detector the UI controls: `http://detector:8000` (Docker) or
+  `http://host.docker.internal:8001` for the native one started with `make live-cam` (needed for USB capture cards on
+  macOS; stop the Docker detector first: `docker compose stop detector`).
+
+Source and circle are persisted (`detector-state` volume / `.detector_state.json` natively).
+
 ### Live footage
 
 | source | how |
@@ -40,7 +57,12 @@ Calibrate eye/trocars in the orchestrator (`:8090`); defaults live in `config/de
 | local webcam / capture card | Docker on macOS cannot see cameras: `make live-cam` (`CAM=1` for another index) runs the detector natively and pushes to the dockerised orchestrator; view at `:8001` |
 | other file | put it under `data/` and set `SOURCE=/data/…` |
 
-Non-square frames are centre-cropped to a square; returned coordinates are in the **original** pixel space.
+Without a circle, non-square frames are centre-cropped to a square and coordinates are in the **original** pixel
+space; with a circle they are in the normalised square (see above).
+
+`FORCEPS_ANGLE` (degrees, default `0` = off) adds a colour-direction cue for forceps that are as saturated as the
+retina (seen on some capture cards). It is not validated across scenes – tune per setup, values below ~10 hurt the
+simulator shadow detection.
 
 ### The background
 
@@ -49,7 +71,8 @@ Shadows are found as "darker than the tool-free retina", so the detector needs a
 * **static** – `data/background.png` (median of the sample video). Default; most accurate.
 * **learned** – set `BACKGROUND_PATH=` (empty). The detector collects ~30 frames over `BOOTSTRAP_SECONDS` (default 8 s)
   while tools move, builds a per-pixel bright percentile, then keeps adapting where no tool is. Use this for new
-  cameras/scenes. `POST /background/reset` relearns. Until a background exists a weaker single-frame fallback is used.
+  cameras/scenes. `POST /background/reset` · `GET/POST /config` (source + circle) · `GET /sources` · `GET /preview.jpg` ·
+`GET /autocircle` · `GET /background.jpg` relearns. Until a background exists a weaker single-frame fallback is used.
 
 ## How it works
 
@@ -67,7 +90,8 @@ Throughput ≈ 20 ms/frame at 1080² (30 fps real-time with headroom).
 
 `GET /` viewer · `GET /live.mjpg` · `GET /state` · `GET /health` · `POST /detect` (image → JSON) ·
 `POST /detect/annotated` (image → JPEG) · `POST /segment` (orchestrator contract) · `POST /background` (image) ·
-`POST /background/reset`
+`POST /background/reset` · `GET/POST /config` (source + circle) · `GET /sources` · `GET /preview.jpg` ·
+`GET /autocircle` · `GET /background.jpg`
 
 ## Accuracy (`make eval`, 43 hand-labelled frames in `data/annotated`)
 

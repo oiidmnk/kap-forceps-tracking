@@ -63,7 +63,7 @@ def test_non_square_frame_maps_back_to_original_pixels():
 
 @needs_data
 def test_segment_endpoint_matches_orchestrator_contract():
-    client = TestClient(create_app(Settings(background_path=str(BG), source="")))
+    client = TestClient(create_app(Settings(background_path=str(BG), source="", state_path="")))
     r = client.post("/segment", files={"image": ("f.png", FRAME.read_bytes(), "image/png")})
     assert r.status_code == 200
     names = {i["class_name"] for i in r.json()["instances"]}
@@ -77,3 +77,85 @@ def test_background_learning_from_samples():
     for i in range(29):
         assert not bg.add_sample(frame)
     assert bg.add_sample(frame) and bg.state == "static"
+
+
+def test_detect_without_background_does_not_crash():
+    d = Detector(Settings(background_path=""))
+    out = d.detect(np.zeros((1080, 1920, 3), np.uint8))
+    assert not out.forceps.ok and not out.shadow.ok
+
+
+def test_eye_disc_found_in_small_retina_circle():
+    from detector.background import find_eye_disc
+    img = np.zeros((1080, 1080, 3), np.uint8)
+    cv2.circle(img, (600, 500), 300, (40, 70, 180), -1)
+    cx, cy, r = find_eye_disc(img)
+    assert abs(cx - 600) < 12 and abs(cy - 500) < 12 and abs(r - 300) < 12
+
+
+def _frame_with_retina(w=1920, h=1080, cx=975, cy=555, r=340):
+    img = np.zeros((h, w, 3), np.uint8)
+    cv2.circle(img, (cx, cy), r, (40, 70, 180), -1)
+    cv2.circle(img, (cx - r - 40, cy), 60, (200, 200, 200), -1)        # something outside the circle
+    return img
+
+
+def test_normalize_is_square_black_outside_circle():
+    d = Detector(Settings(background_path=""))
+    d.roi = (975.0, 555.0, 340.0)
+    out = d.normalize(_frame_with_retina())
+    assert out.shape == (1080, 1080, 3)
+    assert out[540, 540].tolist() != [0, 0, 0]                 # circle content kept
+    assert out[5, 5].tolist() == [0, 0, 0] and out[1075, 1075].tolist() == [0, 0, 0]   # corners black
+    assert out.max(axis=2)[540, :40].max() > 0                 # circle touches the left edge, content there
+
+
+def test_normalize_handles_circle_partly_outside_frame():
+    d = Detector(Settings(background_path=""))
+    d.roi = (100.0, 100.0, 300.0)
+    assert d.normalize(_frame_with_retina()).shape == (1080, 1080, 3)
+
+
+def test_runtime_config_roundtrip(tmp_path):
+    from detector.runtime import RuntimeConfig
+    p = tmp_path / "c.json"
+    rt = RuntimeConfig("a.mp4", str(p))
+    rt.update(source="0", circle={"cx": 10, "cy": 20, "r": 50})
+    again = RuntimeConfig("zzz", str(p))
+    assert again.source == "0" and again.circle == (10.0, 20.0, 50.0)
+    with pytest.raises(ValueError):
+        rt.update(circle={"cx": 1, "cy": 1, "r": 5})
+
+
+def test_config_endpoints(tmp_path):
+    client = TestClient(create_app(Settings(background_path="", source="", state_path=str(tmp_path / "c.json"))))
+    with client:
+        assert client.get("/config").json()["circle"] is None
+        r = client.post("/config", json={"circle": {"cx": 500, "cy": 400, "r": 300}, "source": "/data/video/x.mp4"})
+        assert r.status_code == 200 and r.json()["circle"]["r"] == 300 and r.json()["normalized_size"] == 1080
+        assert client.post("/config", json={"circle": {"cx": 1, "cy": 1, "r": 2}}).status_code == 400
+        assert client.post("/config", json={"clear_circle": True}).json()["circle"] is None
+        assert "files" in client.get("/sources").json()
+
+
+def test_reset_endpoint_bumps_reset_counter(tmp_path):
+    app = create_app(Settings(background_path="", source="", state_path=str(tmp_path / "c.json")))
+    with TestClient(app) as client:
+        before = app.state.runtime.reset_count
+        assert client.post("/reset").status_code == 200
+        assert app.state.runtime.reset_count == before + 1
+
+
+def test_hard_reset_discards_background(tmp_path):
+    from detector.live import LiveWorker
+    from detector.runtime import RuntimeConfig
+    cfg = Settings(background_path=str(BG) if BG.exists() else "", source="x", state_path="")
+    det = Detector(cfg)
+    rt = RuntimeConfig("x", None)
+    w = LiveWorker(det, cfg, rt)
+    w._apply(*rt.snapshot())                       # first apply keeps the loaded background
+    if BG.exists():
+        assert det.bg.state == "static"
+    rt.restart()
+    w._apply(*rt.snapshot())
+    assert det.bg.state == "none" and det.bg.v is None

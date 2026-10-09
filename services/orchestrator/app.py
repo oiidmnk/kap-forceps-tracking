@@ -15,6 +15,9 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from .source import DEFAULT_PATH as DETECTOR_STATE_PATH
+from .source import DetectorStore, add_source_routes
+
 CALIBRATION_KEYS = [
     "light_rot_up",
     "light_rot_clock",
@@ -421,6 +424,7 @@ def create_app(
     stream_url: str = os.getenv("STREAM_URL", DEFAULT_STREAM_URL),
     segmentation_transport: httpx.AsyncBaseTransport | None = None,
     stream_transport: httpx.AsyncBaseTransport | None = None,
+    detector_state_path: Path = DETECTOR_STATE_PATH,
 ) -> FastAPI:
     service = FastAPI(title="Forceps Orchestrator", version="0.1.0")
     service.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -586,6 +590,12 @@ def create_app(
             "stream_result": stream_result,
         }
 
+    add_source_routes(
+        service,
+        apply_calibration,
+        DetectorStore(detector_state_path, os.getenv("DETECTOR_URL") or segmentation_url),
+        segmentation_transport,
+    )
     return service
 
 

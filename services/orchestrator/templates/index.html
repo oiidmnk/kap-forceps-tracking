@@ -16,6 +16,54 @@
       <p>Upload an image or select a video frame, segment the forceps points, and update the live stream.</p>
     </header>
 
+    <section class="panel source-panel" id="source-panel">
+      <div class="source-head">
+        <h2>Source &amp; eye circle</h2>
+        <span id="source-status" class="status"></span>
+      </div>
+      <p class="hint">
+        Pick the video source, then drag a circle around the retina. The rest of the pipeline receives only the
+        circle content, everything outside black, as a square 1:1 image.
+      </p>
+
+      <div class="source-controls">
+        <label class="inline">Source
+          <select id="source-select"></select>
+        </label>
+        <input id="source-custom" type="text" placeholder="device index, file path, rtsp:// or http:// URL">
+        <button id="source-use" type="button">Use source</button>
+        <button id="source-reset" type="button" class="secondary" title="Restart the video from the beginning and discard the learned background">Reset &amp; relearn</button>
+        <button id="source-scan" type="button" class="secondary" title="Probe capture devices (needs a detector running on the host)">Scan cameras</button>
+        <details class="detector-url">
+          <summary>Detector</summary>
+          <input id="detector-url" type="text" list="detector-url-presets" spellcheck="false">
+          <datalist id="detector-url-presets">
+            <option value="http://detector:8000">
+            <option value="http://host.docker.internal:8001">
+          </datalist>
+          <button id="detector-url-save" type="button" class="secondary small">Set</button>
+        </details>
+      </div>
+
+      <div class="source-grid">
+        <div class="source-col">
+          <h3>Source frame &mdash; draw the circle</h3>
+          <div class="circle-stage"><canvas id="circle-canvas" width="640" height="360"></canvas></div>
+          <div class="actions">
+            <button id="circle-apply" type="button" disabled>Apply circle</button>
+            <button id="circle-auto" type="button" class="secondary">Auto-detect</button>
+            <button id="circle-clear" type="button" class="secondary">No circle</button>
+            <span id="circle-readout" class="calib-readout inline-readout"></span>
+          </div>
+          <p class="hint small">Drag inside to move &middot; drag the edge or scroll to resize &middot; drag on empty area to draw a new one.</p>
+        </div>
+        <div class="source-col">
+          <h3>Pipeline input &mdash; normalised 1:1</h3>
+          <div class="circle-stage square"><img id="normalized-view" alt="normalised pipeline input"></div>
+        </div>
+      </div>
+    </section>
+
     <div class="layout">
       <section class="panel">
         <h2>Upload</h2>
@@ -175,5 +223,6 @@
   </main>
 
   <script src="{{ url_for('static', path='app.js') }}" defer></script>
+  <script src="{{ url_for('static', path='source.js') }}" defer></script>
 </body>
 </html>
