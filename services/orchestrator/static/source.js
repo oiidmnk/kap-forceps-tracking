@@ -6,6 +6,7 @@
   const canvas = $('#circle-canvas'), ctx = canvas.getContext('2d')
   const readout = $('#circle-readout')
   const applyBtn = $('#circle-apply'), autoBtn = $('#circle-auto'), clearBtn = $('#circle-clear')
+  const drawBtn = $('#circle-draw'), revertBtn = $('#circle-revert')
   const normView = $('#normalized-view')
   const detectorUrl = $('#detector-url')
   const uploadForm = $('#source-upload-form'), uploadInput = $('#source-upload')
@@ -23,6 +24,10 @@
   let circle = null           // working circle {cx, cy, r} in raw-frame px
   let savedCircle = null      // what the detector currently uses
   let drag = null, dirty = false
+  let drawing = false
+  let editorRevision = 0
+  let sourceRequestId = 0
+  let savingCircle = false
   let loaded = false
   let switchingSource = false
 
@@ -51,7 +56,10 @@
   }
 
   async function loadSource() {
+    const revision = editorRevision
+    const requestId = ++sourceRequestId
     const data = await api('/api/source')
+    if (requestId !== sourceRequestId || revision !== editorRevision || drag || drawing || savingCircle) return
     detectorUrl.value = data.detector_url
     if (data.error) { setStatus(data.error, false); return }
     fillSources(data.sources, data.config.source)
@@ -134,55 +142,171 @@
       ctx.beginPath(); ctx.arc(circle.cx * s, circle.cy * s, circle.r * s, 0, Math.PI * 2)
       ctx.lineWidth = 2; ctx.strokeStyle = dirty ? '#f59e0b' : '#22c55e'; ctx.stroke()
       ctx.beginPath(); ctx.arc(circle.cx * s, circle.cy * s, 4, 0, Math.PI * 2); ctx.fillStyle = ctx.strokeStyle; ctx.fill()
+      const handleRadius = 6 * canvas.width / canvas.getBoundingClientRect().width
+      for (const handle of handles()) {
+        ctx.beginPath(); ctx.arc(handle.x * s, handle.y * s, handleRadius, 0, Math.PI * 2)
+        ctx.fillStyle = '#fff'; ctx.fill(); ctx.stroke()
+      }
       ctx.restore()
     }
   }
   function updateReadout() {
-    readout.textContent = circle ? `c=(${circle.cx.toFixed(0)}, ${circle.cy.toFixed(0)})  r=${circle.r.toFixed(0)}` : 'no circle'
-    applyBtn.disabled = !(dirty && circle)
+    readout.textContent = circle ? `c=(${circle.cx.toFixed(0)}, ${circle.cy.toFixed(0)})  r=${circle.r.toFixed(0)} · ${dirty ? 'Unsaved adjustments' : 'Applied'}` : 'no circle'
+    applyBtn.disabled = !(dirty && circle) || !!drag || drawing || savingCircle
+    revertBtn.disabled = !dirty && !drawing
+    revertBtn.hidden = !dirty && !drawing
+    drawBtn.setAttribute('aria-pressed', String(drawing))
+    canvas.style.cursor = drawing || !circle ? 'crosshair' : 'default'
     draw()
   }
 
+  function handles() {
+    return [
+      { x: circle.cx + circle.r, y: circle.cy, cursor: 'ew-resize' },
+      { x: circle.cx - circle.r, y: circle.cy, cursor: 'ew-resize' },
+      { x: circle.cx, y: circle.cy + circle.r, cursor: 'ns-resize' },
+      { x: circle.cx, y: circle.cy - circle.r, cursor: 'ns-resize' },
+    ]
+  }
+  function hitHandle(point) {
+    return circle && handles().find((handle) => Math.hypot(point.x - handle.x, point.y - handle.y) <= 14 * point.k)
+  }
+  function markChanged() {
+    editorRevision++
+    dirty = circle === null || savedCircle === null ? circle !== savedCircle :
+      circle.cx !== savedCircle.cx || circle.cy !== savedCircle.cy || circle.r !== savedCircle.r
+    updateReadout()
+  }
+  function finishDrag(cancel = false) {
+    if (!drag) return
+    const previous = drag
+    drag = null
+    if (cancel || !previous.started) circle = previous.original
+    if (canvas.hasPointerCapture(previous.pointerId)) canvas.releasePointerCapture(previous.pointerId)
+    markChanged()
+  }
+  drawBtn.addEventListener('click', () => {
+    finishDrag(true)
+    drawing = !drawing
+    editorRevision++
+    updateReadout()
+    canvas.focus({ preventScroll: true })
+  })
+  revertBtn.addEventListener('click', () => {
+    finishDrag(true)
+    circle = savedCircle ? { ...savedCircle } : null
+    drawing = false
+    markChanged()
+  })
   canvas.addEventListener('pointerdown', (ev) => {
-    if (!frameSize) return
-    canvas.setPointerCapture(ev.pointerId)
+    if (!frameSize || ev.button !== 0 || drag) return
+    canvas.focus({ preventScroll: true })
     const p = toRaw(ev)
-    if (circle) {
-      const d = Math.hypot(p.x - circle.cx, p.y - circle.cy)
-      if (Math.abs(d - circle.r) < 14 * p.k) { drag = { mode: 'resize' }; return }
-      if (d < circle.r) { drag = { mode: 'move', dx: circle.cx - p.x, dy: circle.cy - p.y }; return }
-    }
-    circle = { cx: p.x, cy: p.y, r: 20 }; drag = { mode: 'resize' }; dirty = true; updateReadout()
+    const original = circle ? { ...circle } : null
+    let mode
+    if (drawing || !circle) mode = 'draw'
+    else if (hitHandle(p)) mode = 'resize'
+    else if (Math.hypot(p.x - circle.cx, p.y - circle.cy) < circle.r) mode = 'move'
+    else return
+    ev.preventDefault()
+    canvas.setPointerCapture(ev.pointerId)
+    drag = { mode, original, start: p, pointerId: ev.pointerId, started: false }
+    editorRevision++
+    updateReadout()
   })
   canvas.addEventListener('pointermove', (ev) => {
-    if (!drag) return
-    const p = toRaw(ev)
-    if (drag.mode === 'move') { circle.cx = p.x + drag.dx; circle.cy = p.y + drag.dy }
-    else circle.r = Math.max(20, Math.hypot(p.x - circle.cx, p.y - circle.cy))
-    dirty = true; updateReadout()
+    const p = frameSize && toRaw(ev)
+    if (!p) return
+    if (!drag) {
+      const handle = hitHandle(p)
+      canvas.style.cursor = drawing || !circle ? 'crosshair' : handle ? handle.cursor : Math.hypot(p.x - circle.cx, p.y - circle.cy) < circle.r ? 'move' : 'default'
+      return
+    }
+    if (ev.pointerId !== drag.pointerId) return
+    if (!drag.started && Math.hypot(p.x - drag.start.x, p.y - drag.start.y) < 3 * p.k) return
+    drag.started = true
+    const gain = ev.shiftKey ? 0.2 : 1
+    if (drag.mode === 'draw') {
+      circle = { cx: drag.start.x, cy: drag.start.y, r: Math.max(20, Math.hypot(p.x - drag.start.x, p.y - drag.start.y)) }
+      drawing = false
+    } else if (drag.mode === 'move') {
+      circle.cx = drag.original.cx + (p.x - drag.start.x) * gain
+      circle.cy = drag.original.cy + (p.y - drag.start.y) * gain
+    } else {
+      const distance = Math.hypot(p.x - drag.original.cx, p.y - drag.original.cy)
+      const startDistance = Math.hypot(drag.start.x - drag.original.cx, drag.start.y - drag.original.cy)
+      circle.r = Math.max(20, drag.original.r + (distance - startDistance) * gain)
+    }
+    markChanged()
   })
-  const end = () => { drag = null }
-  canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end)
-  canvas.addEventListener('wheel', (ev) => {
-    if (!circle) return
+  canvas.addEventListener('pointerup', (ev) => { if (drag?.pointerId === ev.pointerId) finishDrag() })
+  canvas.addEventListener('pointercancel', (ev) => { if (drag?.pointerId === ev.pointerId) finishDrag() })
+  canvas.addEventListener('lostpointercapture', (ev) => { if (drag?.pointerId === ev.pointerId) finishDrag() })
+  canvas.addEventListener('keydown', (ev) => {
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) return
+    if (ev.key === 'Escape') {
+      ev.preventDefault()
+      finishDrag(true)
+      drawing = false
+      editorRevision++
+      updateReadout()
+      return
+    }
+    if (!circle || drag || drawing) return
+    const step = ev.shiftKey ? 10 : 1
+    switch (ev.key) {
+      case 'ArrowLeft': circle.cx -= step; break
+      case 'ArrowRight': circle.cx += step; break
+      case 'ArrowUp': circle.cy -= step; break
+      case 'ArrowDown': circle.cy += step; break
+      case '+': case '=': circle.r += 1; break
+      case '-': case '−': case '_': circle.r = Math.max(20, circle.r - 1); break
+      default: return
+    }
     ev.preventDefault()
-    circle.r = Math.max(20, circle.r * (ev.deltaY < 0 ? 1.03 : 0.97)); dirty = true; updateReadout()
-  }, { passive: false })
+    markChanged()
+  })
 
   applyBtn.addEventListener('click', async () => {
+    if (!circle || drag || drawing || savingCircle) return
+    const appliedCircle = { ...circle }
+    const revision = editorRevision
+    savingCircle = true
+    sourceRequestId++
+    updateReadout()
     try {
-      const res = await post('/api/source/config', { circle })
-      savedCircle = res.config.circle; dirty = false; updateReadout()
+      const res = await post('/api/source/config', { circle: appliedCircle })
+      savedCircle = res.config.circle
+      if (revision === editorRevision && !drag && !drawing) circle = { ...savedCircle }
+      markChanged()
       setStatus('circle applied · eye calibration set to the normalised square · background relearns', true)
     } catch (e) { setStatus(e.message, false) }
+    finally { savingCircle = false; updateReadout() }
   })
   autoBtn.addEventListener('click', async () => {
-    try { circle = await api('/api/source/autocircle'); dirty = true; updateReadout() }
+    const revision = editorRevision
+    try {
+      const detectedCircle = await api('/api/source/autocircle')
+      if (revision !== editorRevision || drag || savingCircle) return
+      circle = detectedCircle; drawing = false; markChanged(); canvas.focus({ preventScroll: true })
+    }
     catch (e) { setStatus(e.message, false) }
   })
   clearBtn.addEventListener('click', async () => {
-    try { await post('/api/source/config', { clear_circle: true }); circle = null; savedCircle = null; dirty = false; updateReadout(); setStatus('no circle: centre crop of the frame', true) }
+    if (savingCircle) return
+    const revision = editorRevision
+    savingCircle = true
+    sourceRequestId++
+    updateReadout()
+    try {
+      await post('/api/source/config', { clear_circle: true })
+      savedCircle = null
+      if (revision === editorRevision && !drag) { circle = null; drawing = false }
+      markChanged()
+      setStatus('no circle: centre crop of the frame', true)
+    }
     catch (e) { setStatus(e.message, false) }
+    finally { savingCircle = false; updateReadout() }
   })
 
   // ---- preview loop ---------------------------------------------------------
@@ -192,14 +316,18 @@
       if (r.ok) {
         const w = Number(r.headers.get('X-Frame-Width')), h = Number(r.headers.get('X-Frame-Height'))
         const bmp = await createImageBitmap(await r.blob())
-        frame = bmp
-        if (!frameSize || frameSize[0] !== w || frameSize[1] !== h) { frameSize = [w, h]; canvas.height = Math.round(canvas.width * h / w) }
-        draw()
+        if (drag) bmp.close()
+        else {
+          if (frame) frame.close()
+          frame = bmp
+          if (!frameSize || frameSize[0] !== w || frameSize[1] !== h) { frameSize = [w, h]; canvas.height = Math.round(canvas.width * h / w) }
+          draw()
+        }
       }
     } catch (_) { /* detector offline: keep last frame */ }
     setTimeout(refreshFrame, drag ? 400 : 700)
   }
   loadSource().catch((e) => setStatus(e.message, false))
-  setInterval(() => { if (!dirty && !drag && !switchingSource) loadSource().catch(() => {}) }, 5000)
+  setInterval(() => { if (!dirty && !drag && !drawing && !savingCircle && !switchingSource) loadSource().catch(() => {}) }, 5000)
   refreshFrame()
 })()

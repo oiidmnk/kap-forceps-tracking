@@ -59,14 +59,20 @@
       <div class="source-grid">
         <div class="source-col">
           <h3>Source frame &mdash; draw the circle</h3>
-          <div class="circle-stage"><canvas id="circle-canvas" width="640" height="360"></canvas></div>
+          <div class="circle-stage"><canvas id="circle-canvas" width="640" height="360" tabindex="0" aria-label="Eye circle editor" aria-describedby="circle-help"></canvas></div>
           <div class="actions">
             <button id="circle-apply" type="button" disabled>Apply circle</button>
             <button id="circle-auto" type="button" class="secondary">Auto-detect</button>
-            <button id="circle-clear" type="button" class="secondary">No circle</button>
+            <button id="circle-draw" type="button" class="secondary" aria-pressed="false">Draw new circle</button>
+            <button id="circle-revert" type="button" class="secondary" disabled hidden>Revert changes</button>
             <span id="circle-readout" class="calib-readout inline-readout"></span>
           </div>
-          <p class="hint small">Drag inside to move &middot; drag the edge or scroll to resize &middot; drag on empty area to draw a new one.</p>
+          <details class="circle-options">
+            <summary>More options</summary>
+            <button id="circle-clear" type="button" class="secondary">Remove applied circle</button>
+            <p class="hint small">Immediately switches the pipeline to a centre crop without a circle mask.</p>
+          </details>
+          <p id="circle-help" class="hint small">Drag inside to move &middot; drag a handle to resize &middot; Shift-drag for fine adjustment. Click the editor, then use arrow keys to move 1 source pixel (Shift: 10 pixels) and + / − to change the radius by 1 pixel. Escape cancels a drag or redraw. Changes take effect only after Apply.</p>
         </div>
         <div class="source-col">
           <h3>Pipeline input &mdash; normalised 1:1</h3>

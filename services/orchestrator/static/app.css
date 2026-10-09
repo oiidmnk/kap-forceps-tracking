@@ -120,6 +120,9 @@ button.pick-left-shadow { --pick-color:#67c1d2; } button.pick-right-shadow { --p
 .circle-stage { background:#000; border:1px solid var(--border); border-radius:7px; overflow:hidden; line-height:0; }
 .circle-stage canvas, .circle-stage img { width:100%; height:auto; display:block; touch-action:none; }
 .circle-stage canvas { cursor:crosshair; }
+.circle-stage canvas:focus-visible { outline: 2px solid #f59e0b; outline-offset: -3px; }
+.circle-options { margin-top: 10px; }
+.circle-options summary { cursor: pointer; color: var(--muted); font-size: 12px; }
 .circle-stage:not(.square) { max-width:720px; }
 .circle-stage.square { aspect-ratio:1; }
 .circle-stage.square img { width:100%; height:100%; object-fit:contain; }
