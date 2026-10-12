@@ -4,9 +4,8 @@ import { shadowOf, forcepsRenderPose } from '../geometry.js'
 // Estimated shadows of the forceps tips on the retina, cast by the light pipe:
 // a ray from the light tip through each forceps tip onto the sphere interior.
 // Shows the rays, the two shadow points, and the line joining them.
-// Rays pass through the *rendered* tip positions (jaw spread amplified by
-// VIEW_JAW_SPREAD), so the shadow line visibly runs through the drawn tips
-// rather than the raw, un-amplified tracking coordinates.
+// Rendered and tracked tip positions coincide, so rays and distance guides
+// meet the same points on the instrument.
 export default function Shadow({ frame, showRays = true }) {
   if (!frame?.light_tip) return null
   const { light_tip } = frame

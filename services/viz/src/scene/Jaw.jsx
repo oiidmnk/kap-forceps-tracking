@@ -25,7 +25,13 @@ export default function Jaw({
     const op = new THREE.Vector3(...openingDir)
     // Thin axis = normal to the opening plane (jaw axis × opening direction).
     let xAxis = new THREE.Vector3().crossVectors(yAxis, op)
-    if (xAxis.lengthSq() < 1e-9) xAxis.set(1, 0, 0) // jaws perfectly closed
+    if (xAxis.lengthSq() < 1e-9) {
+      // Keep the basis orthogonal for closed jaws in any shaft orientation.
+      const reference = Math.abs(yAxis.x) < 0.9
+        ? new THREE.Vector3(1, 0, 0)
+        : new THREE.Vector3(0, 1, 0)
+      xAxis.crossVectors(yAxis, reference)
+    }
     xAxis.normalize()
     const zAxis = new THREE.Vector3().crossVectors(xAxis, yAxis).normalize()
 

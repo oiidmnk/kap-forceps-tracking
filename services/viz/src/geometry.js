@@ -1,7 +1,7 @@
 // Pure geometry helpers. Vectors are plain [x, y, z] arrays in mm,
 // origin at the eye-globe center.
 
-import { EYE_RADIUS_MM, JAW_LENGTH_MM, VIEW_JAW_SPREAD } from './config.js'
+import { EYE_RADIUS_MM, JAW_LENGTH_MM } from './config.js'
 
 export const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 export const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
@@ -68,29 +68,20 @@ export function forcepsPose(tipLeft, tipRight, trocar) {
   return { jawCenter, shaftDir, openingMm }
 }
 
-// Full render-space pose: the hinge and the two tip positions as they're
-// actually drawn (jaw opening amplified by VIEW_JAW_SPREAD for legibility).
-// Anything that needs to frame or measure against what's on screen — not just
-// the raw tracking data — should read from this, so the camera and the
-// geometry it's framing never disagree.
+// Render the tracked tips at their measured positions. The instrument,
+// distance reticle, shadows, and scope must all use the same coordinates.
+// Only the untracked hinge is inferred from the nominal jaw length.
 export function forcepsRenderPose(frame) {
   const { tip_left, tip_right, trocar } = frame
   const { jawCenter, shaftDir, openingMm } = forcepsPose(tip_left, tip_right, trocar)
   const hinge = sub(jawCenter, scale(shaftDir, JAW_LENGTH_MM))
-
-  const renderTip = (tip) => {
-    const v = sub(tip, jawCenter)
-    const along = scale(shaftDir, dot(v, shaftDir))
-    const perp = sub(v, along)
-    return add(jawCenter, add(along, scale(perp, VIEW_JAW_SPREAD)))
-  }
 
   return {
     jawCenter,
     shaftDir,
     openingMm,
     hinge,
-    tipLeftRender: renderTip(tip_left),
-    tipRightRender: renderTip(tip_right),
+    tipLeftRender: [...tip_left],
+    tipRightRender: [...tip_right],
   }
 }

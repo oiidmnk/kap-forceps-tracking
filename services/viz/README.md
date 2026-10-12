@@ -67,6 +67,10 @@ Only the selected version is loaded, keeping their styles isolated.
 
 ## Workstation controls
 
+- **Instrument geometry:** displayed tips use the original tracking coordinates,
+  without amplifying jaw opening. Distance guides and projected shadows share
+  those positions in both the overview and proximity scope; the hinge remains
+  an estimate based on nominal jaw length.
 - **Data source:** Simulation, Live tracking, or Manual simulation. Simulated
   confidence is not presented as measured telemetry. Calibration is unknown
   unless the live source explicitly reports a `calibrated` boolean.

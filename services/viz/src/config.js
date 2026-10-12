@@ -22,23 +22,19 @@ function defaultWsUrl() {
 }
 export const WS_URL = import.meta.env?.VITE_WS_URL || defaultWsUrl()
 
-// Physical size hints for rendering the instrument (mm). A real 23–25 gauge
-// microforceps shaft is ~0.5–0.6 mm diameter with fine jaws that taper to a point.
-export const SHAFT_RADIUS_MM = 0.28 // shaft ~0.56 mm dia
-export const JAW_BASE_RADIUS_MM = 0.22 // jaw half-width at the hinge
-export const JAW_TIP_RADIUS_MM = 0.05 // jaws taper to a fine tip
+// Physical size hints for rendering the instrument (mm), approximating a
+// slender 27-gauge-scale shaft with fine jaws that taper to a point.
+// Nominal visualization dimensions, not calibrated from the reference image.
+export const SHAFT_RADIUS_MM = 0.20 // shaft ~0.40 mm dia
+export const JAW_BASE_RADIUS_MM = 0.09 // slender jaw half-width at the hinge
+export const JAW_TIP_RADIUS_MM = 0.025 // jaws taper to a fine tip
 export const JAW_FLATTEN = 0.32 // blade thickness / width ratio (flat jaw)
-export const TIP_INDICATOR_MM = 0.1 // subtle safety-color accent at the very tip
+export const TIP_INDICATOR_MM = 0.045 // small accent centered on the tracked tip
 
 // Rendered jaw length (mm). The hinge is placed this far back along the shaft
 // from the tips, so the two jaws form a proper V instead of a flat line.
 // ~1.5 mm matches typical vitreoretinal microforceps jaw length.
 export const JAW_LENGTH_MM = 1.5
-
-// Render-only multiplier on the sideways jaw opening, so the two prongs are
-// legible even when the real forceps is nearly closed. 1 = true opening.
-// Tuned with JAW_LENGTH_MM for a realistic ~15°–37° full opening angle.
-export const VIEW_JAW_SPREAD = 2.4
 
 // --- Clinical view presets --------------------------------------------------
 // Named camera framings for the main overview (+Y up; instruments enter +Y;
