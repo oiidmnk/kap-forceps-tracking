@@ -1,13 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { WS_URL } from '../config.js'
 import { sampleFrame } from '../feed/mockGenerator.js'
 import { parseTrackingFrame, trackingIsStale } from '../feed/trackingState.js'
 
-export function useTrackingFeed(source = 'mock') {
-  const [state, setState] = useState({ source, frame: null, status: 'idle' })
+// Connects the selected data source (mock generator or live WebSocket) and
+// forwards every frame to `onFrame(frame, status, now)`. No React state: the
+// tracking pipeline decides which components update and how often.
+export function useTrackingFeed(source, onFrame) {
   useEffect(() => {
-    const publish = (frame, status) => setState({ source, frame, status })
-    publish(null, source === 'live' ? 'connecting' : source)
+    const publish = (frame, status) => onFrame(frame, status, performance.now())
     if (source === 'mock') {
       const start = performance.now()
       let raf
@@ -18,7 +19,7 @@ export function useTrackingFeed(source = 'mock') {
       raf = requestAnimationFrame(tick)
       return () => cancelAnimationFrame(raf)
     }
-    if (source === 'debug') return
+    if (source !== 'live') return
 
     let ws,
       closed = false,
@@ -61,9 +62,5 @@ export function useTrackingFeed(source = 'mock') {
       clearInterval(staleTimer)
       ws?.close()
     }
-  }, [source])
-  // Suppress the prior source synchronously, before effect cleanup runs.
-  return state.source === source
-    ? state
-    : { frame: null, status: source === 'live' ? 'connecting' : source }
+  }, [source, onFrame])
 }

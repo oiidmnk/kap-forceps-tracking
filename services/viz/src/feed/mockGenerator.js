@@ -2,7 +2,7 @@
 // dashboard runs standalone (no Python) with realistic pivoting motion.
 // Produces the same message shape the live feed emits.
 
-import { EYE_RADIUS_MM, VIEW_PRESETS } from '../config.js'
+import { EYE_RADIUS_MM, JAW_LENGTH_MM, VIEW_PRESETS } from '../config.js'
 import { add, sub, scale, normalize, cross, dot } from '../geometry.js'
 
 // +Y-up convention: instruments enter near the top (+Y); retina is the lower
@@ -47,7 +47,7 @@ export function poseFrame({ depth, wobbleU, wobbleV, half, roll = 0 }) {
 
   const jawCenter = add(TROCAR, scale(shaftDir, depth))
 
-  const jawLen = 1.2
+  const jawLen = JAW_LENGTH_MM
   // Jaw spread axis. Derive it from the *fixed* in-plane reference (u,
   // perpendicular to the constant inward direction), projected perpendicular to
   // the CURRENT shaft. This keeps the jaw plane continuous as the shaft wobbles.
@@ -85,9 +85,9 @@ export function sampleFrame(t) {
   // Insertion depth keeps the tips in the lower (-Y) hemisphere (retina side).
   // ~16 mm puts tips just below the equator; ~22 mm brings them near the retina
   // wall, exercising the Distance-to-Retina safety states.
-  const depth = 19.0 + 3.0 * Math.sin(s * 0.4)
-  // Jaws open/close within a realistic microforceps range (~7°–18° full angle).
-  const half = 0.06 + 0.1 * (0.5 + 0.5 * Math.sin(s * 1.3)) // radians (half-angle)
+  const depth = 18.55 + 3.0 * Math.sin(s * 0.4)
+  // Jaws open/close within the simulator's range: tip separation ~0.1–0.7 mm.
+  const half = 0.03 + 0.18 * (0.5 + 0.5 * Math.sin(s * 1.3)) // radians (half-angle)
 
   return { t, confidence: 0.99, ...poseFrame({ depth, wobbleU, wobbleV, half }) }
 }

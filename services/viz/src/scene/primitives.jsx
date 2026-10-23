@@ -12,6 +12,13 @@ export function SteelMaterial(props) {
   return <meshStandardMaterial color="#b9c4cf" metalness={0.85} roughness={0.32} {...props} />
 }
 
+// Material props for the faded "last known pose" shown after tracking is lost.
+// Always returns every key so switching back restores opaque rendering.
+const GHOST_OPACITY = 0.28
+export function ghostMaterial(ghost) {
+  return { transparent: ghost, opacity: ghost ? GHOST_OPACITY : 1, depthWrite: !ghost }
+}
+
 // Cylinder from a → b. The +Y (top) end of the cylinder maps onto b, so
 // radiusTop tapers the b end (e.g. jaw tips). Material goes in as children.
 export function Rod({ a, b, radius = 0.1, radiusTop, children, ...meshProps }) {
@@ -49,6 +56,26 @@ export function Cannula({ position, tint = '#8fb3d9' }) {
       <mesh rotation={[Math.PI / 2, 0, 0]}>
         <torusGeometry args={[FLANGE_R, 0.09, 12, 40]} />
         <meshStandardMaterial color={tint} metalness={0.8} roughness={0.4} />
+      </mesh>
+    </group>
+  )
+}
+
+// The shaft's continuation outside the eye, so the instrument reads as
+// entering through its trocar. `axis` points into the eye. It never casts the
+// instrument shadow — the sclera would block that light.
+const OUTSIDE_SHAFT_MM = 4
+
+export function OutsideShaft({ entry, axis, radius, ghost = false, ...material }) {
+  const quaternion = useMemo(
+    () => new THREE.Quaternion().setFromUnitVectors(UP, new THREE.Vector3(...axis).negate()),
+    [axis[0], axis[1], axis[2]]
+  )
+  return (
+    <group position={entry} quaternion={quaternion}>
+      <mesh position={[0, OUTSIDE_SHAFT_MM / 2, 0]}>
+        <cylinderGeometry args={[radius, radius, OUTSIDE_SHAFT_MM, 32]} />
+        <SteelMaterial {...material} {...ghostMaterial(ghost)} />
       </mesh>
     </group>
   )

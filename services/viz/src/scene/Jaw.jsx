@@ -1,50 +1,40 @@
-import { useMemo } from 'react'
-import * as THREE from 'three'
+import { useEffect, useMemo } from 'react'
+import { jawCenterline, sweepBlade } from './jawGeometry.js'
+import { ghostMaterial } from './primitives.jsx'
+import {
+  JAW_THICKNESS_MM,
+  JAW_WIDTH_BASE_MM,
+  JAW_WIDTH_TIP_MM,
+  JAW_HOOK_MM,
+} from '../config.js'
 
-// A single forceps jaw: a tapered blade from `from` (hinge) to `to` (tip).
-// Rendered flat — thin perpendicular to the opening plane — like a real
-// microforceps jaw, rather than a round cone. `openingDir` is the sideways
-// direction in which the jaws part; the blade lies in the plane spanned by the
-// jaw axis and that direction.
-export default function Jaw({
-  from,
-  to,
-  openingDir,
-  radiusFrom = 0.2,
-  radiusTo = 0.05,
-  flatten = 0.35,
-  color = '#e2e7ef',
-}) {
-  const { position, quaternion, height } = useMemo(() => {
-    const a = new THREE.Vector3(...from)
-    const b = new THREE.Vector3(...to)
-    const yAxis = new THREE.Vector3().subVectors(b, a)
-    const h = yAxis.length() || 1e-6
-    yAxis.normalize()
-
-    const op = new THREE.Vector3(...openingDir)
-    // Thin axis = normal to the opening plane (jaw axis × opening direction).
-    let xAxis = new THREE.Vector3().crossVectors(yAxis, op)
-    if (xAxis.lengthSq() < 1e-9) {
-      // Keep the basis orthogonal for closed jaws in any shaft orientation.
-      const reference = Math.abs(yAxis.x) < 0.9
-        ? new THREE.Vector3(1, 0, 0)
-        : new THREE.Vector3(0, 1, 0)
-      xAxis.crossVectors(yAxis, reference)
-    }
-    xAxis.normalize()
-    const zAxis = new THREE.Vector3().crossVectors(xAxis, yAxis).normalize()
-
-    const m = new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis)
-    const q = new THREE.Quaternion().setFromRotationMatrix(m)
-    const mid = new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5)
-    return { position: mid, quaternion: q, height: h }
-  }, [from, to, openingDir])
+// A single forceps jaw: a flat spring-steel blade that leaves the tube rim at
+// `base`, bends outward to the tracked `tip` and ends in a small hook pointing
+// `inward` (toward the other jaw), as on the simulator instrument. The blade is
+// thin in the opening direction and wide along `widthDir`.
+export default function Jaw({ base, tip, axis, inward, widthDir, ghost = false, color = '#cfd6de' }) {
+  const geometry = useMemo(
+    () =>
+      sweepBlade(
+        jawCenterline({
+          base,
+          tip,
+          axis,
+          inward,
+          widthBase: JAW_WIDTH_BASE_MM,
+          widthTip: JAW_WIDTH_TIP_MM,
+          hook: JAW_HOOK_MM,
+        }),
+        widthDir,
+        JAW_THICKNESS_MM
+      ),
+    [base, tip, axis, inward, widthDir]
+  )
+  useEffect(() => () => geometry.dispose(), [geometry])
 
   return (
-    <mesh position={position} quaternion={quaternion} scale={[flatten, 1, 1]}>
-      <cylinderGeometry args={[radiusTo, radiusFrom, height, 16]} />
-      <meshStandardMaterial color={color} metalness={0.25} roughness={0.45} />
+    <mesh geometry={geometry} castShadow>
+      <meshStandardMaterial color={color} metalness={0.85} roughness={0.28} {...ghostMaterial(ghost)} />
     </mesh>
   )
 }

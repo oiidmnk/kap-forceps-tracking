@@ -79,12 +79,12 @@ def sample_frame(t):
     )
     # Sweeps the tips from mid-vitreous to near the retina (exercises the
     # Distance-to-Retina safety states); stays inside the globe.
-    depth = 12.5 + 8.0 * math.sin(s * 0.4)
+    depth = 12.05 + 8.0 * math.sin(s * 0.4)
     jaw_center = add(TROCAR, scale(shaft, depth))
 
-    # Jaws open/close within a realistic microforceps range (~7-18 deg full).
-    half = 0.06 + 0.1 * (0.5 + 0.5 * math.sin(s * 1.3))
-    jaw_len = 1.2
+    # Jaws open/close within the simulator's range: tip separation ~0.1-0.7 mm.
+    half = 0.03 + 0.18 * (0.5 + 0.5 * math.sin(s * 1.3))
+    jaw_len = 1.65  # JAW_LENGTH_MM in src/config.js
     ju, _ = perp_basis(shaft)
     along = scale(shaft, jaw_len * math.cos(half))
     spread = scale(ju, jaw_len * math.sin(half))

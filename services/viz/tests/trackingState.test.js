@@ -91,3 +91,11 @@ test('threshold boundaries preserve distinct text and shape cues', () => {
   assert.equal(distanceStatus(2).level, 'safe')
   assert.equal(new Set([0, 1, 3].map((n) => distanceStatus(n).symbol)).size, 3)
 })
+
+test('depth bars give the critical first millimetres most of the room', async () => {
+  const { depthScale } = await import('../src/ui.js')
+  assert.equal(depthScale(0), 0)
+  assert.equal(depthScale(10), 1)
+  assert.equal(depthScale(25), 1, 'clamped above the scale')
+  assert.ok(depthScale(0.5) > 0.2 && depthScale(2) > 0.4, 'thresholds sit well inside the bar')
+})

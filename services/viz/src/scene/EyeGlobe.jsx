@@ -1,7 +1,8 @@
-import { useMemo } from 'react'
+import { memo, useMemo, useRef } from 'react'
 import { Line } from '@react-three/drei'
 import { DoubleSide, BackSide } from 'three'
 import { EYE_RADIUS_MM, LIMBUS_RADIUS_MM } from '../config.js'
+import { useCutaway } from './Cutaway.jsx'
 
 // The eye globe (+Y-up convention): a clean latitude/longitude reference grid
 // (not a triangulated wireframe — no moiré diagonals) over a faint glassy
@@ -9,6 +10,13 @@ import { EYE_RADIUS_MM, LIMBUS_RADIUS_MM } from '../config.js'
 // limbus ring at the top, and dim principal axes. The grid's curvature is the
 // primary depth cue; colors stay on the neutral steel / muted-anatomical
 // palette so it reads clinical.
+
+// Principal axes — constant, so drei's <Line> never rebuilds them per frame.
+const AXES = [
+  [[-EYE_RADIUS_MM, 0, 0], [EYE_RADIUS_MM, 0, 0]],
+  [[0, -EYE_RADIUS_MM, 0], [0, EYE_RADIUS_MM, 0]],
+  [[0, 0, -EYE_RADIUS_MM], [0, 0, EYE_RADIUS_MM]],
+]
 
 const PARALLEL_STEP_DEG = 30
 const MERIDIAN_STEP_DEG = 30
@@ -48,7 +56,10 @@ function gridLines(R, limbusTheta) {
   return { parallels, meridians }
 }
 
-export default function EyeGlobe({ showRetina = true }) {
+// Memoized: the globe is static, so tracking updates never re-render it.
+export default memo(function EyeGlobe({ showRetina = true, cutaway = false }) {
+  const group = useRef()
+  useCutaway(group, cutaway, [showRetina])
   const R = EYE_RADIUS_MM
   const limbusY = Math.sqrt(R * R - LIMBUS_RADIUS_MM * LIMBUS_RADIUS_MM)
   const limbusTheta = Math.asin(LIMBUS_RADIUS_MM / R)
@@ -58,7 +69,7 @@ export default function EyeGlobe({ showRetina = true }) {
   )
 
   return (
-    <group>
+    <group ref={group}>
       {/* Glassy shell — interior backface slightly stronger for volume depth */}
       <mesh>
         <sphereGeometry
@@ -108,9 +119,11 @@ export default function EyeGlobe({ showRetina = true }) {
         />
       ))}
 
-      {/* Retina — lower (-Y) hemisphere: smooth, muted anatomical rose */}
+      {/* Retina — lower (-Y) hemisphere: smooth, muted anatomical rose.
+          Never cut away: it is what the cutaway is meant to reveal, and it
+          is translucent enough not to hide the instrument. */}
       {showRetina && (
-        <mesh>
+        <mesh userData={{ keepInCutaway: true }}>
           <sphereGeometry
             args={[R - 0.08, 64, 28, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2]}
           />
@@ -126,37 +139,21 @@ export default function EyeGlobe({ showRetina = true }) {
         </mesh>
       )}
 
-      {/* Limbus ring at the top (+Y) — neutral steel */}
-      <mesh position={[0, limbusY, 0]} rotation={[Math.PI / 2, 0, 0]}>
+      {/* Limbus ring at the top (+Y) — neutral steel. A landmark: stays
+          visible in the cutaway (e.g. from the surgeon view above). */}
+      <mesh
+        position={[0, limbusY, 0]}
+        rotation={[Math.PI / 2, 0, 0]}
+        userData={{ keepInCutaway: true }}
+      >
         <torusGeometry args={[LIMBUS_RADIUS_MM, 0.06, 12, 96]} />
         <meshStandardMaterial color="#8aa0b6" emissive="#1c2733" />
       </mesh>
 
       {/* Principal axes — dim reference only */}
-      <Line
-        color="#3c4a63"
-        lineWidth={0.75}
-        points={[
-          [-R, 0, 0],
-          [R, 0, 0],
-        ]}
-      />
-      <Line
-        color="#3c4a63"
-        lineWidth={0.75}
-        points={[
-          [0, -R, 0],
-          [0, R, 0],
-        ]}
-      />
-      <Line
-        color="#3c4a63"
-        lineWidth={0.75}
-        points={[
-          [0, 0, -R],
-          [0, 0, R],
-        ]}
-      />
+      {AXES.map((pts, i) => (
+        <Line key={`axis-${i}`} color="#3c4a63" lineWidth={0.75} points={pts} />
+      ))}
     </group>
   )
-}
+})

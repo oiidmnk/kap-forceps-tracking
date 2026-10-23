@@ -1,26 +1,30 @@
 import { useRef } from 'react'
-import { Canvas } from '@react-three/fiber'
+import ProximityWall from '../scene/ProximityWall.jsx'
 import Forceps from '../scene/Forceps.jsx'
 import LandingReticle from '../scene/LandingReticle.jsx'
-import ProximityWall from '../scene/ProximityWall.jsx'
 import StudioEnvironment from '../scene/StudioEnvironment.jsx'
-import ScopeCamera, {
-  ELEV_DEFAULT,
-  ELEV_MIN,
-  ELEV_MAX,
-} from '../scene/ScopeCamera.jsx'
+import SceneView from '../scene/SceneView.jsx'
+import { ShadowLight } from '../scene/InstrumentShadow.jsx'
+import ScopeCamera, { ELEV_MIN, ELEV_MAX } from '../scene/ScopeCamera.jsx'
 import { nearestTip } from '../geometry.js'
-import { distanceStatus } from '../ui.js'
+import { STATUS } from '../ui.js'
+import { useStore } from '../feed/store.js'
 import { DIST_SCOPE_SHOW_MM } from '../config.js'
 
 const DRAG_SENSITIVITY = 0.006
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
 
-// Keep the scope canvas and its space stable across the proximity threshold.
-// Only its scene is active within range; drag adjusts the close-up angle.
-export default function ProximityScope({ frame, enabled = true }) {
-  const dragState = useRef({ azimuth: 0, elevation: ELEV_DEFAULT })
+// The close-up is active while tracking is current and the nearest tip is in
+// proximity range (with hysteresis, see levels.js). Panel and 3D view derive
+// this from the same tracker, so they switch together.
+const scopeActive = (enabled) => (s) => enabled && !!s.levels?.scope && !s.ghost
+
+// Panel: readout (raw measurement, refreshed at the readout rate), the stage
+// placeholder the 3D view renders into, and drag-to-rotate handling.
+export default function ProximityScope({ readout, stageRef, dragState, enabled = true }) {
   const pointer = useRef(null)
+  const { frame, status, levels } = useStore(readout)
+  const active = scopeActive(enabled)({ levels })
 
   const onPointerDown = (e) => {
     pointer.current = { x: e.clientX, y: e.clientY }
@@ -40,25 +44,23 @@ export default function ProximityScope({ frame, enabled = true }) {
   }
   const onPointerUp = (e) => {
     pointer.current = null
-    e.currentTarget.releasePointerCapture(e.pointerId)
+    if (e.currentTarget.hasPointerCapture(e.pointerId))
+      e.currentTarget.releasePointerCapture(e.pointerId)
   }
 
   const info = frame ? nearestTip(frame) : null
-  const inRange = !!info && info.dist < DIST_SCOPE_SHOW_MM
-  const active = enabled && inRange
-  const status = info ? distanceStatus(info.dist) : null
+  const lost = !frame && ['stale', 'degraded', 'error'].includes(status)
+  const color = active && levels ? STATUS[levels.min].color : undefined
   return (
     <section className="scope-panel" aria-labelledby="scope-title">
       <div className="section-heading">
         <h2 id="scope-title">Proximity scope</h2>
-        <span
-          className="scope-readout"
-          style={{ color: active ? status.color : undefined }}
-        >
+        <span className="scope-readout" style={{ color }}>
           {active ? `${info.dist.toFixed(2)} mm` : 'Standby'}
         </span>
       </div>
       <div
+        ref={stageRef}
         className="scope-stage"
         onPointerDown={active ? onPointerDown : undefined}
         onPointerMove={active ? onPointerMove : undefined}
@@ -70,24 +72,6 @@ export default function ProximityScope({ frame, enabled = true }) {
           pointer.current = null
         }}
       >
-        <Canvas
-          gl={{ alpha: true }}
-          camera={{ fov: 42, near: 0.01, far: 100 }}
-          frameloop={active ? 'always' : 'demand'}
-        >
-          <StudioEnvironment intensity={0.35} />
-          <ambientLight intensity={0.4} />
-          <directionalLight position={[4, 6, 4]} intensity={1.1} />
-          <directionalLight position={[-4, -2, -3]} intensity={0.4} />
-          {active && (
-            <>
-              <ProximityWall frame={frame} />
-              <Forceps frame={frame} />
-              <LandingReticle frame={frame} />
-              <ScopeCamera frame={frame} dragState={dragState} />
-            </>
-          )}
-        </Canvas>
         {!active && (
           <div className="scope-empty">
             <span className="scope-symbol" aria-hidden>
@@ -96,14 +80,18 @@ export default function ProximityScope({ frame, enabled = true }) {
             <strong>
               {!enabled
                 ? 'Proximity scope hidden'
-                : !frame
-                  ? 'Waiting for tracking'
-                  : 'Outside proximity range'}
+                : lost
+                  ? 'Tracking lost'
+                  : !frame
+                    ? 'Waiting for tracking'
+                    : 'Outside proximity range'}
             </strong>
             <span>
               {!enabled
                 ? 'Enable in Display settings'
-                : `Close-up available within ${DIST_SCOPE_SHOW_MM} mm`}
+                : lost
+                  ? 'Close-up resumes with the next complete frame'
+                  : `Close-up available within ${DIST_SCOPE_SHOW_MM} mm`}
             </span>
           </div>
         )}
@@ -114,5 +102,46 @@ export default function ProximityScope({ frame, enabled = true }) {
           : 'Fixed close-up · retinal clearance'}
       </p>
     </section>
+  )
+}
+
+// 3D close-up, rendered into the panel's stage inside the shared canvas.
+// `clip` keeps it inside the scrolling side panel.
+export function ProximityScopeView({ sceneStore, stageRef, clip, dragState, focusRef, enabled, showShadow, index }) {
+  const active = useStore(sceneStore, scopeActive(enabled))
+  return (
+    <SceneView
+      track={stageRef}
+      clip={clip}
+      index={index}
+      active={active}
+      camera={{ fov: 42, near: 0.01, far: 100 }}
+    >
+      <StudioEnvironment intensity={0.35} />
+      <ambientLight intensity={0.4} />
+      <directionalLight position={[4, 6, 4]} intensity={1.1} />
+      <directionalLight position={[-4, -2, -3]} intensity={0.4} />
+      {active && (
+        <ScopeContents
+          sceneStore={sceneStore}
+          dragState={dragState}
+          focusRef={focusRef}
+          showShadow={showShadow}
+        />
+      )}
+    </SceneView>
+  )
+}
+
+function ScopeContents({ sceneStore, dragState, focusRef, showShadow }) {
+  const { frame, levels } = useStore(sceneStore)
+  return (
+    <>
+      {showShadow && <ShadowLight frame={frame} angle={0.45} />}
+      <ProximityWall frame={frame} focusRef={focusRef} showShadow={showShadow && !!frame?.light_tip} />
+      <Forceps frame={frame} levels={levels} />
+      <LandingReticle frame={frame} level={levels?.min} />
+      <ScopeCamera frame={frame} dragState={dragState} focusRef={focusRef} />
+    </>
   )
 }

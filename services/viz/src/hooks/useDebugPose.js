@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { poseFrame } from '../feed/mockGenerator.js'
 
 // Rates the pose changes per second of a key being held.
@@ -36,10 +36,9 @@ const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x))
 // needing a real feed. Only active while `active` is true (i.e. the 'debug'
 // source is selected) — otherwise no listeners are attached and the held keys
 // don't do anything, so they're free to use normally the rest of the time.
-export function useDebugPose(active) {
+export function useDebugPose(active, onFrame) {
   const pose = useRef({ ...INITIAL_POSE })
   const pressed = useRef(new Set())
-  const [frame, setFrame] = useState(() => ({ t: 0, confidence: 1, ...poseFrame(INITIAL_POSE) }))
 
   useEffect(() => {
     if (!active) return
@@ -99,7 +98,7 @@ export function useDebugPose(active) {
             break
         }
       }
-      setFrame({ t: now / 1000, confidence: 1, ...poseFrame(p) })
+      onFrame({ t: now / 1000, confidence: 1, ...poseFrame(p) }, 'debug', now)
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
@@ -111,7 +110,5 @@ export function useDebugPose(active) {
       window.removeEventListener('keyup', onKeyUp)
       cancelAnimationFrame(raf)
     }
-  }, [active])
-
-  return frame
+  }, [active, onFrame])
 }

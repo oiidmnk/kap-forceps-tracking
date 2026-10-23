@@ -2,8 +2,8 @@ import { useRef } from 'react'
 import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
 import { Line } from '@react-three/drei'
-import { nearestTip } from '../geometry.js'
 import { EYE_RADIUS_MM } from '../config.js'
+import { CapShadow } from './InstrumentShadow.jsx'
 
 // Reusable scratch objects to avoid per-frame allocations
 const _worldUp = new THREE.Vector3(0, 1, 0)
@@ -11,8 +11,6 @@ const _worldRight = new THREE.Vector3(1, 0, 0)
 const _tangentX = new THREE.Vector3()
 const _tangentZ = new THREE.Vector3()
 const _outward = new THREE.Vector3()
-const _targetWall = new THREE.Vector3()
-const _targetQ = new THREE.Quaternion()
 const _basisMat = new THREE.Matrix4()
 const _txA = new THREE.Vector3() // tangent from worldUp ref
 const _txB = new THREE.Vector3() // tangent from worldRight ref
@@ -75,52 +73,36 @@ const LON_LINES = (() => {
 // actual segment of the 12mm sphere rather than a flat stand-in, so the
 // geometry stays anatomically honest. A small polar cap is built once in a
 // "pole = local +Y" frame; each frame we just re-orient the whole group so the
-// pole lands on the current contact point. Rotation about the sphere's own
-// center preserves every vertex's radius, so this is always a true piece of
-// the real sphere — just re-aimed, not recomputed.
-export default function ProximityWall({ frame }) {
-  const rawWall = frame ? nearestTip(frame).wall : [0, -EYE_RADIUS_MM, 0]
+// pole lands on the scope focus (`focusRef`, smoothed by ScopeCamera, which
+// runs first). Rotation about the sphere's own center preserves every vertex's
+// radius, so this is always a true piece of the real sphere — just re-aimed.
+// The exact predicted contact point is marked by the LandingReticle.
+export default function ProximityWall({ frame, focusRef, showShadow = false }) {
   const groupRef = useRef()
-  const currentQ = useRef(new THREE.Quaternion())
-  const smoothWall = useRef(new THREE.Vector3(...rawWall))
 
-  // Smooth both the wall position and the orientation every frame
   useFrame(() => {
-    // Lerp the wall position so nearest-tip switches don't cause jumps
-    _targetWall.set(...rawWall)
-    smoothWall.current.lerp(_targetWall, 0.12)
+    const focus = focusRef.current
+    if (!focus.valid || !groupRef.current) return
+    _outward.copy(focus.point).normalize()
 
-    // Build a stable basis from the smoothed wall direction.
-    // Blend between two world references to avoid the discontinuous jump
-    // that a hard threshold causes when outward.y crosses a cutoff.
-    _outward.copy(smoothWall.current).normalize()
-
+    // Build a stable basis from the focus direction. Blend between two world
+    // references to avoid the discontinuous jump that a hard threshold causes
+    // when outward.y crosses a cutoff.
     // Smoothstep blend: 0 when |y|<0.85 (use worldUp), 1 when |y|>0.99 (use worldRight)
     const absY = Math.abs(_outward.y)
     const t = absY <= 0.85 ? 0 : absY >= 0.99 ? 1 : smoothstep(0.85, 0.99, absY)
 
-    // Tangent from worldUp reference
     _txA.crossVectors(_outward, _worldUp)
     const lenA = _txA.length()
-
-    // Tangent from worldRight reference
     _txB.crossVectors(_outward, _worldRight)
     const lenB = _txB.length()
-
-    // Blend the two tangent vectors (both valid, just weighted by t)
     if (lenA > 1e-6) _txA.multiplyScalar(1 / lenA)
     if (lenB > 1e-6) _txB.multiplyScalar(1 / lenB)
     _tangentX.lerpVectors(_txA, _txB, t).normalize()
 
     _tangentZ.crossVectors(_tangentX, _outward).normalize()
     _basisMat.makeBasis(_tangentX, _outward, _tangentZ)
-    _targetQ.setFromRotationMatrix(_basisMat)
-
-    // Slerp the rotation for extra smoothness
-    currentQ.current.slerp(_targetQ, 0.15)
-    if (groupRef.current) {
-      groupRef.current.quaternion.copy(currentQ.current)
-    }
+    groupRef.current.quaternion.setFromRotationMatrix(_basisMat)
   })
 
   if (!frame) return null
@@ -139,6 +121,7 @@ export default function ProximityWall({ frame }) {
           side={THREE.DoubleSide}
         />
       </mesh>
+      {showShadow && <CapShadow radius={WALL_RADIUS_MM - 0.01} capAngle={CAP_ANGLE} />}
       {LAT_LINES.map((pts, i) => (
         <Line
           key={`lat-${i}`}
@@ -163,19 +146,6 @@ export default function ProximityWall({ frame }) {
           renderOrder={1}
         />
       ))}
-      {/* Contact-point marker, sitting right at the cap's pole */}
-      <mesh
-        position={[0, WALL_RADIUS_MM + 0.02, 0]}
-        rotation={[-Math.PI / 2, 0, 0]}
-      >
-        <ringGeometry args={[0.12, 0.2, 24]} />
-        <meshBasicMaterial
-          color="#ffffff"
-          transparent
-          opacity={0.85}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
     </group>
   )
 }

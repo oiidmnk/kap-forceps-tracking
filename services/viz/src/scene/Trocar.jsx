@@ -5,13 +5,14 @@ import { Cannula } from './primitives.jsx'
 // point) on the sphere surface — rendered as an actual entry cannula, steel
 // with the blue identity tint. Label is deliberately subtle — a small tag, not
 // a billboard — so it reads as a quiet reference, not a call-to-action.
-export default function Trocar({ position }) {
+export default function Trocar({ position, labelPortal }) {
   if (!position) return null
   return (
     <group>
       <Cannula position={position} tint="#8fb3d9" />
       <Html
-
+        portal={labelPortal}
+        zIndexRange={[2, 2]}
         position={[position[0], position[1] + 1.6, position[2]]}
         center
       >
@@ -23,7 +24,7 @@ export default function Trocar({ position }) {
 
 const labelStyle = {
   color: '#b3c6d8',
-  font: '500 11px Inter, sans-serif',
+  font: '500 12px Inter, sans-serif',
   letterSpacing: '0.02em',
   whiteSpace: 'nowrap',
   pointerEvents: 'none',

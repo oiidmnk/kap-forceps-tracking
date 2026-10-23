@@ -1,3 +1,4 @@
+import { useStore } from '../feed/store.js'
 const labels = {
   live: 'Receiving data',
   mock: 'Simulation active',
@@ -9,24 +10,21 @@ const labels = {
   degraded: 'Incomplete data',
   idle: 'Idle',
 }
-export default function DeviceHeader({
-  status,
-  source,
-  onSourceChange,
-  frame,
-}) {
-  const confidence =
-    source === 'live' && frame?.confidence != null
-      ? `${Math.round(frame.confidence * 100)}%`
-      : '—'
+// Selectors return primitives, so the header re-renders only when its text
+// actually changes.
+const selectStatus = (s) => s.status
+const selectConfidence = (s) => s.frame?.confidence ?? null
+const selectCalibrated = (s) => s.frame?.calibrated ?? null
+
+export default function DeviceHeader({ readout, source, onSourceChange }) {
+  const status = useStore(readout, selectStatus)
+  const rawConfidence = useStore(readout, selectConfidence)
+  const calibrated = useStore(readout, selectCalibrated)
+  const confidence = rawConfidence != null ? `${Math.round(rawConfidence * 100)}%` : '—'
   const calibration =
-    source !== 'live'
-      ? 'Not applicable'
-      : frame?.calibrated === true
-        ? 'Calibrated'
-        : frame?.calibrated === false
-          ? 'Not calibrated'
-          : 'Unknown'
+    calibrated === true ? 'Calibrated' : calibrated === false ? 'Not calibrated' : 'Unknown'
+  // Calibration and confidence only exist for live tracking; simulated data
+  // has neither, so the header leaves them out.
   return (
     <header className="device-header">
       <div className="brand">
@@ -36,24 +34,18 @@ export default function DeviceHeader({
           <span className="brand-subtitle">Depth guidance</span>
         </h1>
       </div>
-      <div className="telemetry">
-        <div>
-          <span className="eyebrow">Calibration</span>
-          <strong>{calibration}</strong>
+      {source === 'live' && (
+        <div className="telemetry">
+          <div>
+            <span className="eyebrow">Calibration</span>
+            <strong>{calibration}</strong>
+          </div>
+          <div>
+            <span className="eyebrow">Confidence</span>
+            <strong title="Reported by the tracking source">{confidence}</strong>
+          </div>
         </div>
-        <div>
-          <span className="eyebrow">Confidence</span>
-          <strong
-            title={
-              source !== 'live'
-                ? 'Confidence is not measured for simulated data'
-                : 'Reported by the tracking source'
-            }
-          >
-            {confidence}
-          </strong>
-        </div>
-      </div>
+      )}
       <div className="source-control">
         <label className="eyebrow" htmlFor="data-source">
           Data source
