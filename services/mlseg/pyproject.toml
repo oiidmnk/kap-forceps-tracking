@@ -1,0 +1,20 @@
+[project]
+name = "mlseg"
+version = "0.1.0"
+description = "Learned forceps/shadow jaw-tip keypoint model; drop-in replacement for the classical detector"
+requires-python = ">=3.10"
+dependencies = ["detector", "numpy>=1.23", "opencv-python-headless>=4.8", "timm>=1.0", "torch>=2.2"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "../detector/src"]
