@@ -1,7 +1,8 @@
 PY := .venv/bin/python
 
-.PHONY: setup test eval up down logs live-cam live-url render background ml-live ml-cam cams ml-down classic
+.PHONY: setup test eval up down logs live-cam live-url render background ml-live ml-cam cams circle ml-down classic
 CAM ?= 0
+ROT ?= 0
 setup:            ## local dev env (python>=3.10)
 	$(or $(PYTHON),python3) -m venv .venv && .venv/bin/pip install -q -U pip && .venv/bin/pip install -q -e "services/detector[dev]"
 test:
@@ -25,14 +26,14 @@ live-url:         ## URL=rtsp://... or http://... MJPEG
 ml-live:          ## learned segmenter, native (uses the Apple GPU via MPS) on :8002; SOURCE=file|url|cam idx, PUSH=1 to feed the orchestrator
 	test -d .venv-ml || (/opt/homebrew/bin/python3.14 -m venv .venv-ml && .venv-ml/bin/pip install -q torch torchvision timm opencv-python-headless numpy fastapi httpx "uvicorn[standard]" python-multipart)
 	VIDEO_DIR="$(CURDIR)/data/video" PYTHONPATH=services/mlseg/src:services/detector/src MLSEG_CKPT=services/mlseg/weights/last.pt DETECTOR_STATE=.segmenter_state.json \
-	SOURCE=$${SOURCE:-data/video/forceps_lev1.mp4} BACKGROUND_PATH= ORCHESTRATOR_URL=$${PUSH:+http://localhost:8090} \
+	SOURCE=$${SOURCE:-data/video/forceps_lev1.mp4} ROTATE=$${ROTATE:-0} BACKGROUND_PATH= ORCHESTRATOR_URL=$${PUSH:+http://localhost:8090} \
 	.venv-ml/bin/uvicorn mlseg.service:app --port 8002
 cams:             ## list capture devices (index + resolution) - the ML venv is created by ml-live/ml-cam
 	test -d .venv-ml || $(MAKE) .venv-ml
 	.venv-ml/bin/python scripts/list_cams.py
 .venv-ml:
 	/opt/homebrew/bin/python3.14 -m venv .venv-ml && .venv-ml/bin/pip install -q torch torchvision timm opencv-python-headless numpy fastapi httpx "uvicorn[standard]" python-multipart
-ml-cam:           ## ONE COMMAND: capture card (CAM=<index>, default 0) -> learned segmenter (Apple GPU) -> orchestrator -> viz.  KEEP=1 keeps the saved eye circle
+ml-cam:           ## ONE COMMAND: capture card (CAM=<index>, default 0) -> learned segmenter (Apple GPU) -> orchestrator -> viz.  ROT=180 if the image stands on its head, KEEP=1 keeps the saved eye circle
 	@docker info >/dev/null 2>&1 || { echo "Docker/OrbStack is not running - start it first (orb start)"; exit 1; }
 	docker compose stop detector
 	docker compose up -d --no-deps orchestrator stream viz
@@ -40,7 +41,9 @@ ml-cam:           ## ONE COMMAND: capture card (CAM=<index>, default 0) -> learn
 	@until curl -sf localhost:8090/api/status >/dev/null; do sleep 1; done
 	@curl -s -X PUT localhost:8090/api/source/detector-url -H 'content-type: application/json' -d '{"url":"http://host.docker.internal:8002"}' >/dev/null && echo "orchestrator -> segmenter on :8002"
 	@echo "live view http://localhost:8002   calibration + eye circle http://localhost:8090   viz http://localhost:8080   (Ctrl+C stops the segmenter)"
-	SOURCE=$(CAM) PUSH=1 $(MAKE) ml-live
+	SOURCE=$(CAM) PUSH=1 ROTATE=$(ROT) $(MAKE) ml-live
+circle:           ## fit the eye circle automatically on the running segmenter (retina must be in view); needed after ml-cam
+	curl -s -X POST localhost:8002/config -H 'content-type: application/json' -d "{\"circle\":$$(curl -s localhost:8002/autocircle)}"
 ml-down:          ## stop segmenter + dockerised orchestrator/stream/viz
 	-lsof -ti tcp:8002 | xargs kill
 	docker compose stop orchestrator stream viz

@@ -13,6 +13,19 @@ def open_capture(source: str) -> cv2.VideoCapture:
     return cv2.VideoCapture(int(source)) if source.isdigit() else cv2.VideoCapture(source)
 
 
+_ROTATIONS = {90: cv2.ROTATE_90_CLOCKWISE, 180: cv2.ROTATE_180, 270: cv2.ROTATE_90_COUNTERCLOCKWISE}
+
+
+def rotate_frame(frame: np.ndarray, degrees: int) -> np.ndarray:
+    """Turn a frame clockwise by 0/90/180/270 degrees (a capture that stands on its head needs 180)."""
+    degrees %= 360
+    if degrees == 0:
+        return frame
+    if degrees not in _ROTATIONS:
+        raise ValueError(f"rotation must be a multiple of 90 degrees, got {degrees}")
+    return cv2.rotate(frame, _ROTATIONS[degrees])
+
+
 def is_file_source(source: str) -> bool:
     return not (source.isdigit() or "://" in source)
 

@@ -91,3 +91,11 @@ carry to unseen ones (hold-out: 3 of 5 still ~35 px off), and a colour rule to t
 (both reddish grey). Only more real labels of this configuration will fix it. `p20` (weight x20) is a candidate on the
 server (`~/luis/segml/mlseg/runs/p20_full`): recall 87 % / 95 % (thr 0.3 / 0.1), less flicker, one extra false alarm on
 `video.mp4`'s empty frames; its CV could not be compared cleanly (hand-read frames fall into one fold). Shipped: p18.
+
+## Orientation of the source (capture cards)
+The 3D stage (`services/stream`) is calibrated for the orientation of the sample footage: instruments enter from the right, the
+shadow lies up/right of the tip, the optic disc is left of the centre. A capture that stands on its head (instruments from the
+upper left, shadow down/left) gives a tip *behind* the retina, i.e. "0.00 mm critical proximity" although the 2D points are right.
+Verified on real inputs: rotating the four points by 180 deg gives tip |r| 0.53 (11 mm clearance, jaw spread 1.2 mm); flipping,
+swapping left/right or mirroring the trocars does not. Fix: `make ml-cam ROT=180` (`ROTATE=180` for the detector/segmenter,
+applied before the eye circle, preview and autocircle), then `make circle`.

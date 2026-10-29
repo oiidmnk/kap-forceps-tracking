@@ -37,4 +37,5 @@ class Settings:
     # --- orchestrator push ---
     orchestrator_url: str = field(default_factory=lambda: _s("ORCHESTRATOR_URL"))
     push_hz: float = field(default_factory=lambda: _f("PUSH_HZ", 15))
+    rotate: int = field(default_factory=lambda: int(_f("ROTATE", 0)))   # source is turned by 0/90/180/270 deg (clockwise) before anything else
     smoothing: float = field(default_factory=lambda: _f("SMOOTHING", 0.5))   # EMA weight of the new sample, 1 = off

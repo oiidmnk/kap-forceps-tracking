@@ -13,7 +13,7 @@ from .background import Background
 from .config import Settings
 from .pipeline import Detection, Detector, annotate
 from .runtime import RuntimeConfig
-from .sources import frames
+from .sources import frames, rotate_frame
 
 
 class Smoother:
@@ -95,6 +95,8 @@ class LiveWorker(threading.Thread):
         for frame in gen:
             if self._stop.is_set() or self.rt.version != version:
                 return
+            if cfg.rotate:
+                frame = rotate_frame(frame, cfg.rotate)     # circle editor, autocircle and preview see the turned image
             self.raw = frame
             self.stats["source_error"] = None
             prepared = self.det._prepare(frame)
