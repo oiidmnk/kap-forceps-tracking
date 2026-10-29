@@ -44,3 +44,37 @@ def compute_masks(bgr: np.ndarray, ref_v: np.ndarray, from_model: bool, cfg: Set
     if not from_model:    # thin vessels leak into the mask
         shadow = cv2.morphologyEx(shadow, cv2.MORPH_OPEN, np.ones((7, 7), np.uint8))
     return forceps, shadow, ratio
+
+
+def isolate_tool(mask: np.ndarray, core: int = 13, half_width: int = 56, min_elong: float = 3.0) -> np.ndarray:
+    """Shadow masks get glued to vessels and blotchy background, so the largest blob is no longer tool-shaped.
+    The thick shaft survives an opening; its axis then defines a strip in which we keep the original mask
+    (jaws included, being thin and attached to the shaft). Without a thick elongated shaft there is no shadow
+    (vessel debris alone must not pass as a tool): returns an empty mask.
+    The strip width matters: narrower cuts jaw tips, wider lets vessels back in (tuned on the sample video)."""
+    small = cv2.resize(mask * 255, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA) > 127          # half-res: 4x cheaper
+    k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (core // 2 | 1, core // 2 | 1))
+    opened = cv2.morphologyEx(small.astype(np.uint8), cv2.MORPH_OPEN, k)
+    n, lab, st, _ = cv2.connectedComponentsWithStats(opened, connectivity=8)
+    best, best_score = None, 0.0
+    for i in np.argsort(st[1:, cv2.CC_STAT_AREA])[::-1][:6] + 1:
+        if st[i, cv2.CC_STAT_AREA] < 75:
+            break
+        ys, xs = np.nonzero(lab == i)
+        P = 2 * np.stack([xs, ys], 1).astype(np.float32)
+        c = P.mean(0)
+        ev, evec = np.linalg.eigh(np.cov((P - c).T))
+        elong = float(np.sqrt(ev[1] / max(ev[0], 1e-9)))
+        score = elong * float(np.sqrt(ev[1]))             # long *and* extended, not just a thin sliver
+        if elong >= min_elong and score > best_score:
+            best, best_score = (c, evec[:, 1]), score
+    if best is None:
+        return np.zeros_like(mask)
+    c, d = best
+    ys, xs = np.nonzero(mask)
+    off = np.stack([xs, ys], 1).astype(np.float32) - c
+    keep = np.abs(off[:, 0] * d[1] - off[:, 1] * d[0]) <= half_width
+    out = np.zeros_like(mask)
+    out[ys[keep], xs[keep]] = 1
+    return out
+

@@ -43,9 +43,10 @@ def _decode(payload: bytes) -> np.ndarray:
     return img
 
 
-def create_app(cfg: Settings | None = None) -> FastAPI:
+def create_app(cfg: Settings | None = None, detector: Detector | None = None) -> FastAPI:
+    """`detector` lets another backend (e.g. the learned `mlseg` model) reuse the whole HTTP/live stack."""
     cfg = cfg or Settings()
-    detector = Detector(cfg)
+    detector = detector or Detector(cfg)
     runtime = RuntimeConfig(cfg.source, cfg.state_path)
     detector.roi = runtime.circle
 

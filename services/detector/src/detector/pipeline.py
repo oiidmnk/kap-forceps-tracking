@@ -9,7 +9,7 @@ import numpy as np
 from .background import Background
 from .config import Settings
 from .geometry import Jaws, analyze
-from .masks import compute_masks, disc
+from .masks import compute_masks, disc, isolate_tool
 
 POINTS = ("left_tip", "right_tip", "junction")
 # colours (BGR)
@@ -102,7 +102,8 @@ class Detector:
         analysis = self._disc_cache[1]
         res = {}
         for name, m in (("forceps", forceps_m), ("shadow", shadow_m)):
-            j: Jaws = analyze(m * analysis)
+            m = m * analysis
+            j: Jaws = analyze(isolate_tool(m) if name == "shadow" else m)
             res[name] = (ToolPose(True, "", *(back(getattr(j, k)) for k in POINTS)) if j.ok
                          else ToolPose(False, j.reason))
         if adapt and from_model:
@@ -120,9 +121,11 @@ def annotate(frame: np.ndarray, det: Detection) -> np.ndarray:
         p: ToolPose = getattr(det, tool)
         if not p.ok:
             continue
-        j = tuple(map(int, p.junction))
+        j = tuple(map(int, p.junction)) if p.junction is not None else None   # learned backends have no junction
         for k in ("left_tip", "right_tip"):
-            cv2.line(out, j, tuple(map(int, getattr(p, k))), LINE[tool], 1, cv2.LINE_AA)
+            if j is not None:
+                cv2.line(out, j, tuple(map(int, getattr(p, k))), LINE[tool], 1, cv2.LINE_AA)
             cv2.circle(out, tuple(map(int, getattr(p, k))), r, COL[k], 2, cv2.LINE_AA)
-        cv2.drawMarker(out, j, COL["junction"], cv2.MARKER_CROSS, 2 * r + 4, 2)
+        if j is not None:
+            cv2.drawMarker(out, j, COL["junction"], cv2.MARKER_CROSS, 2 * r + 4, 2)
     return out
