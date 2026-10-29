@@ -31,6 +31,25 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # Learned replacement for the detector (same API). Opt-in:  docker compose --profile ml up -d --build segmenter
+  # then point the orchestrator's detector URL at http://segmenter:8000. Needs services/mlseg/weights/last.pt.
+  segmenter:
+    profiles: ["ml"]
+    build:
+      context: .
+      dockerfile: services/mlseg/Dockerfile
+    environment:
+      SOURCE: ${SOURCE:-/data/video/forceps_lev1.mp4}
+      ORCHESTRATOR_URL: http://orchestrator:8090
+      DETECTOR_STATE: /state/segmenter.json
+    volumes:
+      - ./data:/data:ro
+      - ./services/mlseg/weights:/weights:ro
+      - detector-state:/state
+    ports:
+      - "8002:8000"
+    restart: unless-stopped
+
   orchestrator:
     build: ./services/orchestrator
     environment:

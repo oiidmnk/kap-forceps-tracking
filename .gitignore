@@ -40,8 +40,15 @@ segmentation/out
 # Local service state
 services/orchestrator/data/
 
+# Learned model: weights and training runs live on the GPU server / are copied in by hand
+services/mlseg/weights/
+services/mlseg/runs/
+
 # Large sample data (not tracked): data/video/forceps_lev1.mp4, data/annotated/ (LabelMe frames)
 data/annotated/
 data/video/*.mp4
 
 .detector_state.json
+.segmenter_state.json
+.venv-ml/
+material
