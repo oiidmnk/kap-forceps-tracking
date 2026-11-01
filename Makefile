@@ -1,6 +1,6 @@
 PY := .venv/bin/python
 
-.PHONY: setup test eval up down logs live-cam live-url render background ml-live ml-cam cams circle ml-down classic
+.PHONY: setup test eval up down logs live-cam live-url render background ml-live ml-cam cams circle ml-down classic weights publish-weights
 CAM ?= 0
 ROT ?= 0
 setup:            ## local dev env (python>=3.10)
@@ -23,7 +23,13 @@ live-cam:         ## local webcam/capture card (index 0) -> stack running in doc
 	VIDEO_DIR="$(CURDIR)/data/video" DETECTOR_STATE=.detector_state.json SOURCE=$${CAM:-0} BACKGROUND_PATH= ORCHESTRATOR_URL=http://localhost:8090 .venv/bin/uvicorn detector.service:app --port 8001
 live-url:         ## URL=rtsp://... or http://... MJPEG
 	VIDEO_DIR="$(CURDIR)/data/video" DETECTOR_STATE=.detector_state.json SOURCE=$(URL) BACKGROUND_PATH= ORCHESTRATOR_URL=http://localhost:8090 .venv/bin/uvicorn detector.service:app --port 8001
-ml-live:          ## learned segmenter, native (uses the Apple GPU via MPS) on :8002; SOURCE=file|url|cam idx, PUSH=1 to feed the orchestrator
+services/mlseg/weights/last.pt:
+	scripts/fetch_model.sh
+weights:          ## fetch the latest (or V=<version>) model weights from musicanalyzer.cc
+	scripts/fetch_model.sh $(V)
+publish-weights:  ## publish services/mlseg/weights/last.pt as a new version: make publish-weights V=v3 M="note"
+	scripts/publish_model.sh $(if $(V),-v $(V)) $(if $(M),-m "$(M)")
+ml-live: services/mlseg/weights/last.pt  ## learned segmenter, native (uses the Apple GPU via MPS) on :8002; SOURCE=file|url|cam idx, PUSH=1 to feed the orchestrator
 	test -d .venv-ml || (/opt/homebrew/bin/python3.14 -m venv .venv-ml && .venv-ml/bin/pip install -q torch torchvision timm opencv-python-headless numpy fastapi httpx "uvicorn[standard]" python-multipart)
 	VIDEO_DIR="$(CURDIR)/data/video" PYTHONPATH=services/mlseg/src:services/detector/src MLSEG_CKPT=services/mlseg/weights/last.pt DETECTOR_STATE=.segmenter_state.json \
 	SOURCE=$${SOURCE:-data/video/forceps_lev1.mp4} ROTATE=$${ROTATE:-0} BACKGROUND_PATH= ORCHESTRATOR_URL=$${PUSH:+http://localhost:8090} \

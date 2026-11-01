@@ -6,7 +6,8 @@ A ResNet34 + UNet predicts 6 heatmaps: `left_tip`, `right_tip`, `left_shadow`, `
 
 ## Use
 ```bash
-# weights: services/mlseg/weights/last.pt  (git-ignored, 86 MB)
+# weights: services/mlseg/weights/last.pt  (git-ignored, 86 MB) - `make weights` fetches them from musicanalyzer.cc,
+#          `make publish-weights M="note"` publishes a new version (see scripts/publish_model.sh)
 docker compose --profile ml up -d --build segmenter      # :8002, then set the orchestrator detector URL to http://segmenter:8000
 cd services/mlseg && MLSEG_CKPT=weights/last.pt pytest    # needs torch, timm, ../detector installed
 ```
