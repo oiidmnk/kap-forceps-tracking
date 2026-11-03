@@ -1,7 +1,8 @@
 PY := .venv/bin/python
 
-.PHONY: setup test eval up down logs live-cam live-url render background ml-live ml-cam cams circle ml-down classic weights publish-weights
+.PHONY: setup test eval up down logs live-cam live-url sim-eval render background ml-live ml-cam cams circle calibration ml-down classic weights publish-weights
 CAM ?= 0
+SIM ?= TestRuns/mapskap1_2026-10-22_11-00-43+0200_forcepstraining_lev1/mapskap1_2026-10-22_11-00-43+0200_forcepstraining_lev1.mp4
 ROT ?= 0
 setup:            ## local dev env (python>=3.10)
 	$(or $(PYTHON),python3) -m venv .venv && .venv/bin/pip install -q -U pip && .venv/bin/pip install -q -e "services/detector[dev]"
@@ -12,6 +13,8 @@ test:
 	PYTHONPATH=services/stream .venv/bin/pytest -q services/stream/tests
 eval:             ## accuracy vs. the LabelMe annotations in data/annotated
 	$(PY) scripts/evaluate.py
+sim-eval: .venv-ml services/mlseg/weights/last.pt  ## 3D accuracy vs. the simulator's trajectory log (SIM=<video>, CSV next to it; DET=classic) -> artifacts/sim_gt_*
+	.venv-ml/bin/python scripts/eval_sim_gt.py "$(SIM)" --detector $(or $(DET),ml)
 up:               ## full stack: detector -> orchestrator -> stream -> viz
 	docker compose up -d --build
 	@echo "detector http://localhost:8000  orchestrator http://localhost:8090  viz http://localhost:8080"
@@ -46,10 +49,15 @@ ml-cam:           ## ONE COMMAND: capture card (CAM=<index>, default 0) -> learn
 	$(if $(KEEP),,rm -f .segmenter_state.json)
 	@until curl -sf localhost:8090/api/status >/dev/null; do sleep 1; done
 	@curl -s -X PUT localhost:8090/api/source/detector-url -H 'content-type: application/json' -d '{"url":"http://host.docker.internal:8002"}' >/dev/null && echo "orchestrator -> segmenter on :8002"
+	@$(MAKE) --no-print-directory calibration
 	@echo "live view http://localhost:8002   calibration + eye circle http://localhost:8090   viz http://localhost:8080   (Ctrl+C stops the segmenter)"
 	SOURCE=$(CAM) PUSH=1 ROTATE=$(ROT) $(MAKE) ml-live
 circle:           ## fit the eye circle automatically on the running segmenter (retina must be in view); needed after ml-cam
 	curl -s -X POST localhost:8002/config -H 'content-type: application/json' -d "{\"circle\":$$(curl -s localhost:8002/autocircle)}"
+calibration:      ## config/default_calibration.json (trocars, light, eye/jaw size) -> running orchestrator + stream; keeps the eye circle
+	@curl -sf localhost:8090/api/calibration | python3 -c 'import json, sys; cur = json.load(sys.stdin); new = json.load(open("config/default_calibration.json")); [new.pop(k) for k in ("eye_center_px", "eye_radius_px")]; print(json.dumps({**cur, **new}))' \
+	  | curl -sf -X PUT localhost:8090/api/calibration -H 'content-type: application/json' -d @- >/dev/null && echo "calibration (config/default_calibration.json) -> orchestrator"
+	-@curl -sf -X POST localhost:8090/api/apply-calibration >/dev/null && echo "calibration -> stream"
 ml-down:          ## stop segmenter + dockerised orchestrator/stream/viz
 	-lsof -ti tcp:8002 | xargs kill
 	docker compose stop orchestrator stream viz

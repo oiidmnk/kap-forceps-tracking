@@ -3,6 +3,18 @@
 Finds the two jaw **tips** of the forceps and of its **shadow**, plus the **junction** where the jaws meet the shaft,
 in retina-simulator footage – offline *and* live – and feeds them into the 3D depth pipeline.
 
+> **Open problems of the 3D stage** (measured against the simulator's trajectory log, see
+> [3D accuracy](#3d-accuracy-vs-the-simulator-make-sim-eval); plan in
+> [#1](https://github.com/oiidmnk/kap-forceps-tracking/issues/1)): the tip is 1.4–2.4 mm off (median) even with perfect
+> 2D points, so better detection no longer helps – the 3D computation does.
+> 1. **Orthographic camera model** – `services/stream/tool_positions.py` treats the camera as infinitely far away; the real
+>    one sits ~22 mm from the eye centre. This is the bulk of the error (perspective prototype: 0.25–0.46 mm).
+> 2. **Height above the retina is underestimated by ~0.5 mm** (systematic) – the forceps is reported closer to the retina
+>    than it is. Goes away with the perspective model.
+> 3. **The camera geometry is not calibrated per session** – the focal length depends on the simulator's zoom, and the eye's
+>    tilt towards the camera changes between sessions (4–10°; up to ~4° within one); the trocar angles are fixed to the
+>    average pose. Needs a fixed zoom or a calibration phase (#1).
+
 ```
  video file / RTSP / MJPEG / camera
         │
@@ -33,6 +45,12 @@ open http://localhost:8765/viewer  # live 3D position diagnostics
 By default the stack plays `data/video/forceps_lev1.mp4` in a loop at real-time speed – i.e. it behaves like a camera.
 Calibrate eye/trocars in the orchestrator (`:8090`); defaults live in `config/default_calibration.json`
 (eye centre/radius are set for the 1080² sample footage – adjust for other cameras).
+Trocar angles, eye radius (12.05 mm) and jaw length (1.9 mm) there are measured from the simulator's trajectory log
+of `mapskap1_2026-10-22_11-00-43+0200_forcepstraining_lev1`; the light sits at its trocar (`light_depth_mm` 0). They hold
+for the simulator's own orientation (Haag-Streit logo upright bottom left, instruments from the upper left, shadow down/left):
+capture it with `ROT=0`. Footage turned by 180° against that (logo upside down, instruments from the lower right) needs `ROT=180`.
+The orchestrator keeps its own copy in its state volume: `make calibration` (also run by `make ml-cam`) pushes the file
+to the running orchestrator and stream without touching the eye circle.
 
 ### Source & eye circle (orchestrator UI, `http://localhost:8090`)
 
@@ -115,6 +133,29 @@ Throughput ≈ 20 ms/frame at 1080² (30 fps real-time with headroom).
 
 Junction points are not labelled, so they are not scored. Single-frame fallback without a background: shadow ≈ 30 px
 (use a background). Closed jaws have no fork → reported as `ok:false` for that frame.
+
+## 3D accuracy vs. the simulator (`make sim-eval`)
+
+The simulator's trajectory log (`<video>_trajectories.csv`: instrument poses in mm) is the ground truth. `scripts/eval_sim_gt.py`
+fits camera and log offset from the forceps tips, replays the video through eye circle -> detector -> calibration ->
+`tool_positions.py` and compares the tip midpoint. Three runs of `mapskap1_2026-10-22` (~3500–4000 frames with the tip in
+view each), median / p95 in mm:
+
+| run | | 3D | height above retina | 3D found |
+|---|---|---|---|---|
+| 11-00-43 | ground-truth tip + modelled shadow (limit of the 3D model) | 1.42 / 5.3 | 0.63 / 2.9 | 100 % |
+| | learned segmenter (`DET=ml`) | 1.40 / 4.2 | 0.60 / 2.0 | 83 % |
+| | classical detector, no background (`DET=classic`) | 1.82 / 7.5 | 1.11 / 5.5 | 49 % |
+| 10-35-27 | limit of the 3D model | 2.18 / 11.7 | 0.91 / 7.7 | 100 % |
+| | learned segmenter | 2.36 / 7.8 | 0.85 / 4.1 | 81 % |
+| 10-48-23 | limit of the 3D model | 2.11 / 5.5 | 0.58 / 3.1 | 100 % |
+| | learned segmenter | 1.76 / 4.7 | 0.50 / 3.7 | 65 % |
+
+With the segmenter the error is the 3D model's own, not the detection's: forceps tips 0.4–0.6 px, found in 97–99 % of
+the frames. The shadow is found in 86–88 % of the frames, except 10-48-23 (69 %, not investigated yet). The trocars are
+identical in all three runs; the runs differ in the eye's tilt towards the camera.
+
+`make sim-eval SIM=<video>` (trajectory CSV next to it), `DET=classic` for the classical detector; results in `artifacts/sim_gt_*`.
 
 ## Layout
 
