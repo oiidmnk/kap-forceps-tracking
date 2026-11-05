@@ -30,6 +30,8 @@ const DEBUG_SHORTCUTS = [
 export default function NavigationControls({ pivot, onPivot, picking, onPick, onReset, navApi, debug }) {
   const [help, setHelp] = useState(false)
   const root = useRef(null)
+  const helpButton = useRef(null)
+  const helpDialog = useRef(null)
   useSceneShield(root)
 
   useEffect(() => {
@@ -39,7 +41,7 @@ export default function NavigationControls({ pivot, onPivot, picking, onPick, on
         setHelp(false)
         return
       }
-      if (typing(e)) return
+      if (help || typing(e)) return
       if (e.code === 'KeyF') (onPick(false), onPivot('instrument'))
       else if (e.code === 'KeyG') (onPick(false), onPivot('globe'))
       else if (e.code === 'KeyP') onPick(true)
@@ -47,22 +49,34 @@ export default function NavigationControls({ pivot, onPivot, picking, onPick, on
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onPivot, onPick, onReset])
+  }, [help, onPivot, onPick, onReset])
 
   useEffect(() => {
     if (!help) return
+    helpDialog.current?.focus()
+    const trapFocus = (e) => {
+      if (e.key !== 'Tab') return
+      // The reference contains no interactive controls; keep focus on its container.
+      e.preventDefault()
+      helpDialog.current?.focus()
+    }
+    document.addEventListener('keydown', trapFocus, true)
     const outside = (e) => {
       if (!root.current?.contains(e.target)) setHelp(false)
     }
     document.addEventListener('pointerdown', outside)
-    return () => document.removeEventListener('pointerdown', outside)
+    return () => {
+      document.removeEventListener('pointerdown', outside)
+      document.removeEventListener('keydown', trapFocus, true)
+      helpButton.current?.focus()
+    }
   }, [help])
 
   return (
     // data-scene-ui + shield: clicks here never orbit or pick.
     <div className="nav-cluster" ref={root} data-scene-ui>
       {help && (
-        <div className="nav-help" role="dialog" aria-label="Navigation shortcuts">
+        <div className="nav-help" data-navigation-help ref={helpDialog} tabIndex={-1} role="dialog" aria-label="Navigation shortcuts">
           <h3>Navigation</h3>
           <dl>
             {[...SHORTCUTS, ...(debug ? DEBUG_SHORTCUTS : [])].map(([k, v]) => (
@@ -103,6 +117,7 @@ export default function NavigationControls({ pivot, onPivot, picking, onPick, on
           ↺
         </button>
         <button
+          ref={helpButton}
           onClick={() => setHelp(!help)}
           aria-expanded={help}
           title="Navigation shortcuts"

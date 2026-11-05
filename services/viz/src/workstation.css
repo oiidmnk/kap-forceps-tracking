@@ -22,9 +22,9 @@
   --faint: #5a6d7e; /* decorative separators only */
   --accent: #aac7de;
   /* States */
-  --safe: #64c69a;
-  --warn: #e7b75b;
-  --danger: #f27a80;
+  --safe: #1ea6ac;
+  --warn: #ffd24a;
+  --danger: #ef5255;
   --on-danger: #160d0e;
   --lost-surface: #1d1a15e6;
   --lost-border: #5a4a32;
@@ -184,12 +184,12 @@ h1 {
   flex-shrink: 0;
 }
 .connection-live i {
-  background: var(--safe);
+  background: var(--accent);
 }
 .connection-stale i,
 .connection-degraded i,
 .connection-connecting i {
-  background: var(--warn);
+  background: var(--muted);
 }
 .connection-error i {
   background: var(--danger);
@@ -244,6 +244,7 @@ h2 {
   letter-spacing: 0;
 }
 .distance-status {
+  min-height: 2lh;
   font-size: 12px;
   font-weight: 600;
   display: flex;
@@ -906,23 +907,26 @@ h2 {
   pointer-events: none;
 }
 .scene-alarm-warn {
-  box-shadow: inset 0 0 0 2px var(--warn);
+  box-shadow: inset 0 0 0 4px var(--warn);
 }
 .scene-alarm-danger {
   box-shadow:
-    inset 0 0 0 3px var(--danger),
+    inset 0 0 0 6px var(--danger),
     inset 0 0 48px color-mix(in srgb, var(--danger) 25%, transparent);
-  animation: alarm-pulse 1.2s ease-in-out infinite;
+  animation: alarm-pulse 0.5s ease-in-out infinite;
+}
+.scene-alarm-steady {
+  animation: none;
 }
 .scene-alarm-banner {
   position: absolute;
   top: 14px;
   left: 50%;
   transform: translateX(-50%);
-  padding: 7px 14px;
+  padding: 8px 16px;
   border-radius: 6px;
   color: var(--on-danger);
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 600;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -936,13 +940,16 @@ h2 {
 @keyframes alarm-pulse {
   50% {
     box-shadow:
-      inset 0 0 0 3px var(--danger),
+      inset 0 0 0 6px var(--danger),
       inset 0 0 18px color-mix(in srgb, var(--danger) 10%, transparent);
   }
 }
 @media (prefers-reduced-motion: reduce) {
   .scene-alarm-danger {
     animation: none;
+  }
+  .depth-track i {
+    transition: none;
   }
 }
 @media (max-width: 760px) {
@@ -1021,4 +1028,57 @@ h2 {
   color: var(--muted);
   font-size: 12px;
   font-style: normal;
+}
+
+/* Readout precision and measurement context. */
+.distance-value.distance-empty {
+  color: var(--muted) !important;
+  font-weight: 300;
+}
+.distance-value.measurement-held,
+.distance-status.measurement-held,
+.distance-nearest.measurement-held,
+.scope-readout.measurement-held,
+.depth-bars.measurement-held,
+.instrument-panel .measurement-held {
+  opacity: 0.55;
+}
+.distance-qualifier {
+  height: 2lh;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.distance-qualifier-warning {
+  color: var(--warn);
+}
+.distance-nearest {
+  font-weight: 400;
+  color: var(--text);
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.45;
+  height: 1lh;
+}
+.distance-nearest::before {
+  content: "Nearest tip: ";
+  color: var(--muted);
+}
+.approach-boundary line {
+  stroke: var(--muted);
+  stroke-width: 0.75;
+  stroke-dasharray: 3 3;
+}
+.approach-boundary text {
+  fill: var(--muted);
+  font-size: 9px;
+}
+.approach-axis {
+  padding-right: calc(100% * 32 / 312);
+  display: flex;
+  justify-content: space-between;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
 }

@@ -76,7 +76,7 @@ export default function App() {
       />
       <main className="workspace">
         <SidePanel ref={sidePanel}>
-          <HUD readout={pipeline.readout} />
+          <HUD readout={pipeline.readout} source={source} />
           <ApproachTrend readout={pipeline.readout} />
           <InstrumentStatus readout={pipeline.readout} />
           <ProximityScope
@@ -105,7 +105,7 @@ export default function App() {
               </span>
               <span>Spherical eye model · R {EYE_RADIUS_MM} mm</span>
             </div>
-            <SceneAlarm readout={pipeline.readout} />
+            <SceneAlarm readout={pipeline.readout} source={source} />
             <SceneStatus pipeline={pipeline} source={source} />
             {picking && (
               <div className="scene-hint" role="status">
@@ -173,6 +173,7 @@ export default function App() {
           <AxisGizmo mainCamera={mainCamera} />
         </SceneView>
         <ProximityScopeView
+          readout={pipeline.readout}
           sceneStore={pipeline.scene}
           stageRef={scopeStage}
           clip={sidePanel}

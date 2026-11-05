@@ -99,3 +99,8 @@ test('depth bars give the critical first millimetres most of the room', async ()
   assert.equal(depthScale(25), 1, 'clamped above the scale')
   assert.ok(depthScale(0.5) > 0.2 && depthScale(2) > 0.4, 'thresholds sit well inside the bar')
 })
+
+test('both source-time spellings are preserved for native frames', () => {
+  assert.equal(parseTrackingFrame({ ...native, t: undefined, timestamp: 42 }).t, 42)
+  assert.equal(parseTrackingFrame({ ...native, t: 0, timestamp: 42 }).t, 0)
+})

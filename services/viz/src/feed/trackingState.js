@@ -1,5 +1,5 @@
-import { EYE_RADIUS_MM } from '../config.js'
-export const STALE_AFTER_MS = 1500
+import { EYE_RADIUS_MM, STALE_MS } from '../config.js'
+export const STALE_AFTER_MS = STALE_MS
 const point = (p) =>
   Array.isArray(p) && p.length === 3 && p.every(Number.isFinite)
 
@@ -15,7 +15,7 @@ export function parseTrackingFrame(raw) {
         ? [v[0] * EYE_RADIUS_MM, -v[2] * EYE_RADIUS_MM, v[1] * EYE_RADIUS_MM]
         : null
     frame = {
-      t: raw.timestamp,
+      t: raw.timestamp ?? raw.t,
       tip_left: map(p.left_tip_forceps),
       tip_right: map(p.right_tip_forceps),
       trocar: map(p.trocar_forceps),
@@ -24,7 +24,7 @@ export function parseTrackingFrame(raw) {
     }
   } else {
     frame = {
-      t: raw.t,
+      t: raw.t ?? raw.timestamp,
       tip_left: raw.tip_left,
       tip_right: raw.tip_right,
       trocar: raw.trocar,

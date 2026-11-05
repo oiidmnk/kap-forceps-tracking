@@ -60,7 +60,7 @@ export default function SurgicalScene({
         ghost={ghost}
       />
       {showShadow && !ghost && <Shadow frame={frame} />}
-      {showReticle && !ghost && <LandingReticle frame={frame} level={levels?.min} />}
+      {showReticle && !ghost && <LandingReticle readout={readout} frame={frame} level={levels?.min} />}
       {showReticle && !ghost && (
         <DistanceLabel frame={frame} readout={readout} portal={labelPortal} />
       )}

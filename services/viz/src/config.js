@@ -11,7 +11,25 @@ export const DIST_WARN_MM = 0.5
 // Hysteresis: a more critical level shows immediately; returning to a safer
 // level requires clearing the threshold by this margin, so noise at a boundary
 // cannot make the status flicker.
-export const DIST_HYSTERESIS_MM = 0.05
+// 0.08 mm ≈ 2× the robust frame-to-frame jitter of the reconstructed height
+// (simulator replay, writeup/figures/viz/alarm_eval/results.md).
+export const LEVEL_HYSTERESIS_MM = 0.08
+export const DIST_HYSTERESIS_MM = LEVEL_HYSTERESIS_MM // compatibility alias
+export const LEVEL_DEESCALATE_DWELL_MS = 250
+// Nearest-tip label: preserve the measured tie band; require sustained evidence.
+export const NEAREST_TIE_ENTER_MM = 0.10
+export const NEAREST_TIE_EXIT_MM = 0.15
+export const NEAREST_SIDE_LEAD_MM = 0.05
+export const NEAREST_DWELL_MS = 500
+export const JAW_CLOSED_MM = 0.12
+export const DROPOUT_GRACE_MS = 400
+// The critical frame pulses only where Critical is trustworthy. With the current
+// (orthographic) tracker, Critical was right for 3 % of its display time in the
+// simulator replay (writeup/viz_design.md §3.3), so live data gets a steady
+// frame. Turn the pulse back on once a replay reaches a Critical PPV of ≥ 30 %.
+export const CRITICAL_PULSE_LIVE = false
+export const MISSED_UPDATE_MS = 200
+export const STALE_MS = 1500
 
 // The persistent proximity panel activates its close-up inside this range;
 // outside it, a standby state keeps the workstation layout stable.

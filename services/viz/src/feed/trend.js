@@ -1,10 +1,10 @@
 // Approach trend of the minimum tip–retina distance, for the panel's sparkline
-// and the approach-speed / time-to-contact readout.
+// and the approach-speed readout.
 //
 // Samples are kept for TREND_WINDOW_MS (thinned to one per SAMPLE_MS); a null
 // distance marks a tracking gap. Velocity is the least-squares slope over the
 // last SLOPE_MS of contiguous samples, lightly smoothed, so a single noisy
-// frame cannot swing it. Time to contact is only estimated while approaching.
+// frame cannot swing it.
 
 export const TREND_WINDOW_MS = 10000
 const SAMPLE_MS = 50
@@ -12,7 +12,6 @@ const SLOPE_MS = 600
 const MIN_SLOPE_SAMPLES = 4
 const MIN_SLOPE_SPAN_MS = 250
 export const STEADY_MM_S = 0.15 // below this speed the instrument counts as holding
-export const MAX_TTC_S = 10
 
 export function createTrend() {
   let samples = []
@@ -58,17 +57,10 @@ export function createTrend() {
     snapshot(now) {
       const raw = slope(now)
       velocity = raw == null ? null : velocity == null ? raw : velocity + (raw - velocity) * 0.5
-      const latest = samples[samples.length - 1]
-      const current = latest?.d ?? null
-      const ttc =
-        velocity != null && current != null && velocity < -STEADY_MM_S
-          ? current / -velocity
-          : null
       return {
         now,
         points: samples.map((s) => [s.t, s.d]),
         velocity,
-        ttc: ttc != null && ttc <= MAX_TTC_S ? ttc : null,
       }
     },
 

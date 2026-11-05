@@ -1,6 +1,6 @@
 import { Html } from '@react-three/drei'
-import { nearestTip, midpoint } from '../geometry.js'
-import { STATUS } from '../ui.js'
+import { readoutTip, midpoint } from '../geometry.js'
+import { STATUS, formatClearance } from '../ui.js'
 import { useStore } from '../feed/store.js'
 
 // Distance readout next to the drop line in the main view, so the clearance
@@ -8,14 +8,14 @@ import { useStore } from '../feed/store.js'
 // scene frame; the number and color come from the readout store (raw
 // measurement, refreshed at the readout rate, hysteresis level).
 export default function DistanceLabel({ frame, readout, portal }) {
-  const { frame: measured, levels } = useStore(readout)
+  const { frame: measured, levels, held, nearestTip } = useStore(readout)
   if (!frame || !measured || !levels) return null
-  const { tip, wall } = nearestTip(frame)
+  const { tip, wall } = readoutTip(frame, nearestTip)
   const { color } = STATUS[levels.min]
   return (
     <Html portal={portal} position={midpoint(tip, wall)} zIndexRange={[2, 2]}>
-      <div className="scene-distance" style={{ color, borderColor: color }}>
-        {nearestTip(measured).dist.toFixed(2)} mm
+      <div className="scene-distance" style={{ color: held ? `color-mix(in srgb, ${color} 55%, transparent)` : color, borderColor: color }}>
+        {formatClearance(readoutTip(measured, nearestTip).dist)} mm
       </div>
     </Html>
   )

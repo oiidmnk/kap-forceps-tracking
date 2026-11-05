@@ -6,8 +6,8 @@ import StudioEnvironment from '../scene/StudioEnvironment.jsx'
 import SceneView from '../scene/SceneView.jsx'
 import { ShadowLight } from '../scene/InstrumentShadow.jsx'
 import ScopeCamera, { ELEV_MIN, ELEV_MAX } from '../scene/ScopeCamera.jsx'
-import { nearestTip } from '../geometry.js'
-import { STATUS } from '../ui.js'
+import { readoutTip } from '../geometry.js'
+import { STATUS, formatClearance } from '../ui.js'
 import { useStore } from '../feed/store.js'
 import { DIST_SCOPE_SHOW_MM } from '../config.js'
 
@@ -23,7 +23,7 @@ const scopeActive = (enabled) => (s) => enabled && !!s.levels?.scope && !s.ghost
 // placeholder the 3D view renders into, and drag-to-rotate handling.
 export default function ProximityScope({ readout, stageRef, dragState, enabled = true }) {
   const pointer = useRef(null)
-  const { frame, status, levels } = useStore(readout)
+  const { frame, status, levels, held, nearestTip } = useStore(readout)
   const active = scopeActive(enabled)({ levels })
 
   const onPointerDown = (e) => {
@@ -48,15 +48,15 @@ export default function ProximityScope({ readout, stageRef, dragState, enabled =
       e.currentTarget.releasePointerCapture(e.pointerId)
   }
 
-  const info = frame ? nearestTip(frame) : null
+  const info = frame ? readoutTip(frame, nearestTip) : null
   const lost = !frame && ['stale', 'degraded', 'error'].includes(status)
   const color = active && levels ? STATUS[levels.min].color : undefined
   return (
     <section className="scope-panel" aria-labelledby="scope-title">
       <div className="section-heading">
         <h2 id="scope-title">Proximity scope</h2>
-        <span className="scope-readout" style={{ color }}>
-          {active ? `${info.dist.toFixed(2)} mm` : 'Standby'}
+        <span className={`scope-readout${held ? ' measurement-held' : ''}`} style={{ color }}>
+          {active ? `${formatClearance(info.dist)} mm` : 'Standby'}
         </span>
       </div>
       <div
@@ -98,7 +98,7 @@ export default function ProximityScope({ readout, stageRef, dragState, enabled =
       </div>
       <p className="panel-note">
         {active
-          ? 'Nearest tip to retinal surface · drag to rotate'
+          ? 'Tip midpoint over the retina · drag to rotate'
           : 'Fixed close-up · retinal clearance'}
       </p>
     </section>
@@ -107,7 +107,7 @@ export default function ProximityScope({ readout, stageRef, dragState, enabled =
 
 // 3D close-up, rendered into the panel's stage inside the shared canvas.
 // `clip` keeps it inside the scrolling side panel.
-export function ProximityScopeView({ sceneStore, stageRef, clip, dragState, focusRef, enabled, showShadow, index }) {
+export function ProximityScopeView({ readout, sceneStore, stageRef, clip, dragState, focusRef, enabled, showShadow, index }) {
   const active = useStore(sceneStore, scopeActive(enabled))
   return (
     <SceneView
@@ -123,6 +123,7 @@ export function ProximityScopeView({ sceneStore, stageRef, clip, dragState, focu
       <directionalLight position={[-4, -2, -3]} intensity={0.4} />
       {active && (
         <ScopeContents
+          readout={readout}
           sceneStore={sceneStore}
           dragState={dragState}
           focusRef={focusRef}
@@ -133,14 +134,14 @@ export function ProximityScopeView({ sceneStore, stageRef, clip, dragState, focu
   )
 }
 
-function ScopeContents({ sceneStore, dragState, focusRef, showShadow }) {
+function ScopeContents({ readout, sceneStore, dragState, focusRef, showShadow }) {
   const { frame, levels } = useStore(sceneStore)
   return (
     <>
       {showShadow && <ShadowLight frame={frame} angle={0.45} />}
       <ProximityWall frame={frame} focusRef={focusRef} showShadow={showShadow && !!frame?.light_tip} />
       <Forceps frame={frame} levels={levels} />
-      <LandingReticle frame={frame} level={levels?.min} />
+      <LandingReticle readout={readout} frame={frame} level={levels?.min} />
       <ScopeCamera frame={frame} dragState={dragState} focusRef={focusRef} />
     </>
   )

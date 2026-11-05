@@ -63,6 +63,15 @@ export function nearestTip(frame, radius = EYE_RADIUS_MM) {
   return { tip, dist, wall }
 }
 
+// Spatial cue follows the panel's published side; a tie anchors at the tip
+// midpoint. The numerical clearance always remains the minimum of both tips.
+export function readoutTip(frame, side, radius = EYE_RADIUS_MM) {
+  const tip = side === 'left' ? frame.tip_left : side === 'right' ? frame.tip_right
+    : midpoint(frame.tip_left, frame.tip_right)
+  return { tip, wall: scale(normalize(tip), radius),
+    dist: Math.min(distanceToRetina(frame.tip_left, radius), distanceToRetina(frame.tip_right, radius)) }
+}
+
 // Full instrument pose derived from the two tips + the (static) trocar.
 // - jawCenter: midpoint of the tips, lies on the shaft axis
 // - shaftDir: unit vector from trocar toward the jaw center (pivot constraint)
