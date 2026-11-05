@@ -1,0 +1,13 @@
+{
+  "screenshot": "../after/15_asymmetric_near.png",
+  "crop": [
+    12,
+    58,
+    320,
+    940
+  ],
+  "output_scale": 2,
+  "dpi": 200,
+  "legend": false,
+  "callouts": []
+}

@@ -1,0 +1,50 @@
+{
+  "screenshot": "../after/20_live_ghost_last.png",
+  "crop": [
+    8,
+    60,
+    480,
+    240
+  ],
+  "output_scale": 2,
+  "dpi": 200,
+  "font_size": 15,
+  "badge_radius": 12,
+  "accent": "#e879f9",
+  "legend": {
+    "position": "below",
+    "width": 480,
+    "padding": 16,
+    "title": "Live source · mocked WebSocket"
+  },
+  "callouts": [
+    {
+      "number": 1,
+      "point": [
+        310,
+        175
+      ],
+      "target": [
+        32,
+        184,
+        270,
+        72
+      ],
+      "text": "No current number. Last Critical reading is explicitly historical; age counts from ghost onset."
+    },
+    {
+      "number": 2,
+      "point": [
+        402,
+        150
+      ],
+      "target": [
+        342,
+        110,
+        8,
+        170
+      ],
+      "text": "No active clearance alarm frame after grace expiry; ghost pose remains in the scene."
+    }
+  ]
+}

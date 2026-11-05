@@ -1,0 +1,31 @@
+{
+  "source_sha256": {
+    "services/viz/src/feed/levels.js": "c76cce0e086879c2efaee1852cbcd32f315d3e8833f97df75f180b7e41cb4572",
+    "services/viz/src/feed/pipeline.js": "9a77ac404e9438bc1067471457a8949ba2fa1d86768b8d1a4c24230ac645f31b",
+    "services/viz/src/config.js": "c81d592c10b82677029e68378d6a358024fa874334d47f8775c14fbb8b13ca21",
+    "services/viz/src/geometry.js": "ad09ae6c08325f66b9d1f77f01ef10e6c321c70564252d72c5d37fd0c12b0312",
+    "services/viz/src/ui.js": "54274099546c1da76723164b588555a541a6032c29eb636d1e60720f2a25d041",
+    "services/stream/tool_positions.py": "1a2e19b2971bcacbffaa05c283d02d13ab9c27f88f8f6a43d40962381d738418",
+    "config/default_calibration.json": "39e262f32a53e027bed2912a28bb7ffd699908c1bc2ce7abe3964270c5f9a6ce"
+  },
+  "inputs_sha256": {
+    "artifacts/sim_gt_10-35-27_ml_frames.csv": "231476be10bb29d5ff637788e0c2ce3550c66a546f53d10f4323eda684b3c3ea",
+    "artifacts/sim_gt_10-35-27_ml_detections.csv": "46d26c10881cc09b2eaecf6cadd37bbcd0c69dffe11cd67cd52b16c8f9820231",
+    "artifacts/sim_gt_10-48-23_ml_frames.csv": "d46cdb51fbce204891dd1f54d3af533ce2c5e4de864fd85299ffa111c0b1f38c",
+    "artifacts/sim_gt_10-48-23_ml_detections.csv": "62aa4bfc876a1d0e261070705c9f58c6c73d2074d0af7abb95d053a9e56f935a",
+    "artifacts/sim_gt_11-00-43_ml_frames.csv": "9334c94a3c11808785d422aac9e22b5b8705e629031d38d3cb131e914c7fd960",
+    "artifacts/sim_gt_11-00-43_ml_detections.csv": "7a48aab41b9021a2a4f16bc4cd827d058a638c2a961417c5bdf29fa1d0427aba"
+  },
+  "current_parameters": [
+    0.5,
+    0.08,
+    250
+  ],
+  "checks": 7,
+  "midpoint_roundtrip_max_error_mm": {
+    "10-35-27": 0.0024173663285331657,
+    "10-48-23": 0.005879412073328984,
+    "11-00-43": 0.001670432540273785
+  },
+  "javascript_matched_frames": 11428
+}

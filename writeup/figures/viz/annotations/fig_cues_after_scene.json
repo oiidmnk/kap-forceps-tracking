@@ -1,0 +1,57 @@
+{
+ "output_scale": 2,
+ "dpi": 200,
+ "accent": "#e879f9",
+ "badge_radius": 13,
+ "screenshot": "../after/04_critical_overview.png",
+ "crop": [
+  860,
+  470,
+  250,
+  420
+ ],
+ "callouts": [
+  {
+   "number": 1,
+   "point": [
+    1075,
+    600
+   ],
+   "target": [
+    905,
+    500,
+    95,
+    370
+   ],
+   "leader": true
+  },
+  {
+   "number": 2,
+   "point": [
+    1075,
+    740
+   ],
+   "target": [
+    946,
+    729,
+    64,
+    22
+   ],
+   "leader": true
+  },
+  {
+   "number": 3,
+   "point": [
+    890,
+    770
+   ],
+   "target": [
+    920,
+    726,
+    26,
+    28
+   ],
+   "leader": true
+  }
+ ]
+}

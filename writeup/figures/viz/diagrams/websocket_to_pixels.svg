@@ -1,0 +1,433 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="864pt" height="806.4pt" viewBox="0 0 864 806.4" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:date>2026-11-05T15:33:37.374009</dc:date>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.11.2, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 806.4 
+L 864 806.4 
+L 864 0 
+L 0 0 
+z
+" style="fill: #ffffff"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 38.88 72 
+L 205.92 72 
+Q 212.4 72 212.4 78.48 
+L 212.4 150.48 
+Q 212.4 156.96 205.92 156.96 
+L 38.88 156.96 
+Q 32.4 156.96 32.4 150.48 
+L 32.4 78.48 
+Q 32.4 72 38.88 72 
+z
+" clip-path="url(#pa7ef120a19)" style="fill: #ffffff; stroke: #b9c4cb; stroke-width: 1.3; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_3">
+    <path d="M 254.88 72 
+L 421.92 72 
+Q 428.4 72 428.4 78.48 
+L 428.4 150.48 
+Q 428.4 156.96 421.92 156.96 
+L 254.88 156.96 
+Q 248.4 156.96 248.4 150.48 
+L 248.4 78.48 
+Q 248.4 72 254.88 72 
+z
+" clip-path="url(#pa7ef120a19)" style="fill: #ffffff; stroke: #b9c4cb; stroke-width: 1.3; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_4">
+    <path d="M 470.88 72 
+L 637.92 72 
+Q 644.4 72 644.4 78.48 
+L 644.4 150.48 
+Q 644.4 156.96 637.92 156.96 
+L 470.88 156.96 
+Q 464.4 156.96 464.4 150.48 
+L 464.4 78.48 
+Q 464.4 72 470.88 72 
+z
+" clip-path="url(#pa7ef120a19)" style="fill: #ffffff; stroke: #b9c4cb; stroke-width: 1.3; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_5">
+    <path d="M 686.88 72 
+L 825.12 72 
+Q 831.6 72 831.6 78.48 
+L 831.6 150.48 
+Q 831.6 156.96 825.12 156.96 
+L 686.88 156.96 
+Q 680.4 156.96 680.4 150.48 
+L 680.4 78.48 
+Q 680.4 72 686.88 72 
+z
+" clip-path="url(#pa7ef120a19)" style="fill: #ffffff; stroke: #b9c4cb; stroke-width: 1.3; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_6">
+    <path d="M 214.399512 114.48 
+Q 230.401573 114.48 245.061993 114.48 
+" clip-path="url(#pa7ef120a19)" style="fill: none; stroke: #356b8b; stroke-width: 1.2; stroke-linecap: round"/>
+    <path d="M 239.861993 111.88 
+L 245.061993 114.48 
+L 239.861993 117.08 
+z
+" clip-path="url(#pa7ef120a19)" style="fill: #356b8b; stroke: #356b8b; stroke-width: 1.2; stroke-linecap: round"/>
+   </g>
+   <g id="patch_7">
+    <path d="M 430.399512 114.48 
+Q 446.401573 114.48 461.061993 114.48 
+" clip-path="url(#pa7ef120a19)" style="fill: none; stroke: #356b8b; stroke-width: 1.2; stroke-linecap: round"/>
+    <path d="M 455.861993 111.88 
+L 461.061993 114.48 
+L 455.861993 117.08 
+z
+" clip-path="url(#pa7ef120a19)" style="fill: #356b8b; stroke: #356b8b; stroke-width: 1.2; stroke-linecap: round"/>
+   </g>
+   <g id="patch_8">
+    <path d="M 646.399512 114.48 
+Q 662.401573 114.48 677.061993 114.48 
+" clip-path="url(#pa7ef120a19)" style="fill: none; stroke: #356b8b; stroke-width: 1.2; stroke-linecap: round"/>
+    <path d="M 671.861993 111.88 
+L 677.061993 114.48 
+L 671.861993 117.08 
+z
+" clip-path="url(#pa7ef120a19)" style="fill: #356b8b; stroke: #356b8b; stroke-width: 1.2; stroke-linecap: round"/>
+   </g>
+   <g id="patch_9">
+    <path d="M 399.6 179.122588 
+Q 399.6 194.759966 399.6 209.055702 
+" clip-path="url(#pa7ef120a19)" style="fill: none; stroke: #356b8b; stroke-width: 1.2; stroke-linecap: round"/>
+    <path d="M 402.2 203.855702 
+L 399.6 209.055702 
+L 397 203.855702 
+z
+" clip-path="url(#pa7ef120a19)" style="fill: #356b8b; stroke: #356b8b; stroke-width: 1.2; stroke-linecap: round"/>
+   </g>
+   <g id="patch_10">
+    <path d="M 817.2 179.122588 
+Q 817.2 194.759966 817.2 209.055702 
+" clip-path="url(#pa7ef120a19)" style="fill: none; stroke: #356b8b; stroke-width: 1.2; stroke-linecap: round"/>
+    <path d="M 819.8 203.855702 
+L 817.2 209.055702 
+L 814.6 203.855702 
+z
+" clip-path="url(#pa7ef120a19)" style="fill: #356b8b; stroke: #356b8b; stroke-width: 1.2; stroke-linecap: round"/>
+   </g>
+   <g id="patch_11">
+    <path d="M 38.88 212.4 
+L 407.52 212.4 
+Q 414 212.4 414 218.88 
+L 414 313.92 
+Q 414 320.4 407.52 320.4 
+L 38.88 320.4 
+Q 32.4 320.4 32.4 313.92 
+L 32.4 218.88 
+Q 32.4 212.4 38.88 212.4 
+z
+" clip-path="url(#pa7ef120a19)" style="fill: #ffffff; stroke: #b9c4cb; stroke-width: 1.3; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_12">
+    <path d="M 456.48 212.4 
+L 825.12 212.4 
+Q 831.6 212.4 831.6 218.88 
+L 831.6 313.92 
+Q 831.6 320.4 825.12 320.4 
+L 456.48 320.4 
+Q 450 320.4 450 313.92 
+L 450 218.88 
+Q 450 212.4 456.48 212.4 
+z
+" clip-path="url(#pa7ef120a19)" style="fill: #ffffff; stroke: #b9c4cb; stroke-width: 1.3; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_13">
+    <path d="M 223.2 322.402588 
+Q 223.2 333.000283 223.2 342.256336 
+" clip-path="url(#pa7ef120a19)" style="fill: none; stroke: #356b8b; stroke-width: 1.2; stroke-linecap: round"/>
+    <path d="M 225.8 337.056336 
+L 223.2 342.256336 
+L 220.6 337.056336 
+z
+" clip-path="url(#pa7ef120a19)" style="fill: #356b8b; stroke: #356b8b; stroke-width: 1.2; stroke-linecap: round"/>
+   </g>
+   <g id="patch_14">
+    <path d="M 640.8 322.402588 
+Q 640.8 333.000283 640.8 342.256336 
+" clip-path="url(#pa7ef120a19)" style="fill: none; stroke: #356b8b; stroke-width: 1.2; stroke-linecap: round"/>
+    <path d="M 643.4 337.056336 
+L 640.8 342.256336 
+L 638.2 337.056336 
+z
+" clip-path="url(#pa7ef120a19)" style="fill: #356b8b; stroke: #356b8b; stroke-width: 1.2; stroke-linecap: round"/>
+   </g>
+   <g id="patch_15">
+    <path d="M 38.88 352.8 
+L 407.52 352.8 
+Q 414 352.8 414 359.28 
+L 414 461.52 
+Q 414 468 407.52 468 
+L 38.88 468 
+Q 32.4 468 32.4 461.52 
+L 32.4 359.28 
+Q 32.4 352.8 38.88 352.8 
+z
+" clip-path="url(#pa7ef120a19)" style="fill: #ffffff; stroke: #b9c4cb; stroke-width: 1.3; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_16">
+    <path d="M 456.48 352.8 
+L 825.12 352.8 
+Q 831.6 352.8 831.6 359.28 
+L 831.6 461.52 
+Q 831.6 468 825.12 468 
+L 456.48 468 
+Q 450 468 450 461.52 
+L 450 359.28 
+Q 450 352.8 456.48 352.8 
+z
+" clip-path="url(#pa7ef120a19)" style="fill: #ffffff; stroke: #b9c4cb; stroke-width: 1.3; stroke-linejoin: miter"/>
+   </g>
+   <g id="line2d_1">
+    <path d="M 756 156.96 
+L 756 177.12 
+" clip-path="url(#pa7ef120a19)" style="fill: none; stroke: #356b8b; stroke-width: 1.2; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_2">
+    <path d="M 399.6 177.12 
+L 817.2 177.12 
+" clip-path="url(#pa7ef120a19)" style="fill: none; stroke: #356b8b; stroke-width: 1.2; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_3">
+    <path d="M 32.4 552.96 
+L 831.6 552.96 
+" clip-path="url(#pa7ef120a19)" style="fill: none; stroke: #b9c4cb; stroke-linecap: square"/>
+   </g>
+   <g id="text_1">
+    <text style="font-weight: 700; font-size: 17.28px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="32.4" y="38.8287" transform="rotate(-0 32.4 38.8287)">From the microscope image to the pixels</text>
+   </g>
+   <g id="text_2">
+    <text style="font-size: 10.08px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #50606c" x="32.4" y="55.44945" transform="rotate(-0 32.4 55.44945)">Numbers and alarm use raw measurements; only the 3D pose is interpolated (and therefore later)</text>
+   </g>
+   <g id="text_3">
+    <text style="font-weight: 700; font-size: 12.24px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="43.92" y="94.331475" transform="rotate(-0 43.92 94.331475)">Tracker (upstream)</text>
+   </g>
+   <g id="text_4">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(43.92 114.129787)">microscope video →</text>
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(43.92 129.267787)">segmenter → 3D tips</text>
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(43.92 144.260606)">(tool_positions.py)</text>
+   </g>
+   <g id="text_5">
+    <text style="font-weight: 700; font-size: 12.24px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="259.92" y="95.409169" transform="rotate(-0 259.92 95.409169)">Stream server</text>
+   </g>
+   <g id="text_6">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(259.92 114.129787)">JSON per frame on /ws</text>
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(259.92 129.267787)">timestamp = send time</text>
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(259.92 144.254897)">(ws_server.py)</text>
+   </g>
+   <g id="text_7">
+    <text style="font-weight: 700; font-size: 12.24px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="475.92" y="95.517225" transform="rotate(-0 475.92 95.517225)">Parse + validate</text>
+   </g>
+   <g id="text_8">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(475.92 114.129787)">both tips + trocar, 3 finite</text>
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(475.92 129.746559)">numbers each; else null</text>
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(475.92 144.405787)">(trackingState.js)</text>
+   </g>
+   <g id="text_9">
+    <text style="font-weight: 700; font-size: 12.24px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="691.92" y="94.331475" transform="rotate(-0 691.92 94.331475)">Pipeline</text>
+   </g>
+   <g id="text_10">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(691.92 114.129787)">freshness, grace,</text>
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(691.92 129.746559)">levels, trend</text>
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(691.92 144.405787)">(pipeline.js)</text>
+   </g>
+   <g id="text_11">
+    <text style="font-size: 9.36px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #50606c" x="32.4" y="173.528775" transform="rotate(-0 32.4 173.528775)">upstream latency (capture, detection, transport) is not measured in this document</text>
+   </g>
+   <g id="text_12">
+    <text style="font-weight: 700; font-size: 12.96px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #356b8b" x="32.4" y="201.61215" transform="rotate(-0 32.4 201.61215)">A  Readout path (numbers, status, alarm)</text>
+   </g>
+   <g id="text_13">
+    <text style="font-weight: 700; font-size: 12.96px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #356b8b" x="450" y="201.61215" transform="rotate(-0 450 201.61215)">B  Scene path (3D views, scope)</text>
+   </g>
+   <g id="text_14">
+    <text style="font-weight: 700; font-size: 12.24px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="43.92" y="235.917225" transform="rotate(-0 43.92 235.917225)">Raw frame → clearance</text>
+   </g>
+   <g id="text_15">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(43.92 254.407444)">dL/R = max(0, 12 mm − ‖tip‖), d = min(dL, dR)</text>
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(43.92 269.667788)">no spatial smoothing, no bias correction</text>
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(43.92 284.805788)">levels with hysteresis / dwell / grace (Fig. A)</text>
+   </g>
+   <g id="text_16">
+    <text style="font-weight: 700; font-size: 12.24px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="461.52" y="234.683662" transform="rotate(-0 461.52 234.683662)">Display interpolator</text>
+   </g>
+   <g id="text_17">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(461.52 254.529787)">drops repeated poses; up to 4 samples</text>
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(461.52 269.667788)">interval I ← 0.85·I + 0.15·gap (start 66 ms)</text>
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(461.52 284.805788)">render time = now − clamp(1.2·I, 30, 150) ms</text>
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(461.52 299.943788)">linear blend between two measured poses</text>
+   </g>
+   <g id="text_18">
+    <text style="font-weight: 700; font-size: 12.24px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="43.92" y="375.597169" transform="rotate(-0 43.92 375.597169)">Readout store (nominal 10 Hz)</text>
+   </g>
+   <g id="text_19">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(43.92 394.929787)">published at most every 100 ms;</text>
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(43.92 410.067787)">level / availability changes publish at once</text>
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(43.92 425.205787)">numbers 1 decimal; trend 10 s, slope over 600 ms</text>
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(43.92 440.221444)">motion word at |v| &gt; 0.15 mm/s</text>
+   </g>
+   <g id="text_20">
+    <text style="font-weight: 700; font-size: 12.24px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="461.52" y="375.083663" transform="rotate(-0 461.52 375.083663)">Scene store (every animation frame)</text>
+   </g>
+   <g id="text_21">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(461.52 394.929787)">≈ 80 ms behind at 15 Hz input</text>
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(461.52 410.067787)">holds the newest pose, never extrapolates</text>
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(461.52 425.205787)">scope camera follows with τ = 0.08 s</text>
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; fill: #202d37" transform="translate(461.52 441.355162)">colours from the same levels as A</text>
+   </g>
+   <g id="text_22">
+    <text style="font-weight: 700; font-size: 12.96px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #356b8b" x="32.4" y="502.57215" transform="rotate(-0 32.4 502.57215)">Time constants as distance travelled at simulator approach speeds</text>
+   </g>
+   <g id="text_23">
+    <text style="font-size: 9.36px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #50606c" x="32.4" y="519.128775" transform="rotate(-0 32.4 519.128775)">speed of the ground-truth tip height while approaching below 3 mm (3 runs, 1940 frames): median 0.53, p75 1.0, p95 2.2 mm/s</text>
+   </g>
+   <g id="text_24">
+    <text style="font-weight: 700; font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #50606c" x="180" y="544.261162" transform="rotate(-0 180 544.261162)">time</text>
+   </g>
+   <g id="text_25">
+    <text style="font-weight: 700; font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #50606c" x="266.4" y="543.758737" transform="rotate(-0 266.4 543.758737)">0.53 mm/s</text>
+   </g>
+   <g id="text_26">
+    <text style="font-weight: 700; font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #50606c" x="360" y="543.758737" transform="rotate(-0 360 543.758737)">1.0 mm/s</text>
+   </g>
+   <g id="text_27">
+    <text style="font-weight: 700; font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #50606c" x="453.6" y="543.758737" transform="rotate(-0 453.6 543.758737)">2.2 mm/s</text>
+   </g>
+   <g id="text_28">
+    <text style="font-weight: 700; font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #50606c" x="547.2" y="543.209006" transform="rotate(-0 547.2 543.209006)">meaning</text>
+   </g>
+   <g id="text_29">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="32.4" y="568.741162" transform="rotate(-0 32.4 568.741162)">readout throttle</text>
+   </g>
+   <g id="text_30">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="180" y="568.648997" transform="rotate(-0 180 568.648997)">≤ 100 ms</text>
+   </g>
+   <g id="text_31">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="266.4" y="568.648997" transform="rotate(-0 266.4 568.648997)">≤ 0.05</text>
+   </g>
+   <g id="text_32">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="360" y="568.648997" transform="rotate(-0 360 568.648997)">≤ 0.10</text>
+   </g>
+   <g id="text_33">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="453.6" y="568.648997" transform="rotate(-0 453.6 568.648997)">≤ 0.22</text>
+   </g>
+   <g id="text_34">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="547.2" y="567.729787" transform="rotate(-0 547.2 567.729787)">number can lag; level changes do not</text>
+   </g>
+   <g id="text_35">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="32.4" y="592.209787" transform="rotate(-0 32.4 592.209787)">scene interpolation</text>
+   </g>
+   <g id="text_36">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="180" y="593.128997" transform="rotate(-0 180 593.128997)">≈ 80 ms</text>
+   </g>
+   <g id="text_37">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="266.4" y="593.128997" transform="rotate(-0 266.4 593.128997)">0.04</text>
+   </g>
+   <g id="text_38">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="360" y="593.128997" transform="rotate(-0 360 593.128997)">0.08</text>
+   </g>
+   <g id="text_39">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="453.6" y="593.128997" transform="rotate(-0 453.6 593.128997)">0.18</text>
+   </g>
+   <g id="text_40">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="547.2" y="592.209787" transform="rotate(-0 547.2 592.209787)">pose / drop line behind the number</text>
+   </g>
+   <g id="text_41">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="32.4" y="617.701163" transform="rotate(-0 32.4 617.701163)">de-escalation dwell</text>
+   </g>
+   <g id="text_42">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="180" y="617.608997" transform="rotate(-0 180 617.608997)">250 ms</text>
+   </g>
+   <g id="text_43">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="266.4" y="617.608997" transform="rotate(-0 266.4 617.608997)">0.13</text>
+   </g>
+   <g id="text_44">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="360" y="617.608997" transform="rotate(-0 360 617.608997)">0.25</text>
+   </g>
+   <g id="text_45">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="453.6" y="617.608997" transform="rotate(-0 453.6 617.608997)">0.55</text>
+   </g>
+   <g id="text_46">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="547.2" y="616.689787" transform="rotate(-0 547.2 616.689787)">alarm stays on while retracting</text>
+   </g>
+   <g id="text_47">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="32.4" y="641.169787" transform="rotate(-0 32.4 641.169787)">dropout grace</text>
+   </g>
+   <g id="text_48">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="180" y="642.088997" transform="rotate(-0 180 642.088997)">400 ms</text>
+   </g>
+   <g id="text_49">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="266.4" y="642.088997" transform="rotate(-0 266.4 642.088997)">0.21</text>
+   </g>
+   <g id="text_50">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="360" y="642.088997" transform="rotate(-0 360 642.088997)">0.40</text>
+   </g>
+   <g id="text_51">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="453.6" y="642.088997" transform="rotate(-0 453.6 642.088997)">0.88</text>
+   </g>
+   <g id="text_52">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="547.2" y="641.169787" transform="rotate(-0 547.2 641.169787)">held value may be this far off</text>
+   </g>
+   <g id="text_53">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="32.4" y="666.661162" transform="rotate(-0 32.4 666.661162)">stale timeout</text>
+   </g>
+   <g id="text_54">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="180" y="666.500484" transform="rotate(-0 180 666.500484)">1.5 s</text>
+   </g>
+   <g id="text_55">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="266.4" y="666.568997" transform="rotate(-0 266.4 666.568997)">0.80</text>
+   </g>
+   <g id="text_56">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="360" y="666.568997" transform="rotate(-0 360 666.568997)">1.50</text>
+   </g>
+   <g id="text_57">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="453.6" y="666.568997" transform="rotate(-0 453.6 666.568997)">3.3</text>
+   </g>
+   <g id="text_58">
+    <text style="font-size: 10.44px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #202d37" x="547.2" y="666.661162" transform="rotate(-0 547.2 666.661162)">frozen source before "Data stale"</text>
+   </g>
+   <g id="text_59">
+    <text style="font-size: 9.36px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #50606c" x="32.4" y="700.568775" transform="rotate(-0 32.4 700.568775)">Distances in mm (time × speed). For comparison: median height error of the tracker ≈ 0.6 mm, hysteresis 0.08 mm, critical threshold 0.5 mm.</text>
+   </g>
+   <g id="text_60">
+    <text style="font-size: 9.36px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #50606c" x="32.4" y="722.168775" transform="rotate(-0 32.4 722.168775)">The interpolation and throttle together are small against the measurement error; grace and stale are not, which is why held values are dimmed</text>
+   </g>
+   <g id="text_61">
+    <text style="font-size: 9.36px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #50606c" x="32.4" y="738.008775" transform="rotate(-0 32.4 738.008775)">and the held level may never be lowered.</text>
+   </g>
+   <g id="text_62">
+    <text style="font-size: 7.92px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #50606c" x="32.4" y="771.017287" transform="rotate(-0 32.4 771.017287)">Sources: services/viz/src/feed/displayInterpolation.js · pipeline.js · trend.js · config.js · scene/ScopeCamera.jsx · services/stream/ws_server.py; speeds: writeup/figures/viz/design/approach_speed.py</text>
+   </g>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="pa7ef120a19">
+   <rect x="0" y="0" width="864" height="806.4"/>
+  </clipPath>
+ </defs>
+</svg>

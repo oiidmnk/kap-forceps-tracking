@@ -1,0 +1,29 @@
+{
+ "output_scale": 4,
+ "dpi": 200,
+ "accent": "#e879f9",
+ "badge_radius": 7,
+ "screenshot": "../baseline/04_critical_overview.png",
+ "crop": [
+  110,
+  690,
+  130,
+  130
+ ],
+ "callouts": [
+  {
+   "number": 3,
+   "point": [
+    130,
+    712
+   ],
+   "target": [
+    155,
+    758,
+    35,
+    30
+   ],
+   "leader": true
+  }
+ ]
+}

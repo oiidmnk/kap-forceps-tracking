@@ -1,0 +1,50 @@
+{
+  "screenshot": "../after/17_live_critical.png",
+  "crop": [
+    8,
+    60,
+    480,
+    240
+  ],
+  "output_scale": 2,
+  "dpi": 200,
+  "font_size": 15,
+  "badge_radius": 12,
+  "accent": "#e879f9",
+  "legend": {
+    "position": "below",
+    "width": 480,
+    "padding": 16,
+    "title": "Live source · mocked WebSocket"
+  },
+  "callouts": [
+    {
+      "number": 1,
+      "point": [
+        310,
+        175
+      ],
+      "target": [
+        32,
+        184,
+        270,
+        72
+      ],
+      "text": "Live Critical: displayed-level p10–p90 note; not a guaranteed true-clearance interval."
+    },
+    {
+      "number": 2,
+      "point": [
+        402,
+        150
+      ],
+      "target": [
+        342,
+        110,
+        8,
+        170
+      ],
+      "text": "Steady red frame in live mode. A still image cannot establish pulse behaviour."
+    }
+  ]
+}

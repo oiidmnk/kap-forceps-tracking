@@ -1,0 +1,53 @@
+{
+  "output_scale": 4,
+  "dpi": 200,
+  "accent": "#e879f9",
+  "badge_radius": 7,
+  "screenshot": "../after/04_critical_overview.png",
+  "crop": [
+    105,
+    765,
+    130,
+    130
+  ],
+  "callouts": [
+    {
+      "number": 1,
+      "point": [
+        0,
+        0
+      ],
+      "text": "Light-pipe aim line and aim point: always drawn -> only with the 'Light beam' layer; it was a second dashed line ending on the retina next to the drop line but meaning 'illuminated centre', not 'landing point'"
+    },
+    {
+      "number": 2,
+      "point": [
+        0,
+        0
+      ],
+      "text": "In-scene label 0.36 -> 0.3 mm (one decimal, rounded down like the panel)"
+    },
+    {
+      "number": 3,
+      "point": [
+        125,
+        787
+      ],
+      "target": [
+        155,
+        816,
+        35,
+        34
+      ],
+      "leader": true,
+      "text": "Critical tip markers: 1.5x radius plus a light back-face outline in both views. Perceptible non-hue separation is scope only; the ≈2 px Overview marker remains too small to rely on it."
+    }
+  ],
+  "legend": {
+    "position": "right",
+    "width": 215,
+    "padding": 12,
+    "title": "Before -> after (critical pose, true 0.36 mm)"
+  },
+  "font_size": 7.5
+}
