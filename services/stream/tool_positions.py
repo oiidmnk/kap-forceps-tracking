@@ -48,12 +48,27 @@ the microscope's x/y image plane) pins down exactly where on that ray the
 real, floating tip is. The point where the two jaws physically meet is then
 recovered from the two reconstructed tip positions, the forceps trocar, and
 the known length of a single jaw.
+
+Two camera models map image pixels into this frame:
+
+    - orthographic (default): image x/y are eye x/y divided by the
+      eye-circle radius, as if the camera were infinitely far away.
+    - perspective: a pinhole camera at ``camera_center_mm`` (eye frame, mm),
+      looking along +z, with focal length ``camera_focal_r`` and principal
+      point offset ``camera_pp_r`` (from the eye-circle centre), both in
+      eye-circle radii. The calibration stores the camera in video px; the
+      orchestrator converts it for the eye circle and crop the points arrive
+      in, so the circle cancels out. Pixels become rays from the camera; the shadow is where
+      its ray hits the far side of the eye sphere, and the tip is the point
+      on the light -> shadow line closest to the tip's ray. Measured against
+      the simulator's trajectory log, this removes most of the orthographic
+      model's error (issue #1).
 """
 
 from __future__ import annotations
 
 import math
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 Vec2 = Tuple[float, float]
 Vec3 = Tuple[float, float, float]
@@ -77,6 +92,10 @@ def _scale3(a: Vec3, s: float) -> Vec3:
 
 def _dot2(a: Vec2, b: Vec2) -> float:
     return a[0] * b[0] + a[1] * b[1]
+
+
+def _dot3(a: Vec3, b: Vec3) -> float:
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 
 
 def _sub2(a: Vec2, b: Vec2) -> Vec2:
@@ -227,6 +246,69 @@ def reconstruct_tip_from_shadow(
     return _add3(light_tip, _scale3(ray_dir, t))
 
 
+def camera_ray(
+    point_px: Vec2,
+    eye_center_px: Vec2,
+    eye_radius_px: float,
+    focal_r: float,
+    pp_r: Vec2,
+) -> Vec3:
+    """Unit direction of the perspective camera's ray through an image pixel."""
+    x, y = pixel_to_normalized(point_px, eye_center_px, eye_radius_px)
+    return _normalize3((x - pp_r[0], y - pp_r[1], focal_r))
+
+
+def shadow_point_on_retina_perspective(
+    shadow_px: Vec2,
+    eye_center_px: Vec2,
+    eye_radius_px: float,
+    camera_center: Vec3,
+    focal_r: float,
+    pp_r: Vec2,
+) -> Vec3:
+    """Where the camera ray through the shadow pixel hits the far side of the eye sphere."""
+    ray = camera_ray(shadow_px, eye_center_px, eye_radius_px, focal_r, pp_r)
+    b = _dot3(ray, camera_center)
+    radicand = b ** 2 - (_dot3(camera_center, camera_center) - 1.0)
+    if radicand < 0.0:
+        raise ValueError("shadow pixel's camera ray misses the eye sphere")
+    return _add3(camera_center, _scale3(ray, -b + math.sqrt(radicand)))
+
+
+def reconstruct_tip_perspective(
+    light_tip: Vec3,
+    tip_px: Vec2,
+    shadow_px: Vec2,
+    eye_center_px: Vec2,
+    eye_radius_px: float,
+    camera_center: Vec3,
+    focal_r: float,
+    pp_r: Vec2,
+) -> Vec3:
+    """Recover the 3D tip with a perspective camera.
+
+    The tip lies on the line from the light tip through the shadow point;
+    the camera ray through the tip pixel picks the point on that line
+    closest to it (the two lines rarely intersect exactly because of
+    detection noise).
+    """
+    shadow_3d = shadow_point_on_retina_perspective(
+        shadow_px, eye_center_px, eye_radius_px, camera_center, focal_r, pp_r
+    )
+    a = _sub3(shadow_3d, light_tip)
+    e = camera_ray(tip_px, eye_center_px, eye_radius_px, focal_r, pp_r)
+    w = _sub3(light_tip, camera_center)
+    aa, ae = _dot3(a, a), _dot3(a, e)
+    denom = aa - ae ** 2
+    if denom <= 1e-12 * aa:
+        raise ValueError(
+            "light -> shadow line is parallel to the tip's camera ray; "
+            "cannot solve for the tip"
+        )
+    s = (ae * _dot3(e, w) - _dot3(a, w)) / denom
+    return _add3(light_tip, _scale3(a, s))
+
+
 def jaw_meeting_point(
     trocar_forceps: Vec3, left_tip: Vec3, right_tip: Vec3, jaw_length: float
 ) -> Vec3:
@@ -271,6 +353,9 @@ def compute_tool_positions(
     jaw_length_mm: float,
     light_aim_tilt: float = 0.0,
     light_aim_clock: float = 0.0,
+    camera_focal_r: Optional[float] = None,
+    camera_pp_r: Vec2 = (0.0, 0.0),
+    camera_center_mm: Optional[Vec3] = None,
 ) -> Dict[str, Vec3]:
     """Reconstruct all tool positions in the normalized eye frame.
 
@@ -301,6 +386,11 @@ def compute_tool_positions(
         (fraction-of-eye-radius) frame used everywhere else.
     jaw_length_mm:
         Length of a single forceps jaw, in millimeters.
+    camera_focal_r, camera_pp_r, camera_center_mm:
+        Optional perspective camera (see the module docstring): focal
+        length and principal-point offset in eye-circle radii, camera
+        centre in the eye frame in millimeters. Without ``camera_focal_r``
+        the orthographic model is used.
 
     Returns
     -------
@@ -319,12 +409,24 @@ def compute_tool_positions(
 
     trocar_forceps = trocar_position(forceps_rot_up, forceps_rot_clock)
 
-    left_tip_forceps = reconstruct_tip_from_shadow(
-        tip_light, left_tip_px, left_shadow_px, eye_center_px, eye_radius_px
-    )
-    right_tip_forceps = reconstruct_tip_from_shadow(
-        tip_light, right_tip_px, right_shadow_px, eye_center_px, eye_radius_px
-    )
+    if camera_focal_r is None:
+        def reconstruct(tip_px: Vec2, shadow_px: Vec2) -> Vec3:
+            return reconstruct_tip_from_shadow(
+                tip_light, tip_px, shadow_px, eye_center_px, eye_radius_px
+            )
+    else:
+        if camera_center_mm is None:
+            raise ValueError("camera_focal_r needs camera_center_mm")
+        camera_center = _scale3(camera_center_mm, 1.0 / eye_radius_mm)
+
+        def reconstruct(tip_px: Vec2, shadow_px: Vec2) -> Vec3:
+            return reconstruct_tip_perspective(
+                tip_light, tip_px, shadow_px, eye_center_px, eye_radius_px,
+                camera_center, camera_focal_r, camera_pp_r,
+            )
+
+    left_tip_forceps = reconstruct(left_tip_px, left_shadow_px)
+    right_tip_forceps = reconstruct(right_tip_px, right_shadow_px)
 
     jaw_meet_forceps = jaw_meeting_point(
         trocar_forceps, left_tip_forceps, right_tip_forceps, jaw_length
@@ -426,5 +528,26 @@ if __name__ == "__main__":
     )
     for key, value in result.items():
         print(f"{key}: {value}")
+
+    # Perspective camera: project a known tip and its shadow into the image,
+    # then reconstruct the tip from those two pixels.
+    cam_r, focal_r, pp_r = (-0.06, 0.03, -1.82), 3.0, (-0.15, -0.03)
+    light = light_tip_position(0.64, -0.45, 0.14, aim_tilt=0.34, aim_clock=1.15)
+    tip_true = (0.1, -0.2, 0.6)
+    direction = _normalize3(_sub3(tip_true, light))
+    b = _dot3(direction, light)
+    shadow_true = _add3(light, _scale3(direction, -b + math.sqrt(b ** 2 - (_dot3(light, light) - 1.0))))
+
+    def to_px(p: Vec3) -> Vec2:
+        rel = _sub3(p, cam_r)
+        return (
+            eye_center_px[0] + eye_radius_px * (focal_r * rel[0] / rel[2] + pp_r[0]),
+            eye_center_px[1] + eye_radius_px * (focal_r * rel[1] / rel[2] + pp_r[1]),
+        )
+
+    got = reconstruct_tip_perspective(
+        light, to_px(tip_true), to_px(shadow_true), eye_center_px, eye_radius_px, cam_r, focal_r, pp_r
+    )
+    assert _norm3(_sub3(got, tip_true)) < 1e-9, got
 
     print("All checks passed.")

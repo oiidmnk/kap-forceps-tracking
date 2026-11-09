@@ -12,7 +12,7 @@ origin is the midpoint of its jaw tips. Image point = pinhole(EYE pose · X). Ne
 offset is assumed: both are fitted to the detected forceps tips (12 parameters, thousands of frames). The camera also
 gives the image-aligned frame the pipeline works in, so GT and reconstruction are compared there.
 
-Attribution: the same reconstruction is also fed (a) the GT tip + a modelled shadow (light at the lamp trocar, retina =
+Attribution: the same reconstruction is also fed (a) the GT tip + a modelled shadow (point light at the logged lamp tip, retina =
 eye sphere) -> error of the 3D model alone, (b) the GT tip + the detected shadow -> adds shadow detection.
 """
 import argparse
@@ -116,6 +116,41 @@ def decompose(P):
     return K / K[2, 2], R, -R.T @ t
 
 
+def angles(u):
+    """Unit vector on the eye sphere -> (rot_up, rot_clock) as in tool_positions.trocar_position."""
+    return float(np.arccos(np.clip(-u[2], -1, 1))), float(np.arctan2(u[1], u[0]))
+
+
+def measured_calibration(log, T, Rc, C, K, r_eye):
+    """Calibration this recording implies: trocar angles and light tip in the camera-aligned eye frame, perspective
+    camera in video px. The eye moves a little during a run; its median pose is used."""
+    E = pose_at(log[EYE], T)
+    U, _, Vt = np.linalg.svd(E[:, :3, :3].sum(0))
+    to_cam = Rc @ (U @ Vt)
+    forceps_up, forceps_clock = angles(to_cam @ trocar(log[FORCEPS][1]) / r_eye)
+    t_lamp, M_lamp = log[LAMP]
+    L = trocar(M_lamp)
+    light_up, light_clock = angles(to_cam @ L / np.linalg.norm(L))
+    tip = M_lamp[:, :3, 3] - L
+    depth = np.linalg.norm(tip, axis=1)
+    inside = depth < 6                                        # lamp in the eye (insert/remove poses are far outside)
+    aim = to_cam @ np.median(tip[inside] / depth[inside, None], 0)
+    aim /= np.linalg.norm(aim)
+    default = -np.array(tp.trocar_position(light_up, light_clock))
+    e_up = np.array([np.cos(light_up) * np.cos(light_clock), np.cos(light_up) * np.sin(light_clock), np.sin(light_up)])
+    e_clock = np.array([-np.sin(light_clock), np.cos(light_clock), 0.0])
+    cam = np.median(np.einsum("ij,nj->ni", Rc, C - E[:, :3, 3]), 0)
+    return {
+        "light_rot_up": light_up, "light_rot_clock": light_clock, "light_depth_mm": float(np.median(depth[inside])),
+        "light_aim_tilt": float(np.arccos(np.clip(aim @ default, -1, 1))),
+        "light_aim_clock": float(np.arctan2(aim @ e_clock, aim @ e_up)),
+        "forceps_rot_up": forceps_up, "forceps_rot_clock": forceps_clock, "eye_radius_mm": round(r_eye, 2),
+        "camera_focal_px": float((K[0, 0] + K[1, 1]) / 2),
+        "camera_pp_px": [float(K[0, 2]), float(K[1, 2])],
+        "camera_center_mm": [float(v) for v in cam],
+    }
+
+
 # --- detection pass ----------------------------------------------------------------------------------------------
 def make_detector(kind, ckpt):
     if kind == "classic":                                     # single-frame fallback, no background model
@@ -161,14 +196,33 @@ def detect_all(video, det, circle):
 
 
 # --- evaluation --------------------------------------------------------------------------------------------------
+def camera_in_square(cal, circle):
+    """Camera in video px -> relative to the normalised square's eye circle, as the orchestrator hands it to the
+    stream (stream_calibration in services/orchestrator/app.py)."""
+    if cal.get("camera_focal_px") is None:
+        return cal
+    cx, cy, r = circle
+    side = max(2, round(2 * r))
+    x0, y0 = round(cx - r), round(cy - r)
+    s, h = WORK / side, WORK / 2
+    (px, py) = cal["camera_pp_px"]
+    return {**cal, "camera_focal_r": cal["camera_focal_px"] * s / h,
+            "camera_pp_r": [((px - x0) * s - h) / h, ((py - y0) * s - h) / h]}
+
+
 def reconstruct(cal, tips_l, tips_r, sh_l, sh_r):
     """Stream reconstruction per frame -> tip midpoint in mm (NaN where the stream would fail)."""
     out = np.full((len(tips_l), 3), np.nan)
     keys = ("light_rot_up", "light_rot_clock", "light_depth_mm", "forceps_rot_up", "forceps_rot_clock",
             "eye_radius_mm", "jaw_length_mm")
+    camera = {}
+    if cal.get("camera_focal_r") is not None:
+        camera = dict(camera_focal_r=cal["camera_focal_r"], camera_pp_r=tuple(cal.get("camera_pp_r", (0.0, 0.0))),
+                      camera_center_mm=tuple(cal["camera_center_mm"]))
     for i, (a, b, c, d) in enumerate(zip(tips_l, tips_r, sh_l, sh_r)):
         try:
-            p = tp.compute_tool_positions(**{k: cal[k] for k in keys}, light_aim_tilt=cal.get("light_aim_tilt", 0.0),
+            p = tp.compute_tool_positions(**{k: cal[k] for k in keys}, **camera,
+                                          light_aim_tilt=cal.get("light_aim_tilt", 0.0),
                                           light_aim_clock=cal.get("light_aim_clock", 0.0), left_tip_px=tuple(a),
                                           right_tip_px=tuple(b), left_shadow_px=tuple(c), right_shadow_px=tuple(d),
                                           eye_center_px=(WORK / 2, WORK / 2), eye_radius_px=WORK / 2)
@@ -198,6 +252,8 @@ def main():
     ap.add_argument("--circle", help="eye circle cx,cy,r in video px (default: auto-detected, median over the video)")
     ap.add_argument("--out", default=os.path.join(ROOT, "artifacts/sim_gt"))
     ap.add_argument("--reuse", action="store_true", help="reuse <out>_<detector>_detections.csv from an earlier run")
+    ap.add_argument("--write-calibration", metavar="JSON",
+                    help="write the calibration this recording implies (trocars, light, perspective camera) as JSON")
     a = ap.parse_args()
     log = load_log(a.csv or os.path.splitext(a.video)[0] + "_trajectories.csv")
     cal = json.load(open(a.calibration))
@@ -260,13 +316,19 @@ def main():
     gt_n = to_norm(gt_raw)
     visible = sel & (np.linalg.norm(gt_n - WORK / 2, axis=1) < 0.94 * WORK / 2)
     sh_n = np.full_like(gt_n, np.nan)
-    if LAMP in log:                                           # shadow model: light at the lamp trocar, retina = eye sphere
-        L = trocar(log[LAMP][1])
+    if LAMP in log:                                           # shadow model: point light at the lamp tip, retina = eye sphere
+        L = pose_at(log[LAMP], T)[:, :3, 3]
         d = tip_w - L
         d /= np.linalg.norm(d, axis=1, keepdims=True)
-        b = d @ L
-        sh_w = L + (-b + np.sqrt(np.maximum(b ** 2 - (L @ L - r_eye ** 2), 0)))[:, None] * d
+        b = (d * L).sum(1)
+        sh_w = L + (-b + np.sqrt(np.maximum(b ** 2 - ((L * L).sum(1) - r_eye ** 2), 0)))[:, None] * d
         sh_n = to_norm(project(P, apply(E, sh_w)))
+
+    if a.write_calibration:
+        measured = {**cal, **measured_calibration(log, T[sel], Rc, C, K, r_eye)}
+        with open(a.write_calibration, "w") as f:
+            json.dump(measured, f, indent=2)
+        print(f"measured calibration -> {a.write_calibration}")
 
     # 4. report
     f_ok, s_ok = np.isfinite(fl).all(1), np.isfinite(sl).all(1)
@@ -279,6 +341,7 @@ def main():
           f"median {np.nanmedian(e_s[visible]):.1f} px, p95 {np.nanpercentile(e_s[visible], 95):.1f} px (model is approximate)")
     print(f"\n{'mm (median p75 p95)':34s} {'':7s}   {'3D':17s}   {'lateral':21s}   {'depth':19s}   height above retina")
     full = visible & f_ok & s_ok
+    cal = camera_in_square(cal, circle)
     rec_pipe = reconstruct(cal, fl[full], fr[full], sl[full], sr[full])
     rec_model = reconstruct(cal, gt_n[visible], gt_n[visible], sh_n[visible], sh_n[visible])
     rec_shadow = reconstruct(cal, gt_n[full], gt_n[full], sl[full], sr[full])

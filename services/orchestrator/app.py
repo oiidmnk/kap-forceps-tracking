@@ -40,6 +40,8 @@ CALIBRATION_KEYS = [
     "jaw_length_mm",
 ]
 
+CAMERA_KEYS = ("camera_focal_r", "camera_pp_r", "camera_center_mm")       # as the stream takes them
+
 REQUIRED_CLASS_TO_INPUT = {
     "tip_left": "left_tip_px",
     "tip_right": "right_tip_px",
@@ -154,7 +156,44 @@ def validate_calibration(payload: Any) -> dict[str, Any]:
         raise OrchestratorError("eye_radius_mm must be greater than 0")
     if calibration["jaw_length_mm"] <= 0:
         raise OrchestratorError("jaw_length_mm must be greater than 0")
+    # Optional light aim (radians; 0 = straight at the eye centre).
+    for key in ("light_aim_tilt", "light_aim_clock"):
+        if payload.get(key) is not None:
+            calibration[key] = float(payload[key])
+    # Optional perspective camera (focal length / principal point in video px, centre in mm).
+    if payload.get("camera_focal_px") is not None:
+        calibration["camera_focal_px"] = float(payload["camera_focal_px"])
+        if calibration["camera_focal_px"] <= 0:
+            raise OrchestratorError("camera_focal_px must be greater than 0")
+        calibration["camera_pp_px"] = _as_vec2(payload.get("camera_pp_px"), "camera_pp_px")
+        center = payload.get("camera_center_mm")
+        if not isinstance(center, (list, tuple)) or len(center) != 3:
+            raise OrchestratorError("camera_center_mm must be [x, y, z]")
+        calibration["camera_center_mm"] = [float(v) for v in center]
     return calibration
+
+
+def stream_calibration(calibration: dict[str, Any], detector_config: dict[str, Any] | None) -> dict[str, Any]:
+    """Saved calibration -> stream inputs.
+
+    The camera is saved in video px. The stream wants it relative to its eye circle, in the coordinates the tip and
+    shadow points arrive in: the detector's normalised square when it crops to an eye circle, else video px. The
+    circle cancels out, so a circle that is a few px off moves the crop but not the 3D.
+    """
+    out = {key: value for key, value in calibration.items() if key not in ("camera_focal_px", "camera_pp_px")}
+    if "camera_focal_px" not in calibration:
+        return out
+    focal, (px, py) = calibration["camera_focal_px"], calibration["camera_pp_px"]
+    circle = (detector_config or {}).get("circle")
+    if circle:                                  # video px -> normalised square, as detector.pipeline.Detector.normalize
+        side = max(2, int(round(2 * circle["r"])))
+        x0, y0 = int(round(circle["cx"] - circle["r"])), int(round(circle["cy"] - circle["r"]))
+        scale = float(detector_config["normalized_size"]) / side
+        focal, px, py = focal * scale, (px - x0) * scale, (py - y0) * scale
+    (cx, cy), r = calibration["eye_center_px"], calibration["eye_radius_px"]
+    out["camera_focal_r"] = focal / r
+    out["camera_pp_r"] = [(px - cx) / r, (py - cy) / r]
+    return out
 
 
 def polygon_centroid(points: list[list[float]]) -> list[float]:
@@ -394,6 +433,19 @@ async def get_stream_inputs(
     return response.json()
 
 
+async def get_detector_config(
+    detector_url: str,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> dict[str, Any]:
+    try:
+        async with httpx.AsyncClient(transport=transport, timeout=10.0) as client:
+            response = await client.get(f"{detector_url.rstrip('/')}/config")
+        response.raise_for_status()
+        return response.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        raise OrchestratorError(f"the perspective camera needs the detector's eye circle, but GET /config failed: {exc}") from exc
+
+
 def _response_detail(response: httpx.Response) -> str:
     try:
         payload = response.json()
@@ -443,6 +495,12 @@ def create_app(
     service.state.stream_url = stream_url
     service.state.segmentation_transport = segmentation_transport
     service.state.stream_transport = stream_transport
+
+    async def to_stream(calibration: dict[str, Any]) -> dict[str, Any]:
+        config = None
+        if "camera_focal_px" in calibration:
+            config = await get_detector_config(service.state.segmentation_url, service.state.segmentation_transport)
+        return stream_calibration(calibration, config)
 
     @service.get("/")
     async def index(request: Request):
@@ -516,7 +574,9 @@ def create_app(
                     "stream has no current inputs to update; process a frame first "
                     "so the tip/shadow points are seeded"
                 )
-            stream_payload = {**current_inputs, **calibration}
+            # A calibration without a camera switches the stream back to orthographic.
+            stale = {key: value for key, value in current_inputs.items() if key not in CAMERA_KEYS}
+            stream_payload = {**stale, **await to_stream(calibration)}
             stream_result = await put_stream_inputs(
                 service.state.stream_url,
                 stream_payload,
@@ -546,7 +606,7 @@ def create_app(
         try:
             points = validate_manual_points(payload)
             calibration = service.state.calibration_store.load()
-            stream_payload = {**calibration, **points}
+            stream_payload = {**await to_stream(calibration), **points}
             stream_result = await put_stream_inputs(
                 service.state.stream_url,
                 stream_payload,
@@ -579,7 +639,7 @@ def create_app(
             )
             predicted_points = select_preprocessor_points(segmentation)
             calibration = service.state.calibration_store.load()
-            stream_payload = {**calibration, **predicted_points}
+            stream_payload = {**await to_stream(calibration), **predicted_points}
             stream_result = await put_stream_inputs(
                 service.state.stream_url,
                 stream_payload,

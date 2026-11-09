@@ -1,11 +1,26 @@
 {
-  "light_rot_up": 0.68072,
-  "light_rot_clock": -0.52982,
-  "light_depth_mm": 0.0,
-  "forceps_rot_up": 0.63347,
-  "forceps_rot_clock": -2.73154,
-  "eye_center_px": [540.0, 540.0],
+  "light_rot_up": 0.64018,
+  "light_rot_clock": -0.45132,
+  "light_depth_mm": 1.73,
+  "light_aim_tilt": 0.33879,
+  "light_aim_clock": 1.14881,
+  "forceps_rot_up": 0.68755,
+  "forceps_rot_clock": -2.61495,
+  "eye_center_px": [
+    540.0,
+    540.0
+  ],
   "eye_radius_px": 500.0,
   "eye_radius_mm": 12.05,
-  "jaw_length_mm": 1.9
+  "jaw_length_mm": 1.9,
+  "camera_focal_px": 1344.9,
+  "camera_pp_px": [
+    516.5,
+    545.6
+  ],
+  "camera_center_mm": [
+    -0.7538,
+    0.3037,
+    -21.9205
+  ]
 }

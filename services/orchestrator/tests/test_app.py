@@ -4,6 +4,7 @@ from pathlib import Path
 import cv2
 import httpx
 import numpy as np
+import pytest
 from fastapi.testclient import TestClient
 
 from orchestrator.app import (
@@ -326,6 +327,73 @@ def test_calibration_update_persists(tmp_path):
 
     assert response.status_code == 200
     assert json.loads(calibration_path.read_text(encoding="utf-8"))["jaw_length_mm"] == 4.5
+
+
+def test_calibration_keeps_optional_light_aim_and_camera(tmp_path):
+    default_calibration = tmp_path / "default_calibration.json"
+    calibration_path = tmp_path / "calibration.json"
+    default_calibration.write_text(json.dumps(CALIBRATION), encoding="utf-8")
+    client = TestClient(
+        create_app(
+            calibration_path=calibration_path,
+            default_calibration_source=default_calibration,
+            segmentation_url="http://segmentation.test",
+            stream_url="http://stream.test",
+        )
+    )
+
+    camera = {
+        "light_aim_tilt": 0.3,
+        "light_aim_clock": 1.1,
+        "camera_focal_px": 1345.0,
+        "camera_pp_px": [517.0, 546.0],
+        "camera_center_mm": [-0.75, 0.3, -21.9],
+    }
+    assert client.put("/api/calibration", json=dict(CALIBRATION, **camera)).status_code == 200
+    saved = json.loads(calibration_path.read_text(encoding="utf-8"))
+    assert {key: saved[key] for key in camera} == camera
+
+    bad = dict(CALIBRATION, camera_focal_px=1345.0, camera_pp_px=[517.0, 546.0], camera_center_mm=[0.0, -22.0])
+    assert client.put("/api/calibration", json=bad).status_code == 400
+
+
+def test_apply_calibration_converts_camera_to_the_detector_crop(tmp_path):
+    default_calibration = tmp_path / "default_calibration.json"
+    calibration_path = tmp_path / "calibration.json"
+    calibration = dict(CALIBRATION, eye_center_px=[540.0, 540.0], eye_radius_px=540.0, camera_focal_px=1345.0,
+                       camera_pp_px=[517.0, 546.0], camera_center_mm=[-0.75, 0.3, -21.9])
+    default_calibration.write_text(json.dumps(calibration), encoding="utf-8")
+    put_payloads = []
+
+    async def detector_handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/config"
+        return httpx.Response(200, json={"circle": {"cx": 577.0, "cy": 559.0, "r": 444.0}, "normalized_size": 1080})
+
+    async def stream_handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(200, json={"inputs": {**CALIBRATION, "camera_focal_r": 9.0}, "positions": {}})
+        put_payloads.append(json.loads(request.content.decode("utf-8")))
+        return httpx.Response(200, json={"positions": {}})
+
+    client = TestClient(
+        create_app(
+            calibration_path=calibration_path,
+            default_calibration_source=default_calibration,
+            segmentation_url="http://segmentation.test",
+            stream_url="http://stream.test",
+            segmentation_transport=httpx.MockTransport(detector_handler),
+            stream_transport=httpx.MockTransport(stream_handler),
+            detector_state_path=tmp_path / "detector.json",
+        )
+    )
+
+    assert client.post("/api/apply-calibration").status_code == 200
+    sent = put_payloads[-1]
+    # Crop: side 888 px from (133, 115), scaled to 1080 -> relative to the square's circle (centre 540, radius 540).
+    assert sent["camera_focal_r"] == pytest.approx(1345.0 * 2 / 888)
+    assert sent["camera_pp_r"] == pytest.approx([(517 - 133) * 2 / 888 - 1, (546 - 115) * 2 / 888 - 1])
+    assert sent["camera_center_mm"] == [-0.75, 0.3, -21.9]
+    assert "camera_focal_px" not in sent and "camera_pp_px" not in sent
 
 
 def test_index_renders_template_with_static_assets(tmp_path):

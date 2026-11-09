@@ -3,17 +3,19 @@
 Finds the two jaw **tips** of the forceps and of its **shadow**, plus the **junction** where the jaws meet the shaft,
 in retina-simulator footage – offline *and* live – and feeds them into the 3D depth pipeline.
 
-> **Open problems of the 3D stage** (measured against the simulator's trajectory log, see
-> [3D accuracy](#3d-accuracy-vs-the-simulator-make-sim-eval); plan in
-> [#1](https://github.com/oiidmnk/kap-forceps-tracking/issues/1)): the tip is 1.4–2.4 mm off (median) even with perfect
-> 2D points, so better detection no longer helps – the 3D computation does.
-> 1. **Orthographic camera model** – `services/stream/tool_positions.py` treats the camera as infinitely far away; the real
->    one sits ~22 mm from the eye centre. This is the bulk of the error (perspective prototype: 0.25–0.46 mm).
-> 2. **Height above the retina is underestimated by ~0.5 mm** (systematic) – the forceps is reported closer to the retina
->    than it is. Goes away with the perspective model.
-> 3. **The camera geometry is not calibrated per session** – the focal length depends on the simulator's zoom, and the eye's
->    tilt towards the camera changes between sessions (4–10°; up to ~4° within one); the trocar angles are fixed to the
->    average pose. Needs a fixed zoom or a calibration phase (#1).
+> **3D stage: perspective camera** ([#1](https://github.com/oiidmnk/kap-forceps-tracking/issues/1)). The stream now
+> reconstructs with a pinhole camera ~22 mm from the eye centre instead of an orthographic one. With the simulator at
+> 6.5× / 6 mm ([Simulator settings](#simulator-settings)) and a camera measured once, the tip is **0.12–0.24 mm** off
+> (median, three runs, each scored with the calibration of the other two) instead of 1.5–1.8 mm, and the height above the
+> retina has no systematic bias any more (was −0.4 to −0.5 mm). The camera is stored in video px, so the eye circle
+> only crops the detector input and does not enter the 3D. Open:
+> 1. **Eye roll per session** – the eye still rolls by up to ~2° between runs and moves during a run. The trocar line in
+>    the lens-off view measures the roll to ~0.1–0.3° against the log; not yet used by the pipeline.
+> 2. **TODO: live input = exported video?** The camera (`camera_focal_px`, `camera_pp_px`) is measured on the simulator's
+>    exported MP4s (1080 × 1080). It holds for the live input only if that has the same framing (same size, no extra crop
+>    or scaling). Expected to be the same, not yet checked: compare a live frame with an exported one, e.g. the trocars
+>    in the lens-off view.
+> 3. **Reporting rate** – on the lev2 runs the stream reports the tip in only 65–84 % of the frames (shadow detection).
 
 ```
  video file / RTSP / MJPEG / camera
@@ -45,12 +47,31 @@ open http://localhost:8765/viewer  # live 3D position diagnostics
 By default the stack plays `data/video/forceps_lev1.mp4` in a loop at real-time speed – i.e. it behaves like a camera.
 Calibrate eye/trocars in the orchestrator (`:8090`); defaults live in `config/default_calibration.json`
 (eye centre/radius are set for the 1080² sample footage – adjust for other cameras).
-Trocar angles, eye radius (12.05 mm) and jaw length (1.9 mm) there are measured from the simulator's trajectory log
-of `mapskap1_2026-10-22_11-00-43+0200_forcepstraining_lev1`; the light sits at its trocar (`light_depth_mm` 0). They hold
+Trocar angles, light tip (1.73 mm past its trocar, with its aim), the perspective camera (`camera_focal_px`,
+`camera_pp_px` in video px, `camera_center_mm` in the eye frame), eye radius (12.05 mm) and jaw length (1.9 mm) there are measured
+from the simulator's trajectory logs of the three runs of 2026-11-09 at 6.5× / 6 mm (`scripts/eval_sim_gt.py … --write-calibration`,
+averaged). Without the `camera_*` fields the stream falls back to the orthographic model. The orchestrator converts the
+camera to the detector's crop (its current eye circle) whenever it pushes the calibration to the stream, so the circle
+only has to contain the retina: set it once (*Auto-detect* or by hand) and leave it. Re-detecting it per frame would
+add noise – the auto-detected centre scatters by 19–33 px between frames while the eye moves by 5–12 px. The values hold
 for the simulator's own orientation (Haag-Streit logo upright bottom left, instruments from the upper left, shadow down/left):
 capture it with `ROT=0`. Footage turned by 180° against that (logo upside down, instruments from the lower right) needs `ROT=180`.
 The orchestrator keeps its own copy in its state volume: `make calibration` (also run by `make ml-cam`) pushes the file
 to the running orchestrator and stream without touching the eye circle.
+
+### Simulator settings
+
+Set these on the Eyesi before every session; both can be read off the simulator:
+
+| setting | value |
+|---|---|
+| microscope zoom | **6.5×** |
+| lens–cornea distance | **6 mm** |
+
+They fix the camera's focal length and distance to the eye, so a camera measured once holds for every session: in
+three runs at these settings the focal length differed by 0.45 % and the camera distance by 0.1 mm. The camera in
+`config/default_calibration.json` is measured at 6.5× / 6 mm; the recordings of 2026-10-22 predate this rule.
+To record a run for evaluation: export video + trajectory log, and show the lens-off view for a few seconds (trocars).
 
 ### Source & eye circle (orchestrator UI, `http://localhost:8090`)
 
@@ -138,8 +159,27 @@ Junction points are not labelled, so they are not scored. Single-frame fallback 
 
 The simulator's trajectory log (`<video>_trajectories.csv`: instrument poses in mm) is the ground truth. `scripts/eval_sim_gt.py`
 fits camera and log offset from the forceps tips, replays the video through eye circle -> detector -> calibration ->
-`tool_positions.py` and compares the tip midpoint. Three runs of `mapskap1_2026-10-22` (~3500–4000 frames with the tip in
-view each), median / p95 in mm:
+`tool_positions.py` and compares the tip midpoint (median / p95 in mm).
+
+**Perspective model, 6.5× / 6 mm** – three runs of `mapskap1_2026-11-09` (forceps training lev 2, ~3100–3300 frames with
+the tip in view each). "Fixed camera": camera, trocars and light averaged from the *other two* runs, i.e. what a camera
+measured once gives, stored in video px; "today": the orthographic model with the 2026-10-22 calibration.
+
+| run | | today (orthographic) | fixed camera (perspective) | height, fixed camera | 3D found |
+|---|---|---|---|---|---|
+| 11-14-13 | limit of the 3D model | 1.86 / 6.1 | 0.14 / 0.35 | 0.05 / 0.16 | 100 % |
+| | learned segmenter | 1.78 / 8.6 | 0.24 / 6.1 | 0.12 / 2.4 | 84 % |
+| 11-25-32 | limit of the 3D model | 1.96 / 6.1 | 0.16 / 0.33 | 0.08 / 0.19 | 100 % |
+| | learned segmenter | 1.46 / 6.4 | 0.16 / 0.60 | 0.09 / 0.48 | 65 % |
+| 11-32-14 | limit of the 3D model | 2.16 / 10.9 | 0.14 / 0.55 | 0.06 / 0.33 | 100 % |
+| | learned segmenter | 1.81 / 9.5 | 0.12 / 0.61 | 0.06 / 0.44 | 69 % |
+
+Height bias with the fixed camera: −0.05 to +0.09 mm (orthographic: −0.38 to −0.53 mm). With each run's own camera the
+segmenter reaches 0.12–0.17 mm, so a camera measured once loses little. Stored relative to the auto-detected eye circle
+instead of in video px, the same camera gave 0.31 / 0.23 / 0.19 mm: the circle moved by up to 15 px between runs while
+the camera did not. The p95 of 6 mm in 11-14-13 comes from detection outliers, not from the model.
+
+**Orthographic model (before #1)** – three runs of `mapskap1_2026-10-22` (~3500–4000 frames with the tip in view each):
 
 | run | | 3D | height above retina | 3D found |
 |---|---|---|---|---|
@@ -156,6 +196,8 @@ the frames. The shadow is found in 86–88 % of the frames, except 10-48-23 (69 
 identical in all three runs; the runs differ in the eye's tilt towards the camera.
 
 `make sim-eval SIM=<video>` (trajectory CSV next to it), `DET=classic` for the classical detector; results in `artifacts/sim_gt_*`.
+`scripts/eval_sim_gt.py <video> --reuse --calibration <json>` scores another calibration on the cached detections;
+`--write-calibration <json>` writes the calibration the recording implies (trocars, light, camera).
 
 ## Layout
 

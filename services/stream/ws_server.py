@@ -113,8 +113,20 @@ def compute_positions(data: Dict[str, Any]) -> Dict[str, Any]:
         eye_radius_px=float(data["eye_radius_px"]),
         eye_radius_mm=float(data["eye_radius_mm"]),
         jaw_length_mm=float(data["jaw_length_mm"]),
+        **camera_kwargs(data),
     )
     return {key: [value[0], value[1], value[2]] for key, value in positions.items()}
+
+
+def camera_kwargs(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Optional perspective camera; without ``camera_focal_r`` the model stays orthographic."""
+    if data.get("camera_focal_r") is None:
+        return {}
+    return {
+        "camera_focal_r": float(data["camera_focal_r"]),
+        "camera_pp_r": _as_vec2(data.get("camera_pp_r", [0.0, 0.0])),
+        "camera_center_mm": tuple(float(v) for v in data["camera_center_mm"]),
+    }
 
 
 def anchor_positions(data: Dict[str, Any]) -> Dict[str, Any]:
