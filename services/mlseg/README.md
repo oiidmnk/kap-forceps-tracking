@@ -164,7 +164,7 @@ found (thr 0.1) 0.79 / 0.77 / 0.82 with on/off switches 116 / 94 / 60; container
 alarms). p18 and r3 stay available as `weights/p18.pt`, `weights/r3.pt`.
 
 **3D check against the video and calibration** (`scripts/fit_calibration.py` -> `config/rod_calibration.json`).
-*Superseded scale, see "Scale" below: the free fit shrinks the scene ~3x.*
+*Superseded scale and camera, see "Scale and camera" below: the free fit shrinks the scene ~3x.*
 With `config/default_calibration.json` (made for the forceps footage) the 3D scene of `rod.mp4` is wrong: only 3 % of the
 rod ends inside the eye, the rigid rod's length varies 10-20 mm, and while the forceps visibly carries the rod (rod and
 tips move together, frames 3040-3062 and 3968-4034) tips and rod are 1.8 mm apart. The script tracks the video with the
@@ -178,17 +178,26 @@ between 10 s windows), so one calibration is a compromise; the light's depth is 
 contact barely changes); the stream's camera is orthographic, the simulator's wide-field optics is not - the fit absorbs
 that in a large eye radius (1875 px for the 1080 px circle), so absolute sizes are smaller than the real instruments.
 
-**Scale.** Left free, the eye radius absorbs the wide-field optics (1875 px) and the reconstructed scene is ~3x too
-small next to the real-size instruments of the viz (rod 1.1 x 0.15 mm beside a 0.64 mm shaft). The optic disc gives the
-image scale: ~85 px for ~1.8 mm -> 0.021 mm/px -> the 12 mm eye is ~600 px. `config/rod_calibration.json` is fitted with
-`--eye-radius-px 600 --contact-weight 0` (contact comes from the image, below): rod 3.1-3.6 mm in the viz (video: ~3.9
-mm), length +-9 %, everything inside the eye, open jaws 0.76 mm apart (model: 0.7 mm fully open). The orthographic
-camera then puts the shaft axes' meeting point outside the eye, so the forceps trocar keeps only its direction and sits at
-the limbus. The light sits at its trocar (`--light-at-trocar 0.3 1.5`: only the trocar's two angles are fitted, the
-light 0.06 mm inside the wall; the score also counts frames whose rod is >30 % off, a median alone accepted a light
-position where single frames blow up to 40 mm). It comes out at 58 deg from the straight-down axis, upper right,
-opposite the forceps; over all 1784 tracked frames the rod is within +-30 % of its median length in 88 %, 0.3 % of its
-ends below the retina - as good as a free light tip (which also lands off to that side).
+**Scale and camera.** Left free, the eye radius absorbs the wide-field optics (1875 px) and the reconstructed scene is
+~3x too small next to the real-size instruments of the viz (rod 1.1 x 0.15 mm beside a 0.64 mm shaft). The optic disc
+gives the image scale: ~85 px for ~1.8 mm -> 0.021 mm/px -> the 12 mm eye is ~600 px (`--eye-radius-px 600`). The
+stream's orthographic camera does not fit a wide-angle fundus view: the rod's reconstructed length spreads +-8 % and the
+forceps shaft axes meet outside the eye. A pinhole camera c eye radii from the eye centre (`camera_distance`, optional
+in the stream and the orchestrator, 0 = orthographic as before) fits much better; scanning c on rod.mp4 (light at its
+trocar, refitted for each c):
+
+| c | rod length IQR | rod within +-30 % | light trocar | forceps trocar (shaft axes) |
+|---|---|---|---|---|
+| orthographic | +-8 % | 91 % | 57 deg | outside the eye |
+| 2.0 | +-5 % | 94 % | 45 deg | 41 deg |
+| **2.2** | **+-4 %** | **93 %** | **33 deg** | **52 deg** |
+| 2.6 | +-3 % | 94 % | 39 deg | misses the eye |
+
+(sampled frames; angles from the straight-down axis, pars plana ~45-50 deg). `config/rod_calibration.json` uses c = 2.2
+(`--camera-distance 2.2 --light-at-trocar 0.3 1.5 --contact-weight 0`): both trocars come out at plausible places
+without clamping, and over all 1783 tracked frames the rod is within +-30 % of its median length in 91 % (orthographic:
+88 %), 0.3 % of its ends below the retina. The reconstructed rod is 2.9 mm long (`ROD_LENGTH_MM` in the viz): it floats
+well above the retina, so the image (optic-disc scale, ~3.9 mm) shows it enlarged.
 
 **Contact decided in the image** (`detector/contact.py`, independent of the calibration). The live worker flags
 `rod_contact` when the forceps tips lie on the rod and either the forceps shadow meets the rod's shadow at the same place

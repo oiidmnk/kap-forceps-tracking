@@ -51,7 +51,7 @@ export const TIP_INDICATOR_MM = 0.045 // small accent centered on the tracked ti
 // tracked midpoint and direction (the per-frame reconstructed length jitters
 // by ~10 %): the median reconstructed length of rod.mp4, and a thickness from
 // the footage (~6.5x as long as thick, 185 px vs. 28 px).
-export const ROD_LENGTH_MM = 3.3
+export const ROD_LENGTH_MM = 2.9
 export const ROD_RADIUS_MM = ROD_LENGTH_MM / 13
 export const ROD_COLOR = '#c8141c'
 // Glow of the rod while the forceps touches it.

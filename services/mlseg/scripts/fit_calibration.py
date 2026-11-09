@@ -6,11 +6,13 @@ every point must lie inside the eye; while the forceps carries the rod (rod and 
 it. Left free, the radius absorbs the simulator's wide-field optics and comes out far too large (the whole scene shrinks
 ~3x against the real-size instruments of the viz), so it is fixed from a known size in the image: the optic disc
 (~1.8 mm, ~85 px in rod.mp4 -> 0.021 mm/px -> 12 mm eye = ~600 px). The forceps trocar is the point all shaft axes (tip
-midpoint -> junction) pass through.
+midpoint -> junction) pass through. --camera-distance uses the stream's pinhole camera (tool_positions.py) instead of
+the orthographic one: on rod.mp4 the rod's length spread drops from +-8 % to +-4 % at c = 2.2, and the shaft axes then
+meet on the eye (a straight line stays straight in a pinhole image), at the pars plana.
 
 python scripts/fit_calibration.py --video rod.mp4 --ckpt weights/last.pt --base ../../config/default_calibration.json \
     --out ../../config/rod_calibration.json --eye-radius-px 600 --contact-weight 0 --light-at-trocar 0.3 1.5 \
-    [--track runs/track.npz]
+    --camera-distance 2.2 [--track runs/track.npz]
 """
 import argparse
 import json
@@ -37,6 +39,8 @@ ap.add_argument("--eye-radius-px", type=float, default=0.0, help="fix the eye ra
 ap.add_argument("--light-at-trocar", nargs=2, type=float, metavar=("UP_MIN", "UP_MAX"),
                 help="the light sits at its trocar (chandelier / pipe barely inserted): fit only the trocar's angles, "
                      "rot_up within this range (radians from the straight-down axis; pars plana ~0.6-0.9)")
+ap.add_argument("--camera-distance", type=float, default=0.0,
+                help="pinhole camera this many eye radii from the eye centre (0: orthographic)")
 ap.add_argument("--contact-weight", type=float, default=10.0,
                 help="weight of tip-rod contact while carried (0: contact comes from the image, detector/contact.py)")
 a = ap.parse_args()
@@ -103,13 +107,30 @@ while i < len(idx):
 print(f"frames {len(idx)}: rod {okR.mean():.2f}, forceps+shadow {okT.mean():.2f}, carried {carried.sum()}")
 
 
+CAM = a.camera_distance
+
+
+def cam_ray(p, rpx):
+    """tool_positions.camera_ray, vectorised: origin (0, 0, -c), direction per pixel"""
+    u = (p - C) / rpx
+    return np.concatenate([u / (1 + CAM), np.ones(u.shape[:-1] + (1,))], -1)
+
+
 def rec(L, p, s, rpx):
     """tool_positions.reconstruct_tip_from_shadow, vectorised"""
-    sxy = (s - C) / rpx
-    S3 = np.concatenate([sxy, np.sqrt(np.clip(1 - (sxy ** 2).sum(-1), 0, None))[..., None]], -1)
-    ray = S3 - L
-    t = (((p - C) / rpx - L[:2]) * ray[..., :2]).sum(-1) / np.maximum((ray[..., :2] ** 2).sum(-1), 1e-9)
-    return L + t[..., None] * ray
+    if CAM <= 0:
+        sxy = (s - C) / rpx
+        S3 = np.concatenate([sxy, np.sqrt(np.clip(1 - (sxy ** 2).sum(-1), 0, None))[..., None]], -1)
+        ray = S3 - L
+        t = (((p - C) / rpx - L[:2]) * ray[..., :2]).sum(-1) / np.maximum((ray[..., :2] ** 2).sum(-1), 1e-9)
+        return L + t[..., None] * ray
+    origin = np.array([0.0, 0.0, -CAM])
+    d = cam_ray(s, rpx)
+    dd = (d * d).sum(-1)
+    S3 = origin + ((CAM + np.sqrt(np.clip(CAM * CAM - dd * (CAM * CAM - 1), 0, None))) / dd)[..., None] * d
+    u, v, w0 = S3 - L, cam_ray(p, rpx), L - origin
+    A, B, Cv, Dv, Ev = (u * u).sum(-1), (u * v).sum(-1), (v * v).sum(-1), (u * w0).sum(-1), (v * w0).sum(-1)
+    return L + ((B * Ev - Cv * Dv) / np.maximum(A * Cv - B * B, 1e-12))[..., None] * u
 
 
 sel, ts, cs = np.where(okR)[0][::3], np.where(okT)[0][::3], np.where(okR & okT & carried)[0]
@@ -186,6 +207,13 @@ for _ in range(4):
     res = np.abs(n @ p - b)
     w = res < np.percentile(res, 80)
 xy = (p - C) / rpx
+if CAM > 0:
+    # the shaft axes meet at the trocar's image: its camera ray hits the eye's front (or passes it: tangent point)
+    d = cam_ray(p, rpx)
+    dd = float(d @ d)
+    s_hit = (CAM - math.sqrt(max(CAM * CAM - dd * (CAM * CAM - 1), 0.0))) / dd
+    P3 = np.array([0.0, 0.0, -CAM]) + s_hit * d
+    P3 /= np.linalg.norm(P3)
 
 
 def light_entry(L, rot_up):
@@ -202,8 +230,8 @@ def light_entry(L, rot_up):
     return rot_up, clock, depth, tilt, math.atan2(float(d @ e_clock), float(d @ e_up))
 
 
-# trocars sit at about the limbus (6 mm of the 12 mm eye radius); with a realistic eye radius the orthographic camera
-# puts the axes' meeting point far outside (the simulator's optics is wide-angle), so only its direction is used then
+# orthographic camera: trocars sit at about the limbus (6 mm of the 12 mm eye radius); with a realistic eye radius the
+# axes' meeting point lands far outside the eye (the simulator's optics is wide-angle), so only its direction is used
 LIMBUS = 0.5
 LIMBUS_UP = math.asin(LIMBUS)
 # the light pipe also enters near the limbus (placing its trocar straight behind the tip would put it at the side)
@@ -213,8 +241,8 @@ else:
     l_up, l_clock, l_depth, l_tilt, l_aim = light_entry(L, LIMBUS_UP)
 out = {**base, "light_rot_up": round(l_up, 5), "light_rot_clock": round(l_clock, 5), "light_depth_mm": round(l_depth * mm, 3),
        "light_aim_tilt": round(l_tilt, 5), "light_aim_clock": round(l_aim, 5),
-       "forceps_rot_up": round(math.asin(min(float(np.linalg.norm(xy)), LIMBUS)), 5),
-       "forceps_rot_clock": round(float(np.arctan2(xy[1], xy[0])), 5),
+       "forceps_rot_up": round(math.acos(-float(P3[2])) if CAM > 0 else math.asin(min(float(np.linalg.norm(xy)), LIMBUS)), 5),
+       "forceps_rot_clock": round(float(np.arctan2(xy[1], xy[0])), 5), "camera_distance": CAM,
        "eye_center_px": [540.0, 540.0], "eye_radius_px": round(rpx, 1)}
 json.dump(out, open(a.out, "w"), indent=2)
 print(f"trocar at {p.round(0)} px (shaft-axis residual {np.median(res):.0f} px) -> {a.out}")
