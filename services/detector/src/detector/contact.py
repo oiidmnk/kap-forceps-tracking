@@ -29,26 +29,32 @@ class RodContact:
     on_margin / off_margin: tips to rod axis beyond its half width (px) to count as on / off the rod
     move_px: rod speed per frame (moving with the tips) that counts as being pushed
     confirm: evidence needed in this many frames in a row to start contact
-    hold: contact without fresh evidence ends after this many frames once the tips are no longer on the rod
+    release: a reason to end contact must hold this many frames in a row (one noisy frame does not end a grasp)
+    hold: contact without fresh evidence ends after this many frames once the tips are no longer on the rod; also how
+        long contact survives the rod or the forceps not being found
     """
 
     def __init__(self, enter_shadow: float = 1.3, leave_shadow: float = 2.5, on_margin: float = 12.0,
-                 off_margin: float = 24.0, move_px: float = 1.3, confirm: int = 2, hold: int = 15):
+                 off_margin: float = 24.0, move_px: float = 1.3, confirm: int = 2, release: int = 3, hold: int = 15):
         self.enter_shadow, self.leave_shadow = enter_shadow, leave_shadow
         self.on_margin, self.off_margin, self.move_px = on_margin, off_margin, move_px
-        self.confirm, self.hold = confirm, hold
+        self.confirm, self.release, self.hold = confirm, release, hold
         self.reset()
 
     def reset(self) -> None:
-        self.state, self.streak, self.since_evidence = False, 0, 0
+        self.state, self.streak, self.leaving, self.since_evidence, self.missing = False, 0, 0, 0, 0
         self._last: tuple[np.ndarray, np.ndarray] | None = None
         self._v_rod = self._v_tips = np.zeros(2)
 
     def __call__(self, det: Detection) -> bool:
         rod, forceps = det.rod, det.forceps
         if rod is None or rod.ends is None or not forceps.ok:
-            self.reset()
-            return False
+            self.missing += 1                      # a grasped rod is often hidden for a moment: keep the state a while
+            self._last, self.streak = None, 0
+            if self.missing > self.hold:
+                self.reset()
+            return self.state
+        self.missing = 0
         a, b = (np.asarray(p, np.float64) for p in rod.ends)
         tips = np.asarray([forceps.left_tip, forceps.right_tip], np.float64)
         mid = tips.mean(0)
@@ -73,10 +79,12 @@ class RodContact:
         evidence = on and (pushed or (shadow_gap is not None and shadow_gap < self.enter_shadow * width))
         self.streak = self.streak + 1 if evidence else 0
         self.since_evidence = 0 if evidence else self.since_evidence + 1
+        leaving = (dist > width / 2 + self.off_margin
+                   or (shadow_gap is not None and shadow_gap > self.leave_shadow * width)
+                   or (not on and self.since_evidence > self.hold))
+        self.leaving = self.leaving + 1 if leaving and not evidence else 0
         if not self.state:
             self.state = self.streak >= self.confirm
-        elif (dist > width / 2 + self.off_margin
-              or (shadow_gap is not None and shadow_gap > self.leave_shadow * width)
-              or (not on and self.since_evidence > self.hold)):
+        elif self.leaving >= self.release:
             self.state = False
         return self.state

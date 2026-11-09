@@ -57,8 +57,15 @@ def test_tip_above_the_rod_casts_its_shadow_elsewhere():
 
 def test_contact_survives_the_shadow_merging_and_ends_when_the_tips_leave():
     c = RodContact()
-    out = run(c, [frame(100, 160)] * 3 + [frame(100)] * 20 + [frame(100, 160, held=True)] * 5 + [frame(160, 220)])
-    assert all(out[1:28]) and not out[-1]
+    out = run(c, [frame(100, 160)] * 3 + [frame(100)] * 20 + [frame(100, 160, held=True)] * 5 + [frame(160, 220)] * 3)
+    assert all(out[1:30]) and not out[-1]                                       # released after 3 frames off the rod
+
+
+def test_one_noisy_frame_or_a_brief_miss_does_not_end_contact():
+    c = RodContact()
+    out = run(c, [frame(100, 160)] * 3 + [frame(100, 260)] + [Detection(NONE, NONE, rod=None)] * 4 + [frame(100, 160)] * 2)
+    assert all(out[1:])
+    assert not any(run(RodContact(), [Detection(NONE, NONE, rod=None)] * 3))
 
 
 def test_tips_that_push_the_rod_are_in_contact_without_a_shadow():
