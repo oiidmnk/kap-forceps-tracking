@@ -139,3 +139,37 @@ def test_rod_contact_without_forceps_changes_nothing():
     positions, _ = resilient_positions(data)
     assert positions["left_tip_forceps"] is None and positions["rod_contact"] is False
     assert positions["rod_a"] == rod_positions(data)["rod_a"]
+
+
+def _project(p, c, center, rpx):
+    """Pinhole camera at (0, 0, -c): 3D point (eye radii) -> pixel."""
+    k = (1 + c) / (p[2] + c)
+    return (center[0] + rpx * k * p[0], center[1] + rpx * k * p[1])
+
+
+def test_pinhole_camera_reconstructs_a_point_from_its_image_and_shadow():
+    import math
+    from tool_positions import light_tip_position, reconstruct_tip_from_shadow, _add3, _scale3, _sub3, _norm3
+
+    c, center, rpx = 2.2, (540.0, 540.0), 600.0
+    light = light_tip_position(0.6, -0.5, 0.005)
+    tip = (0.15, -0.1, 0.55)
+    # its shadow: continue the light ray through the tip to the far retina
+    d = _sub3(tip, light)
+    a, b, cc = sum(x * x for x in d), 2 * sum(x * y for x, y in zip(light, d)), sum(x * x for x in light) - 1
+    shadow = _add3(light, _scale3(d, (-b + math.sqrt(b * b - 4 * a * cc)) / (2 * a)))
+    got = reconstruct_tip_from_shadow(light, _project(tip, c, center, rpx), _project(shadow, c, center, rpx), center, rpx, c)
+    assert _norm3(_sub3(got, tip)) < 1e-9
+
+
+def test_camera_distance_defaults_to_the_orthographic_camera():
+    from ws_server import resilient_positions
+    from tool_positions import _norm3, _sub3
+
+    data = dict(VALID_INPUTS, rod_a_px=[120.0, 140.0], rod_a_shadow_px=[200.0, 80.0],
+                rod_b_px=[170.0, 140.0], rod_b_shadow_px=[240.0, 80.0])
+    ortho, _ = resilient_positions(dict(data))
+    assert resilient_positions(dict(data, camera_distance=0.0))[0] == ortho
+    far, _ = resilient_positions(dict(data, camera_distance=1e6))     # a very distant pinhole is orthographic
+    for key in ("left_tip_forceps", "right_tip_forceps", "rod_a", "rod_b"):
+        assert _norm3(_sub3(far[key], ortho[key])) < 1e-4

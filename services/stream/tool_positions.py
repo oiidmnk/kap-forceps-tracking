@@ -48,6 +48,14 @@ the microscope's x/y image plane) pins down exactly where on that ray the
 real, floating tip is. The point where the two jaws physically meet is then
 recovered from the two reconstructed tip positions, the forceps trocar, and
 the known length of a single jaw.
+
+Camera: by default orthographic along z (an image pixel is a line parallel
+to z). With ``camera_distance`` c > 0 it is a pinhole at (0, 0, -c), in eye
+radii from the eye center, looking along +z; ``eye_radius_px`` then is the
+image scale at the far pole (a point (x, y, z) images at
+(1 + c) * (x, y) / (z + c) eye radii from the image center). Wide-angle
+fundus views (the simulator) fit this much better; c -> infinity is the
+orthographic camera.
 """
 
 from __future__ import annotations
@@ -73,6 +81,10 @@ def _add3(a: Vec3, b: Vec3) -> Vec3:
 
 def _scale3(a: Vec3, s: float) -> Vec3:
     return (a[0] * s, a[1] * s, a[2] * s)
+
+
+def _dot3(a: Vec3, b: Vec3) -> float:
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 
 
 def _dot2(a: Vec2, b: Vec2) -> float:
@@ -184,10 +196,28 @@ def light_tip_position(
     return _add3(trocar, _scale3(direction, depth))
 
 
+def camera_ray(
+    point_px: Vec2, eye_center_px: Vec2, eye_radius_px: float, camera_distance: float
+) -> Tuple[Vec3, Vec3]:
+    """(origin, direction) of the line a pixel sees (pinhole camera,
+    ``camera_distance`` > 0; see the module docstring)."""
+    u, v = pixel_to_normalized(point_px, eye_center_px, eye_radius_px)
+    c = camera_distance
+    return (0.0, 0.0, -c), (u / (1.0 + c), v / (1.0 + c), 1.0)
+
+
 def shadow_point_on_retina(
-    shadow_px: Vec2, eye_center_px: Vec2, eye_radius_px: float
+    shadow_px: Vec2, eye_center_px: Vec2, eye_radius_px: float, camera_distance: float = 0.0
 ) -> Vec3:
     """Place an observed shadow pixel onto the far (deep) retinal surface."""
+    if camera_distance > 0.0:
+        origin, d = camera_ray(shadow_px, eye_center_px, eye_radius_px, camera_distance)
+        c = camera_distance
+        dd = _dot3(d, d)
+        # |origin + s d| = 1, far root; a ray past the eye's outline -> its tangent point
+        disc = c * c - dd * (c * c - 1.0)
+        s = (c + math.sqrt(max(disc, 0.0))) / dd
+        return _add3(origin, _scale3(d, s))
     sx, sy = pixel_to_normalized(shadow_px, eye_center_px, eye_radius_px)
     radicand = 1.0 - sx ** 2 - sy ** 2
     sz = math.sqrt(radicand) if radicand > 0.0 else 0.0
@@ -200,6 +230,7 @@ def reconstruct_tip_from_shadow(
     shadow_px: Vec2,
     eye_center_px: Vec2,
     eye_radius_px: float,
+    camera_distance: float = 0.0,
 ) -> Vec3:
     """Recover the 3D position of a tool tip from its shadow.
 
@@ -207,10 +238,22 @@ def reconstruct_tip_from_shadow(
     the retina. Its 2D microscope-image position fixes how far along that
     ray it sits (solved as a least-squares projection in the image plane,
     since the ray's own image-plane projection is a single line and the
-    observed tip offset only constrains that 2D component).
+    observed tip offset only constrains that 2D component). With a pinhole
+    camera it is the point of the light ray closest to the tip pixel's
+    camera ray.
     """
-    shadow_3d = shadow_point_on_retina(shadow_px, eye_center_px, eye_radius_px)
+    shadow_3d = shadow_point_on_retina(shadow_px, eye_center_px, eye_radius_px, camera_distance)
     ray_dir = _sub3(shadow_3d, light_tip)
+
+    if camera_distance > 0.0:
+        origin, v = camera_ray(tip_px, eye_center_px, eye_radius_px, camera_distance)
+        w0 = _sub3(light_tip, origin)
+        a, b, c = _dot3(ray_dir, ray_dir), _dot3(ray_dir, v), _dot3(v, v)
+        d, e = _dot3(ray_dir, w0), _dot3(v, w0)
+        denom = a * c - b * b
+        if denom <= 1e-15 * a * c:
+            raise ValueError("light ray and camera ray are parallel; cannot solve for the ray parameter")
+        return _add3(light_tip, _scale3(ray_dir, (b * e - c * d) / denom))
 
     tip_xy = pixel_to_normalized(tip_px, eye_center_px, eye_radius_px)
     delta = _sub2(tip_xy, _xy(light_tip))
@@ -271,6 +314,7 @@ def compute_tool_positions(
     jaw_length_mm: float,
     light_aim_tilt: float = 0.0,
     light_aim_clock: float = 0.0,
+    camera_distance: float = 0.0,
 ) -> Dict[str, Vec3]:
     """Reconstruct all tool positions in the normalized eye frame.
 
@@ -301,6 +345,9 @@ def compute_tool_positions(
         (fraction-of-eye-radius) frame used everywhere else.
     jaw_length_mm:
         Length of a single forceps jaw, in millimeters.
+    camera_distance:
+        Pinhole camera at this distance (eye radii) from the eye center;
+        ``0`` (the default) is the orthographic camera.
 
     Returns
     -------
@@ -320,10 +367,10 @@ def compute_tool_positions(
     trocar_forceps = trocar_position(forceps_rot_up, forceps_rot_clock)
 
     left_tip_forceps = reconstruct_tip_from_shadow(
-        tip_light, left_tip_px, left_shadow_px, eye_center_px, eye_radius_px
+        tip_light, left_tip_px, left_shadow_px, eye_center_px, eye_radius_px, camera_distance
     )
     right_tip_forceps = reconstruct_tip_from_shadow(
-        tip_light, right_tip_px, right_shadow_px, eye_center_px, eye_radius_px
+        tip_light, right_tip_px, right_shadow_px, eye_center_px, eye_radius_px, camera_distance
     )
 
     jaw_meet_forceps = jaw_meeting_point(
@@ -353,6 +400,7 @@ def compute_rod_positions(
     eye_radius_mm: float,
     light_aim_tilt: float = 0.0,
     light_aim_clock: float = 0.0,
+    camera_distance: float = 0.0,
 ) -> Dict[str, Vec3]:
     """3D end points of a free-floating rod (e.g. a dropped capsule).
 
@@ -370,10 +418,10 @@ def compute_rod_positions(
     )
     return {
         "rod_a": reconstruct_tip_from_shadow(
-            tip_light, rod_a_px, rod_a_shadow_px, eye_center_px, eye_radius_px
+            tip_light, rod_a_px, rod_a_shadow_px, eye_center_px, eye_radius_px, camera_distance
         ),
         "rod_b": reconstruct_tip_from_shadow(
-            tip_light, rod_b_px, rod_b_shadow_px, eye_center_px, eye_radius_px
+            tip_light, rod_b_px, rod_b_shadow_px, eye_center_px, eye_radius_px, camera_distance
         ),
     }
 

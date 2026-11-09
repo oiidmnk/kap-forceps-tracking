@@ -75,7 +75,7 @@ def validate_inputs(data: Dict[str, Any]) -> Dict[str, Any]:
 
     ``light_aim_tilt``/``light_aim_clock`` are optional and default to ``0.0``
     (aiming straight at the eye center) so existing input files and payloads
-    keep working unchanged.
+    keep working unchanged; so is ``camera_distance`` (``0`` = orthographic).
     """
     missing = [key for key in REQUIRED_KEYS if key not in data]
     if missing:
@@ -122,6 +122,7 @@ def compute_positions(data: Dict[str, Any]) -> Dict[str, Any]:
         eye_radius_px=float(data["eye_radius_px"]),
         eye_radius_mm=float(data["eye_radius_mm"]),
         jaw_length_mm=float(data["jaw_length_mm"]),
+        camera_distance=float(data.get("camera_distance", 0.0)),
     )
     return {key: [value[0], value[1], value[2]] for key, value in positions.items()}
 
@@ -143,6 +144,7 @@ def rod_positions(data: Dict[str, Any]) -> Dict[str, Any]:
         eye_center_px=_as_vec2(data["eye_center_px"]),
         eye_radius_px=float(data["eye_radius_px"]),
         eye_radius_mm=float(data["eye_radius_mm"]),
+        camera_distance=float(data.get("camera_distance", 0.0)),
     )
     return {key: [value[0], value[1], value[2]] for key, value in positions.items()}
 

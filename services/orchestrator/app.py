@@ -153,6 +153,8 @@ def validate_calibration(payload: Any) -> dict[str, Any]:
         # optional: the light aimed past the eye centre (stream default 0 = at the centre)
         "light_aim_tilt": float(payload.get("light_aim_tilt", 0.0)),
         "light_aim_clock": float(payload.get("light_aim_clock", 0.0)),
+        # optional: pinhole camera this many eye radii from the eye centre (0 = orthographic)
+        "camera_distance": float(payload.get("camera_distance", 0.0)),
     }
     if calibration["eye_radius_px"] <= 0:
         raise OrchestratorError("eye_radius_px must be greater than 0")
@@ -160,6 +162,8 @@ def validate_calibration(payload: Any) -> dict[str, Any]:
         raise OrchestratorError("eye_radius_mm must be greater than 0")
     if calibration["jaw_length_mm"] <= 0:
         raise OrchestratorError("jaw_length_mm must be greater than 0")
+    if calibration["camera_distance"] < 0:
+        raise OrchestratorError("camera_distance must not be negative")
     return calibration
 
 

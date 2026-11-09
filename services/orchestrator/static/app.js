@@ -10,13 +10,14 @@ function setStatus(el, message, ok) {
   el.className = `status ${ok ? 'ok' : 'error'}`
 }
 
-// Keys without a form field (the light aim) are kept as loaded.
+// Keys without a form field (the light aim, the camera model) are kept as loaded.
 let hiddenCalibration = {}
 
 function fillCalibration(data) {
   hiddenCalibration = {
     light_aim_tilt: data.light_aim_tilt ?? 0,
     light_aim_clock: data.light_aim_clock ?? 0,
+    camera_distance: data.camera_distance ?? 0,
   }
   for (const [key, value] of Object.entries(data)) {
     if (key === 'eye_center_px') {

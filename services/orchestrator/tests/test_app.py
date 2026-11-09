@@ -327,9 +327,12 @@ def test_calibration_update_persists(tmp_path):
     assert response.status_code == 200
     assert json.loads(calibration_path.read_text(encoding="utf-8"))["jaw_length_mm"] == 4.5
 
-    aimed = dict(CALIBRATION, light_aim_tilt=0.9, light_aim_clock=-0.1)    # light trocar at the limbus, aimed past the centre
+    aimed = dict(CALIBRATION, light_aim_tilt=0.9, light_aim_clock=-0.1, camera_distance=2.2)
     assert client.put("/api/calibration", json=aimed).json()["light_aim_tilt"] == 0.9
-    assert json.loads(calibration_path.read_text(encoding="utf-8"))["light_aim_clock"] == -0.1
+    saved = json.loads(calibration_path.read_text(encoding="utf-8"))
+    assert saved["light_aim_clock"] == -0.1 and saved["camera_distance"] == 2.2
+    assert client.put("/api/calibration", json=CALIBRATION).json()["camera_distance"] == 0.0   # default: orthographic
+    assert client.put("/api/calibration", json=dict(CALIBRATION, camera_distance=-1)).status_code == 400
 
 
 def test_index_renders_template_with_static_assets(tmp_path):
