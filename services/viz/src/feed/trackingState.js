@@ -1,4 +1,4 @@
-import { EYE_RADIUS_MM, ROD_LENGTH_MM } from '../config.js'
+import { EYE_RADIUS_MM, ROD_LENGTH_MM, ROD_RADIUS_MM } from '../config.js'
 export const STALE_AFTER_MS = 1500
 const point = (p) =>
   Array.isArray(p) && p.length === 3 && p.every(Number.isFinite)
@@ -11,6 +11,51 @@ function fixRodLength(a, b) {
   const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2]
   const h = ROD_LENGTH_MM / 2 / len
   return [m.map((v, i) => v - d[i] * h), m.map((v, i) => v + d[i] * h)]
+}
+
+const ROD_CLEARANCE_MM = 0.05 // gap kept between a tip and the rod surface without contact
+
+// Closest point to p on segment a-b.
+function closestOnSegment(p, a, b) {
+  const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]
+  const dd = d[0] * d[0] + d[1] * d[1] + d[2] * d[2]
+  const t = dd > 0 ? Math.min(1, Math.max(0, ((p[0] - a[0]) * d[0] + (p[1] - a[1]) * d[1] + (p[2] - a[2]) * d[2]) / dd)) : 0
+  return [a[0] + t * d[0], a[1] + t * d[1], a[2] + t * d[2]]
+}
+
+// Forceps tips (and their midpoint) to the rod surface, mm; 0 when inside.
+export function rodGap(frame) {
+  if (!frame?.rod_a || !frame?.tip_left) return null
+  const tips = [frame.tip_left, frame.tip_right, frame.tip_left.map((v, i) => (v + frame.tip_right[i]) / 2)]
+  const d = Math.min(...tips.map((p) => Math.hypot(...p.map((v, i) => v - closestOnSegment(p, frame.rod_a, frame.rod_b)[i]))))
+  return Math.max(0, d - ROD_RADIUS_MM)
+}
+
+// Without contact in the video the forceps must not pierce the rod: move the
+// rod (as a whole) away from each tip that is inside it. In contact the stream
+// has already put the rod onto the tips.
+function clearRod(frame) {
+  let [a, b] = [frame.rod_a, frame.rod_b]
+  const keep = ROD_RADIUS_MM + ROD_CLEARANCE_MM
+  for (let pass = 0; pass < 3; pass++) {
+    for (const p of [frame.tip_left, frame.tip_right, frame.tip_left.map((v, i) => (v + frame.tip_right[i]) / 2)]) {
+      const c = closestOnSegment(p, a, b)
+      let away = c.map((v, i) => v - p[i])
+      let dist = Math.hypot(...away)
+      if (dist >= keep) continue
+      if (dist < 1e-9) {
+        // tip on the axis: push perpendicular to the rod
+        const d = b.map((v, i) => v - a[i])
+        away = Math.abs(d[1]) < 0.9 * Math.hypot(...d) ? [-d[2], 0, d[0]] : [0, d[2], -d[1]]
+        dist = 0
+      }
+      const n = Math.hypot(...away)
+      const shift = away.map((v) => (v / n) * (keep - dist))
+      a = a.map((v, i) => v + shift[i])
+      b = b.map((v, i) => v + shift[i])
+    }
+  }
+  return [a, b]
 }
 
 // Accept native millimeter frames and the upstream normalized reconstruction.
@@ -62,6 +107,9 @@ export function parseTrackingFrame(raw) {
   if (![frame.tip_left, frame.tip_right, frame.trocar].every(point)) {
     if (!frame.rod_a) return null
     frame.tip_left = frame.tip_right = frame.trocar = null
+  }
+  if (frame.rod_a && frame.tip_left && !frame.rod_contact) {
+    ;[frame.rod_a, frame.rod_b] = clearRod(frame)
   }
   return {
     ...frame,

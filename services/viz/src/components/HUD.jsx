@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { distanceToRetina } from '../geometry.js'
 import { STATUS, depthScale, distanceStatus, DEPTH_SCALE_MAX_MM } from '../ui.js'
 import { useStore } from '../feed/store.js'
-import { hasForceps } from '../feed/trackingState.js'
+import { hasForceps, rodGap } from '../feed/trackingState.js'
 import { DIST_SAFE_MM, DIST_WARN_MM } from '../config.js'
 export function ToggleBar({ toggles, onToggle }) {
   const [open, setOpen] = useState(false)
@@ -136,6 +136,11 @@ export default function HUD({ readout }) {
         )}
         {rodDist != null && frame.rod_contact && (
           <div className="rod-contact" role="status">Forceps touches rod</div>
+        )}
+        {rodDist != null && !frame.rod_contact && rodGap(frame) != null && (
+          <div className="rod-gap" title="Nearest forceps tip to the rod surface">
+            Tips to rod {rodGap(frame).toFixed(2)} <small>mm</small>
+          </div>
         )}
         <div className="depth-ticks" aria-hidden>
           {TICKS.map((mm) => (

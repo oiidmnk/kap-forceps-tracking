@@ -109,7 +109,8 @@ test('the rod is optional and maps like the tips', () => {
   assert.equal(parseTrackingFrame({ positions }).rod_a, null)
   const frame = parseTrackingFrame({ positions: { ...positions, rod_a: [0.1, 0.2, 0.3], rod_b: null } })
   assert.equal(frame.rod_a, null) // never half a rod
-  const both = parseTrackingFrame({ positions: { ...positions, rod_a: [0.1, 0.2, 0.3], rod_b: [0, 0, 0.5] } })
+  // in contact, so it is not moved off the tips it runs through
+  const both = parseTrackingFrame({ positions: { ...positions, rod_a: [0.1, 0.2, 0.3], rod_b: [0, 0, 0.5], rod_contact: true } })
   // same midpoint and direction as the tips it was given, but the rod's fixed length
   const mid = (p, q) => p.map((v, i) => (v + q[i]) / 2)
   const dir = (p, q) => {
@@ -142,4 +143,20 @@ test('rod contact is reported only with a whole rod', () => {
   assert.equal(parseTrackingFrame({ positions: { ...positions, rod_contact: true } }).rod_contact, true)
   assert.equal(parseTrackingFrame({ positions }).rod_contact, false)
   assert.equal(parseTrackingFrame({ positions: { ...positions, rod_b: null, rod_contact: true } }).rod_contact, false)
+})
+test('without contact the rod is moved off tips that pierce it', async () => {
+  const { rodGap } = await import('../src/feed/trackingState.js')
+  // tips sit right on the rod axis (rod_a..rod_b passes through both tips)
+  const positions = {
+    left_tip_forceps: [0.1, 0.2, 0.3],
+    right_tip_forceps: [0.1, 0.2, 0.31],
+    trocar_forceps: [0, 0, -0.8],
+    rod_a: [0.05, 0.2, 0.305],
+    rod_b: [0.15, 0.2, 0.305],
+  }
+  const free = parseTrackingFrame({ positions })
+  assert.ok(rodGap(free) > 0.04 && rodGap(free) < 0.06) // ROD_CLEARANCE_MM from the surface
+  const held = parseTrackingFrame({ positions: { ...positions, rod_contact: true } })
+  assert.equal(rodGap(held), 0) // in contact: left where the stream put it
+  assert.equal(rodGap({ ...free, rod_a: null }), null)
 })

@@ -752,6 +752,11 @@ h2 {
   color: #ff5a3c;
   text-align: right;
 }
+.rod-gap {
+  font-size: 12px;
+  color: var(--muted);
+  text-align: right;
+}
 .depth-track {
   position: relative;
   height: 8px;
