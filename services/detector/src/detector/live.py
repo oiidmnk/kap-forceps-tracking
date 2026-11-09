@@ -102,6 +102,45 @@ class RodHold:
         return {**pts, **self.last}
 
 
+class RodFilter:
+    """Steadies the rod. It floats still unless pushed, but its 3D pose comes from the shadow ends, whose detection
+    jitters by a few px and now and then jumps (the 3D height and tilt then jump by mm). An adaptive EMA: the further
+    the rod ends moved from the filtered pose, the more the new sample counts (`still_w` at rest, 1 from `move_px` on),
+    so a pushed rod follows at once. A shadow end that jumps by more than `outlier_px` while the rod itself rests is
+    ignored for up to `max_reject` frames. In contact the detection passes unfiltered (the stream puts the rod onto the
+    forceps then)."""
+
+    def __init__(self, still_w: float = 0.1, move_px: float = 6.0, outlier_px: float = 40.0, max_reject: int = 10):
+        self.still_w, self.move_px, self.outlier_px, self.max_reject = still_w, move_px, outlier_px, max_reject
+        self.reset()
+
+    def reset(self) -> None:
+        self.f: dict[str, np.ndarray] | None = None
+        self.rejected = 0
+
+    def __call__(self, pts: dict | None) -> dict | None:
+        if not pts or not all(k in pts for k in ROD_KEYS):
+            return pts
+        raw = {k: np.asarray(pts[k], np.float64) for k in ROD_KEYS}
+        f = self.f
+        if f is not None:                          # the ends are unordered: pair them with the filtered ones
+            keep = np.linalg.norm(raw["rod_a_px"] - f["rod_a_px"]) + np.linalg.norm(raw["rod_b_px"] - f["rod_b_px"])
+            swap = np.linalg.norm(raw["rod_a_px"] - f["rod_b_px"]) + np.linalg.norm(raw["rod_b_px"] - f["rod_a_px"])
+            if swap < keep:
+                raw = {"rod_a_px": raw["rod_b_px"], "rod_b_px": raw["rod_a_px"],
+                       "rod_a_shadow_px": raw["rod_b_shadow_px"], "rod_b_shadow_px": raw["rod_a_shadow_px"]}
+        if f is None or pts.get("rod_contact"):
+            self.f, self.rejected = raw, 0
+        else:
+            moved = max(np.linalg.norm(raw[k] - f[k]) for k in ("rod_a_px", "rod_b_px"))
+            w = float(np.clip(moved / self.move_px, self.still_w, 1.0))
+            jump = max(np.linalg.norm(raw[k] - f[k]) for k in ("rod_a_shadow_px", "rod_b_shadow_px"))
+            hold_shadow = moved < self.move_px and jump > self.outlier_px and self.rejected < self.max_reject
+            self.rejected = self.rejected + 1 if hold_shadow else 0
+            self.f = {k: f[k] if hold_shadow and "shadow" in k else f[k] + w * (raw[k] - f[k]) for k in ROD_KEYS}
+        return {**pts, **{k: [float(v[0]), float(v[1])] for k, v in self.f.items()}}
+
+
 class LiveWorker(threading.Thread):
     def __init__(self, detector: Detector, cfg: Settings, runtime: RuntimeConfig):
         super().__init__(daemon=True, name="live")
@@ -116,6 +155,7 @@ class LiveWorker(threading.Thread):
         self._smooth = Smoother(cfg.smoothing)
         self._contact = RodContact()
         self._rod_hold = RodHold()
+        self._rod_filter = RodFilter()
         self._last_push = 0.0
         self._applied_version = -1
         self._applied_resets = 0
@@ -136,6 +176,7 @@ class LiveWorker(threading.Thread):
         self._smooth.last = None
         self._contact.reset()
         self._rod_hold.reset()
+        self._rod_filter.reset()
         self.stats.update(detect_error=None, source_error=None)
         with self.cond:
             self.jpeg, self.detection = None, None
@@ -198,7 +239,7 @@ class LiveWorker(threading.Thread):
             if time.monotonic() - t_fps >= 1.0:
                 self.stats["fps"] = round(n_fps / (time.monotonic() - t_fps), 1)
                 t_fps, n_fps = time.monotonic(), 0
-            pts = self._rod_hold(d.orchestrator_points())      # every frame: a carried rod follows the tips
+            pts = self._rod_filter(self._rod_hold(d.orchestrator_points()))   # every frame (carried rod, rod motion)
             if client and pts and time.monotonic() - self._last_push >= 1.0 / cfg.push_hz:
                 self._last_push = time.monotonic()
                 try:

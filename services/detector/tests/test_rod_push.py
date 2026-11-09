@@ -1,5 +1,5 @@
 from detector.contact import RodContact
-from detector.live import RodHold, Smoother
+from detector.live import RodFilter, RodHold, Smoother
 from detector.pipeline import Detection, RodPose, ToolPose
 
 ROD = RodPose(((10.0, 10.0), (50.0, 10.0)), ((12.0, 30.0), (52.0, 30.0)))
@@ -100,3 +100,32 @@ def test_a_lost_rod_in_contact_moves_with_the_tips_then_stops():
     out = h(moved(FORCEPS, 20.0))                    # lost for longer than `follow`: it stays put
     assert out["rod_a_px"] == [27.0, 0.0] and out["rod_contact"] is False
     assert h({**FORCEPS, **moved(SEEN_ROD, 1.0)})["rod_a_px"] == [21.0, 0.0]   # found again: the detection wins
+
+
+def test_rod_filter_steadies_a_resting_rod_and_ignores_a_jumping_shadow():
+    f = RodFilter()
+    f({**FORCEPS, **SEEN_ROD})
+    out = f({**FORCEPS, **moved(SEEN_ROD, 2.0)})                 # 2 px of jitter counts 2/6 (move_px 6)
+    assert abs(out["rod_a_px"][0] - 20.0 - 2.0 / 3) < 1e-9
+    for _ in range(5):                                           # jitter back and forth stays near the rest pose
+        out = f({**FORCEPS, **moved(SEEN_ROD, 1.0)})
+        out = f({**FORCEPS, **moved(SEEN_ROD, -1.0)})
+    assert abs(out["rod_a_px"][0] - 20.0) < 0.5
+    jumped = {**SEEN_ROD, "rod_a_shadow_px": [20.0, 90.0]}       # shadow end jumps 60 px, the rod rests
+    assert f({**FORCEPS, **jumped})["rod_a_shadow_px"] == out["rod_a_shadow_px"]
+
+
+def test_rod_filter_follows_a_pushed_rod_and_keeps_its_end_order():
+    f = RodFilter()
+    f({**FORCEPS, **SEEN_ROD})
+    assert f({**FORCEPS, **moved(SEEN_ROD, 10.0)})["rod_a_px"] == [30.0, 0.0]   # moved > move_px: no lag
+    swapped = {"rod_a_px": [60.0, 0.0], "rod_b_px": [20.0, 0.0], "rod_a_shadow_px": [60.0, 30.0],
+               "rod_b_shadow_px": [20.0, 30.0]}
+    out = f({**FORCEPS, **swapped})                              # labels swapped by the detector, rod moved back
+    assert out["rod_a_px"] == [20.0, 0.0] and out["rod_b_shadow_px"] == [60.0, 30.0]
+
+
+def test_rod_filter_passes_contact_frames_through():
+    f = RodFilter()
+    f({**FORCEPS, **SEEN_ROD})
+    assert f({**FORCEPS, **moved(SEEN_ROD, 2.0), "rod_contact": True})["rod_a_px"] == [22.0, 0.0]

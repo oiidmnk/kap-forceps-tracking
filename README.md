@@ -98,7 +98,8 @@ Shadows are found as "darker than the tool-free retina", so the detector needs a
    `PUSH_HZ`. Forceps points are pushed when all four tip points are present; the learned segmenter also pushes the
    **rod** (red capsule of the rod task: both ends + the shadow each end casts) when it sees it. A frame with only the
    rod keeps the last forceps pose, a frame without the rod keeps its last position (`live.RodHold`: it floats still
-   unless pushed; while the forceps touched it, it moves along with the tips for up to 30 frames); the stream
+   unless pushed; while the forceps touched it, it moves along with the tips for up to 30 frames; `live.RodFilter` steadies a resting rod, whose 3D pose comes from
+   jittery shadow ends); the stream
    reconstructs each rod end from its shadow like a forceps tip and the viz draws the rod (red capsule of fixed size, `ROD_LENGTH_MM`, at the tracked midpoint and direction, with its shadow, "Rod" row in the distance panel). Whether the forceps touches the rod is
    decided in the image (`detector/contact.py`); on contact the stream puts the rod onto the forceps tips and the viz
    lets it glow.
