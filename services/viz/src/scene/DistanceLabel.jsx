@@ -1,5 +1,6 @@
 import { Html } from '@react-three/drei'
 import { nearestTip, midpoint } from '../geometry.js'
+import { hasForceps } from '../feed/trackingState.js'
 import { STATUS } from '../ui.js'
 import { useStore } from '../feed/store.js'
 
@@ -9,7 +10,7 @@ import { useStore } from '../feed/store.js'
 // measurement, refreshed at the readout rate, hysteresis level).
 export default function DistanceLabel({ frame, readout, portal }) {
   const { frame: measured, levels } = useStore(readout)
-  if (!frame || !measured || !levels) return null
+  if (!hasForceps(frame) || !hasForceps(measured) || !levels) return null
   const { tip, wall } = nearestTip(frame)
   const { color } = STATUS[levels.min]
   return (

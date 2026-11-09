@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import DynamicLine from './DynamicLine.jsx'
 import { DoubleSide, Quaternion, Vector3 } from 'three'
 import { nearestTip } from '../geometry.js'
+import { hasForceps } from '../feed/trackingState.js'
 import { STATUS } from '../ui.js'
 
 // Landing reticle: projects the nearest forceps tip radially onto the retina
@@ -12,7 +13,7 @@ import { STATUS } from '../ui.js'
 // redundant here: the drop line already
 // encodes the gap by length).
 export default function LandingReticle({ frame, level }) {
-  const info = frame ? nearestTip(frame) : null
+  const info = hasForceps(frame) ? nearestTip(frame) : null
 
   // Orient the flat ring so its face is tangent to the sphere at the contact
   // point (ring normal = outward radial direction at that wall point).

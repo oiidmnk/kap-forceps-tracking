@@ -20,7 +20,9 @@ const PIVOT_BOUNDS = new THREE.Box3(
   new THREE.Vector3(EYE_RADIUS_MM, EYE_RADIUS_MM, EYE_RADIUS_MM)
 )
 
-const jawCenter = (frame) => midpoint(frame.tip_left, frame.tip_right)
+// Followed point: the jaws, or the rod's middle while only the rod is tracked.
+const jawCenter = (frame) =>
+  frame.tip_left ? midpoint(frame.tip_left, frame.tip_right) : midpoint(frame.rod_a, frame.rod_b)
 
 // Main-view navigation on drei's CameraControls:
 // - left-drag orbits, right-drag pans (pivot bounded to the globe), scroll

@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { ROD_LENGTH_MM } from '../src/config.js'
 import {
   parseTrackingFrame,
   trackingIsStale,
@@ -98,4 +99,47 @@ test('depth bars give the critical first millimetres most of the room', async ()
   assert.equal(depthScale(10), 1)
   assert.equal(depthScale(25), 1, 'clamped above the scale')
   assert.ok(depthScale(0.5) > 0.2 && depthScale(2) > 0.4, 'thresholds sit well inside the bar')
+})
+test('the rod is optional and maps like the tips', () => {
+  const positions = {
+    left_tip_forceps: [0.1, 0.2, 0.3],
+    right_tip_forceps: [0, 0, 0.5],
+    trocar_forceps: [0, 0, -0.8],
+  }
+  assert.equal(parseTrackingFrame({ positions }).rod_a, null)
+  const frame = parseTrackingFrame({ positions: { ...positions, rod_a: [0.1, 0.2, 0.3], rod_b: null } })
+  assert.equal(frame.rod_a, null) // never half a rod
+  const both = parseTrackingFrame({ positions: { ...positions, rod_a: [0.1, 0.2, 0.3], rod_b: [0, 0, 0.5] } })
+  // same midpoint and direction as the tips it was given, but the rod's fixed length
+  const mid = (p, q) => p.map((v, i) => (v + q[i]) / 2)
+  const dir = (p, q) => {
+    const d = q.map((v, i) => v - p[i])
+    const n = Math.hypot(...d)
+    return d.map((v) => v / n)
+  }
+  const close = (p, q) => p.every((v, i) => Math.abs(v - q[i]) < 1e-9)
+  assert.ok(close(mid(both.rod_a, both.rod_b), mid(both.tip_left, both.tip_right)))
+  assert.ok(close(dir(both.rod_a, both.rod_b), dir(both.tip_left, both.tip_right)))
+  assert.ok(Math.abs(Math.hypot(...both.rod_b.map((v, i) => v - both.rod_a[i])) - ROD_LENGTH_MM) < 1e-9)
+})
+test('a frame with only the rod is valid and has no forceps', async () => {
+  const { hasForceps } = await import('../src/feed/trackingState.js')
+  const frame = parseTrackingFrame({
+    positions: { left_tip_forceps: null, right_tip_forceps: null, trocar_forceps: [0, 0, -1], rod_a: [0.1, 0.2, 0.3], rod_b: [0, 0, 0.5] },
+  })
+  assert.ok(frame && frame.rod_a)
+  assert.equal(hasForceps(frame), false)
+  assert.equal(frame.trocar, null)
+})
+test('rod contact is reported only with a whole rod', () => {
+  const positions = {
+    left_tip_forceps: [0.1, 0.2, 0.3],
+    right_tip_forceps: [0, 0, 0.5],
+    trocar_forceps: [0, 0, -0.8],
+    rod_a: [0.1, 0.2, 0.3],
+    rod_b: [0, 0, 0.5],
+  }
+  assert.equal(parseTrackingFrame({ positions: { ...positions, rod_contact: true } }).rod_contact, true)
+  assert.equal(parseTrackingFrame({ positions }).rod_contact, false)
+  assert.equal(parseTrackingFrame({ positions: { ...positions, rod_b: null, rod_contact: true } }).rod_contact, false)
 })

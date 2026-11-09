@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { distanceToRetina } from '../geometry.js'
-import { STATUS, depthScale, DEPTH_SCALE_MAX_MM } from '../ui.js'
+import { STATUS, depthScale, distanceStatus, DEPTH_SCALE_MAX_MM } from '../ui.js'
 import { useStore } from '../feed/store.js'
+import { hasForceps } from '../feed/trackingState.js'
 import { DIST_SAFE_MM, DIST_WARN_MM } from '../config.js'
 export function ToggleBar({ toggles, onToggle }) {
   const [open, setOpen] = useState(false)
@@ -71,13 +72,18 @@ const TICKS = [0, DIST_WARN_MM, DIST_SAFE_MM, 5, DEPTH_SCALE_MAX_MM]
 // READOUT_INTERVAL_MS); colors and labels use the hysteresis levels.
 export default function HUD({ readout }) {
   const { frame, status, levels } = useStore(readout)
-  const tips = frame
+  const tips = hasForceps(frame)
     ? [
         { key: 'L', name: 'Left tip', dist: distanceToRetina(frame.tip_left), level: levels?.left },
         { key: 'R', name: 'Right tip', dist: distanceToRetina(frame.tip_right), level: levels?.right },
       ]
     : []
   const minDist = tips.length ? Math.min(...tips.map((t) => t.dist)) : null
+  // The rod is a separate object: its own row (nearer end), not part of the forceps minimum.
+  const rodDist =
+    frame?.rod_a && frame?.rod_b
+      ? Math.min(distanceToRetina(frame.rod_a), distanceToRetina(frame.rod_b))
+      : null
   const state = minDist == null || !levels ? null : STATUS[levels.min]
   return (
     <section className="distance-panel" aria-labelledby="distance-title">
@@ -117,6 +123,20 @@ export default function HUD({ readout }) {
             </div>
           )
         })}
+        {rodDist != null && (
+          <div className="depth-bar">
+            <span title="Rod (nearer end)">Rod</span>
+            <div className="depth-track">
+              <i style={{ left: pct(rodDist), background: distanceStatus(rodDist).color }} aria-hidden />
+            </div>
+            <strong style={{ color: distanceStatus(rodDist).color }}>
+              {rodDist.toFixed(2)} <small>mm</small>
+            </strong>
+          </div>
+        )}
+        {rodDist != null && frame.rod_contact && (
+          <div className="rod-contact" role="status">Forceps touches rod</div>
+        )}
         <div className="depth-ticks" aria-hidden>
           {TICKS.map((mm) => (
             <span key={mm} style={{ left: pct(mm) }}>

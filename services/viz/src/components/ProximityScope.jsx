@@ -7,6 +7,7 @@ import SceneView from '../scene/SceneView.jsx'
 import { ShadowLight } from '../scene/InstrumentShadow.jsx'
 import ScopeCamera, { ELEV_MIN, ELEV_MAX } from '../scene/ScopeCamera.jsx'
 import { nearestTip } from '../geometry.js'
+import { hasForceps } from '../feed/trackingState.js'
 import { STATUS } from '../ui.js'
 import { useStore } from '../feed/store.js'
 import { DIST_SCOPE_SHOW_MM } from '../config.js'
@@ -48,7 +49,7 @@ export default function ProximityScope({ readout, stageRef, dragState, enabled =
       e.currentTarget.releasePointerCapture(e.pointerId)
   }
 
-  const info = frame ? nearestTip(frame) : null
+  const info = hasForceps(frame) ? nearestTip(frame) : null
   const lost = !frame && ['stale', 'degraded', 'error'].includes(status)
   const color = active && levels ? STATUS[levels.min].color : undefined
   return (
@@ -134,7 +135,8 @@ export function ProximityScopeView({ sceneStore, stageRef, clip, dragState, focu
 }
 
 function ScopeContents({ sceneStore, dragState, focusRef, showShadow }) {
-  const { frame, levels } = useStore(sceneStore)
+  const { frame: scene, levels } = useStore(sceneStore)
+  const frame = hasForceps(scene) ? scene : null // the close-up follows the forceps
   return (
     <>
       {showShadow && <ShadowLight frame={frame} angle={0.45} />}

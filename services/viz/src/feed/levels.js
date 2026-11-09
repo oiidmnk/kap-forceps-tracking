@@ -5,6 +5,7 @@ import {
   DIST_SCOPE_HIDE_MM,
 } from '../config.js'
 import { distanceToRetina } from '../geometry.js'
+import { hasForceps } from './trackingState.js'
 
 const SEVERITY = { safe: 0, warn: 1, danger: 2 }
 
@@ -26,7 +27,7 @@ export function createLevelTracker() {
   let state = null
   return {
     update(frame) {
-      if (!frame) {
+      if (!hasForceps(frame)) {
         state = null
         return null
       }

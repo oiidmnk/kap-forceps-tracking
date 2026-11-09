@@ -8,7 +8,7 @@
 // blend between two real measurements. It never extrapolates: past the newest
 // sample it holds that sample. Numeric readouts should keep using raw frames.
 
-const POINT_KEYS = ['tip_left', 'tip_right', 'trocar', 'light_tip', 'light_trocar']
+const POINT_KEYS = ['tip_left', 'tip_right', 'trocar', 'light_tip', 'light_trocar', 'rod_a', 'rod_b']
 const MAX_SAMPLES = 4
 const MIN_DELAY_MS = 30
 const MAX_DELAY_MS = 150
@@ -31,9 +31,20 @@ function lerpPoint(a, b, u) {
   return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u]
 }
 
+const dist2 = (p, q) => (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2
+
+// The rod's two ends are unordered: blend each end towards the nearer one, so a
+// swapped pair never collapses the rod through its middle.
+function alignRod(a, b) {
+  if (!a.rod_a || !a.rod_b || !b.rod_a || !b.rod_b) return b
+  const keep = dist2(a.rod_a, b.rod_a) + dist2(a.rod_b, b.rod_b)
+  const swap = dist2(a.rod_a, b.rod_b) + dist2(a.rod_b, b.rod_a)
+  return swap < keep ? { ...b, rod_a: b.rod_b, rod_b: b.rod_a } : b
+}
+
 export function lerpFrame(a, b, u) {
-  const out = { ...b }
-  for (const k of POINT_KEYS) out[k] = lerpPoint(a[k], b[k], u)
+  const out = { ...alignRod(a, b) }
+  for (const k of POINT_KEYS) out[k] = lerpPoint(a[k], out[k], u)
   return out
 }
 

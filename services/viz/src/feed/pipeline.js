@@ -3,6 +3,7 @@ import { createInterpolator } from './displayInterpolation.js'
 import { createLevelTracker } from './levels.js'
 import { createTrend } from './trend.js'
 import { distanceToRetina } from '../geometry.js'
+import { hasForceps } from './trackingState.js'
 import { READOUT_INTERVAL_MS } from '../config.js'
 
 // Statuses in which live tracking was lost after it had been running. The
@@ -85,7 +86,7 @@ export function createTrackingPipeline() {
       levels = tracker.update(frame)
       trend.push(
         now,
-        frame ? Math.min(distanceToRetina(frame.tip_left), distanceToRetina(frame.tip_right)) : null
+        hasForceps(frame) ? Math.min(distanceToRetina(frame.tip_left), distanceToRetina(frame.tip_right)) : null
       )
 
       if (!frame) {

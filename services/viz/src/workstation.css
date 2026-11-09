@@ -746,6 +746,12 @@ h2 {
   color: var(--muted);
   font-weight: 400;
 }
+.rod-contact {
+  font-size: 12px;
+  font-weight: 500;
+  color: #ff5a3c;
+  text-align: right;
+}
 .depth-track {
   position: relative;
   height: 8px;
