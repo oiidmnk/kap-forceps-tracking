@@ -95,7 +95,13 @@ Shadows are found as "darker than the tool-free retina", so the detector needs a
    from the tip: the stretch with **two runs** is the open jaw pair. Outer ends = **tips**, where the gap closes =
    **junction**. Left/right follow your labelling (left = lower side when heading towards the tip).
 4. **Live** – per frame: detect → draw → MJPEG; points are EMA-smoothed (`SMOOTHING`) and posted to the orchestrator at
-   `PUSH_HZ`. Only frames with all four tip points are pushed.
+   `PUSH_HZ`. Forceps points are pushed when all four tip points are present; the learned segmenter also pushes the
+   **rod** (red capsule of the rod task: both ends + the shadow each end casts) when it sees it. A frame with only the
+   rod keeps the last forceps pose, a frame without the rod keeps its last position (`live.RodHold`: it floats still
+   unless pushed; while the forceps touched it, it moves along with the tips for up to 30 frames); the stream
+   reconstructs each rod end from its shadow like a forceps tip and the viz draws the rod (red capsule of fixed size, `ROD_LENGTH_MM`, at the tracked midpoint and direction, with its shadow, "Rod" row in the distance panel). Whether the forceps touches the rod is
+   decided in the image (`detector/contact.py`); on contact the stream puts the rod onto the forceps tips and the viz
+   lets it glow.
 
 Throughput ≈ 20 ms/frame at 1080² (30 fps real-time with headroom).
 
