@@ -34,6 +34,7 @@ from typing import Any, Dict, Tuple
 from aiohttp import web
 
 from tool_positions import (
+    compute_rod_positions,
     compute_tool_positions,
     light_tip_position,
     trocar_position,
@@ -59,6 +60,14 @@ REQUIRED_KEYS = [
     "eye_radius_mm",
     "jaw_length_mm",
 ]
+
+
+# Optional: a free-floating rod (both ends and the shadow each one casts).
+# Absent or null -> no rod in the scene.
+ROD_KEYS = ["rod_a_px", "rod_a_shadow_px", "rod_b_px", "rod_b_shadow_px"]
+# ``rod_contact`` (optional bool): the forceps touches the rod, decided in the
+# image by the detector. The 3D reconstruction of two separate objects is only
+# as good as the calibration, so on contact the rod is moved onto the forceps.
 
 
 def validate_inputs(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -117,6 +126,43 @@ def compute_positions(data: Dict[str, Any]) -> Dict[str, Any]:
     return {key: [value[0], value[1], value[2]] for key, value in positions.items()}
 
 
+def rod_positions(data: Dict[str, Any]) -> Dict[str, Any]:
+    """``rod_a``/``rod_b`` (normalized frame) when all rod inputs are given, else both ``None``."""
+    if any(data.get(key) is None for key in ROD_KEYS):
+        return {"rod_a": None, "rod_b": None}
+    positions = compute_rod_positions(
+        light_rot_up=float(data["light_rot_up"]),
+        light_rot_clock=float(data["light_rot_clock"]),
+        light_depth_mm=float(data["light_depth_mm"]),
+        light_aim_tilt=float(data.get("light_aim_tilt", 0.0)),
+        light_aim_clock=float(data.get("light_aim_clock", 0.0)),
+        rod_a_px=_as_vec2(data["rod_a_px"]),
+        rod_a_shadow_px=_as_vec2(data["rod_a_shadow_px"]),
+        rod_b_px=_as_vec2(data["rod_b_px"]),
+        rod_b_shadow_px=_as_vec2(data["rod_b_shadow_px"]),
+        eye_center_px=_as_vec2(data["eye_center_px"]),
+        eye_radius_px=float(data["eye_radius_px"]),
+        eye_radius_mm=float(data["eye_radius_mm"]),
+    )
+    return {key: [value[0], value[1], value[2]] for key, value in positions.items()}
+
+
+def snap_rod_to_forceps(positions: Dict[str, Any]) -> None:
+    """Move the rod (both ends alike) so its axis passes through the midpoint
+    of the forceps tips: the forceps holds or pushes it."""
+    a, b = positions.get("rod_a"), positions.get("rod_b")
+    left, right = positions.get("left_tip_forceps"), positions.get("right_tip_forceps")
+    if a is None or b is None or left is None or right is None:
+        return
+    mid = [(l + r) / 2 for l, r in zip(left, right)]
+    v = [q - p for p, q in zip(a, b)]
+    vv = sum(c * c for c in v)
+    t = 0.0 if vv < 1e-18 else min(1.0, max(0.0, sum((m - p) * c for m, p, c in zip(mid, a, v)) / vv))
+    shift = [m - (p + t * c) for m, p, c in zip(mid, a, v)]
+    positions["rod_a"] = [p + d for p, d in zip(a, shift)]
+    positions["rod_b"] = [p + d for p, d in zip(b, shift)]
+
+
 def anchor_positions(data: Dict[str, Any]) -> Dict[str, Any]:
     """Points that depend only on the calibration angles, not on the tips.
 
@@ -154,15 +200,27 @@ def resilient_positions(data: Dict[str, Any]) -> Tuple[Dict[str, Any], Any]:
     Returns ``(positions, error)``. On the happy path ``error`` is ``None`` and
     all six points are present. If the tip reconstruction is inconsistent, the
     trocars/light are still returned (tips ``None``) alongside the error text,
-    so the stream degrades gracefully instead of returning a 500.
+    so the stream degrades gracefully instead of returning a 500. The rod is
+    reconstructed independently: a bad rod never removes the forceps.
     """
     try:
-        return compute_positions(data), None
+        positions, error = compute_positions(data), None
     except Exception as exc:  # noqa: BLE001 - degrade to anchors, report the reason
         try:
-            return anchor_positions(data), str(exc)
+            positions, error = anchor_positions(data), str(exc)
         except Exception as anchor_exc:  # noqa: BLE001
             return {}, f"{exc}; anchors failed: {anchor_exc}"
+    try:
+        positions.update(rod_positions(data))
+    except Exception as exc:  # noqa: BLE001 - keep the forceps
+        positions.update({"rod_a": None, "rod_b": None})
+        error = f"rod: {exc}" if error is None else f"{error}; rod: {exc}"
+    contact = bool(data.get("rod_contact")) and positions["rod_a"] is not None \
+        and positions.get("left_tip_forceps") is not None
+    if contact:
+        snap_rod_to_forceps(positions)
+    positions["rod_contact"] = contact
+    return positions, error
 
 
 def compute_from_file(path: Path) -> Tuple[Dict[str, Any], Any]:

@@ -82,3 +82,60 @@ def test_viewer_and_websocket_routes_coexist(tmp_path):
             assert {'/', '/ws', '/viewer'} <= paths
 
     asyncio.run(exercise())
+
+
+def test_rod_is_reconstructed_from_its_shadow_like_a_tip():
+    from ws_server import resilient_positions
+    from tool_positions import _norm3, _sub3
+
+    data = dict(VALID_INPUTS)
+    # the rod's ends sit exactly where the forceps tips are, with the same shadows -> same 3D points
+    data.update(rod_a_px=data["left_tip_px"], rod_a_shadow_px=data["left_shadow_px"],
+                rod_b_px=data["right_tip_px"], rod_b_shadow_px=data["right_shadow_px"])
+    positions, error = resilient_positions(data)
+    assert error is None
+    assert _norm3(_sub3(positions["rod_a"], positions["left_tip_forceps"])) < 1e-9
+    assert _norm3(_sub3(positions["rod_b"], positions["right_tip_forceps"])) < 1e-9
+
+
+def test_rod_is_optional_and_never_breaks_the_forceps():
+    from ws_server import resilient_positions
+
+    positions, error = resilient_positions(dict(VALID_INPUTS))
+    assert error is None and positions["rod_a"] is None and positions["rod_b"] is None
+    bad = dict(VALID_INPUTS, rod_a_px=[10, 10], rod_a_shadow_px=[10, 10], rod_b_px=[1, 1], rod_b_shadow_px="x")
+    positions, error = resilient_positions(bad)
+    assert positions["left_tip_forceps"] is not None and positions["rod_a"] is None and "rod" in error
+
+
+def test_rod_contact_moves_the_rod_onto_the_forceps():
+    from ws_server import resilient_positions
+    from tool_positions import _norm3, _sub3
+
+    data = dict(VALID_INPUTS, rod_a_px=[120.0, 140.0], rod_a_shadow_px=[200.0, 80.0],
+                rod_b_px=[170.0, 140.0], rod_b_shadow_px=[240.0, 80.0])
+    apart, _ = resilient_positions(dict(data))
+    touching, error = resilient_positions(dict(data, rod_contact=True))
+    assert error is None and apart["rod_contact"] is False and touching["rod_contact"] is True
+
+    def to_axis(pos):
+        a, b = pos["rod_a"], pos["rod_b"]
+        mid = [(l + r) / 2 for l, r in zip(pos["left_tip_forceps"], pos["right_tip_forceps"])]
+        v = _sub3(b, a)
+        t = min(1.0, max(0.0, sum(x * y for x, y in zip(_sub3(mid, a), v)) / sum(x * x for x in v)))
+        return _norm3(_sub3(mid, [p + t * c for p, c in zip(a, v)]))
+
+    assert to_axis(apart) > 1e-3 and to_axis(touching) < 1e-9
+    # moved as a whole: same length, same direction
+    assert _norm3(_sub3(_sub3(touching["rod_b"], touching["rod_a"]), _sub3(apart["rod_b"], apart["rod_a"]))) < 1e-9
+
+
+def test_rod_contact_without_forceps_changes_nothing():
+    from ws_server import rod_positions, resilient_positions
+
+    data = dict(VALID_INPUTS, rod_a_px=[120.0, 140.0], rod_a_shadow_px=[200.0, 80.0],
+                rod_b_px=[170.0, 140.0], rod_b_shadow_px=[240.0, 80.0], rod_contact=True,
+                left_tip_px=[1000.0, 1000.0])          # tips outside the eye -> no forceps
+    positions, _ = resilient_positions(data)
+    assert positions["left_tip_forceps"] is None and positions["rod_contact"] is False
+    assert positions["rod_a"] == rod_positions(data)["rod_a"]

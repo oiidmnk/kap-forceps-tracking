@@ -327,6 +327,10 @@ def test_calibration_update_persists(tmp_path):
     assert response.status_code == 200
     assert json.loads(calibration_path.read_text(encoding="utf-8"))["jaw_length_mm"] == 4.5
 
+    aimed = dict(CALIBRATION, light_aim_tilt=0.9, light_aim_clock=-0.1)    # light trocar at the limbus, aimed past the centre
+    assert client.put("/api/calibration", json=aimed).json()["light_aim_tilt"] == 0.9
+    assert json.loads(calibration_path.read_text(encoding="utf-8"))["light_aim_clock"] == -0.1
+
 
 def test_index_renders_template_with_static_assets(tmp_path):
     default_calibration = tmp_path / "default_calibration.json"
@@ -402,3 +406,58 @@ def test_decode_video_frame_reads_selected_frame(tmp_path):
 
     assert frame.shape[:2] == (12, 12)
     assert frame.mean() > 100
+
+
+def test_manual_points_with_rod_only_keeps_the_last_forceps(tmp_path):
+    default_calibration = tmp_path / "default_calibration.json"
+    default_calibration.write_text(json.dumps(CALIBRATION), encoding="utf-8")
+    current_inputs = {**CALIBRATION, "left_tip_px": [1, 2], "right_tip_px": [3, 4], "left_shadow_px": [5, 6],
+                      "right_shadow_px": [7, 8], "rod_a_px": [0, 0], "rod_a_shadow_px": [0, 0],
+                      "rod_b_px": [0, 0], "rod_b_shadow_px": [0, 0]}
+    put_payloads = []
+
+    async def stream_handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(200, json={"inputs": current_inputs, "positions": {}})
+        put_payloads.append(json.loads(request.content.decode("utf-8")))
+        return httpx.Response(200, json={"positions": {}})
+
+    client = TestClient(
+        create_app(
+            calibration_path=tmp_path / "calibration.json",
+            default_calibration_source=default_calibration,
+            segmentation_url="http://segmentation.test",
+            stream_url="http://stream.test",
+            stream_transport=httpx.MockTransport(stream_handler),
+        )
+    )
+    rod = {"rod_a_px": [10, 11], "rod_a_shadow_px": [12, 13], "rod_b_px": [14, 15], "rod_b_shadow_px": [16, 17],
+           "rod_contact": True}
+    response = client.post("/api/manual-points", json=rod)
+
+    assert response.status_code == 200
+    assert put_payloads[-1]["left_tip_px"] == [1, 2]          # forceps kept from the stream
+    assert put_payloads[-1]["rod_b_shadow_px"] == [16, 17]    # rod from this frame
+    assert put_payloads[-1]["rod_contact"] is True
+
+    forceps = {"left_tip_px": [1.0, 2.0], "right_tip_px": [3.0, 4.0], "left_shadow_px": [5.0, 6.0],
+               "right_shadow_px": [7.0, 8.0]}
+    client.post("/api/manual-points", json=forceps)
+    assert "rod_a_px" not in put_payloads[-1]                 # a frame without the rod removes it
+    assert "rod_contact" not in put_payloads[-1]
+
+
+def test_manual_points_rejects_an_incomplete_rod(tmp_path):
+    default_calibration = tmp_path / "default_calibration.json"
+    default_calibration.write_text(json.dumps(CALIBRATION), encoding="utf-8")
+    client = TestClient(
+        create_app(
+            calibration_path=tmp_path / "calibration.json",
+            default_calibration_source=default_calibration,
+            segmentation_url="http://segmentation.test",
+            stream_url="http://stream.test",
+        )
+    )
+    response = client.post("/api/manual-points", json={"rod_a_px": [1, 2], "rod_b_px": [3, 4]})
+    assert response.status_code == 400
+    assert "rod_a_shadow_px" in response.json()["detail"]

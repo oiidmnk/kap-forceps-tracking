@@ -340,6 +340,44 @@ def compute_tool_positions(
     }
 
 
+def compute_rod_positions(
+    light_rot_up: float,
+    light_rot_clock: float,
+    light_depth_mm: float,
+    rod_a_px: Vec2,
+    rod_a_shadow_px: Vec2,
+    rod_b_px: Vec2,
+    rod_b_shadow_px: Vec2,
+    eye_center_px: Vec2,
+    eye_radius_px: float,
+    eye_radius_mm: float,
+    light_aim_tilt: float = 0.0,
+    light_aim_clock: float = 0.0,
+) -> Dict[str, Vec3]:
+    """3D end points of a free-floating rod (e.g. a dropped capsule).
+
+    Like a forceps tip, each end lies on the ray from the light tip through
+    the shadow it casts on the retina, and its 2D image position fixes where
+    on that ray. ``rod_a_shadow_px`` must be the shadow of ``rod_a_px``.
+    Returns ``rod_a`` and ``rod_b`` in the normalized eye frame.
+    """
+    tip_light = light_tip_position(
+        light_rot_up,
+        light_rot_clock,
+        light_depth_mm / eye_radius_mm,
+        light_aim_tilt,
+        light_aim_clock,
+    )
+    return {
+        "rod_a": reconstruct_tip_from_shadow(
+            tip_light, rod_a_px, rod_a_shadow_px, eye_center_px, eye_radius_px
+        ),
+        "rod_b": reconstruct_tip_from_shadow(
+            tip_light, rod_b_px, rod_b_shadow_px, eye_center_px, eye_radius_px
+        ),
+    }
+
+
 if __name__ == "__main__":
     # ------------------------------------------------------------------
     # Verification against the worked example (left/right tip
