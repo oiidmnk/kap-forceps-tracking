@@ -63,3 +63,22 @@ def test_empty_retina_reports_nothing(client):
         pytest.skip("no empty background image")
     d = client.post("/detect", files={"image": ("b.png", bg.read_bytes(), "image/png")}).json()
     assert not d["forceps"]["ok"] and not d["shadow"]["ok"]
+
+
+def test_rod_and_its_shadow_on_held_out_frame(client):
+    video = ROOT / "data/video/rod.mp4"
+    if not video.exists():
+        pytest.skip("rod video missing")
+    cap = cv2.VideoCapture(str(video))
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 6440)             # held-out block 6000-6800 of the rod model
+    ok, frame = cap.read()
+    r = client.post("/detect", files={"image": ("f.png", cv2.imencode(".png", frame)[1].tobytes(), "image/png")}).json()
+    if "rod" not in r:
+        pytest.skip("checkpoint has no rod channels")
+    from mlseg.rodcv import find_rod
+    assert r["rod"]["ok"]
+    ends = np.array(r["rod"]["ends"])
+    ref = find_rod(frame).ends
+    assert min(np.abs(ends - ref).max(), np.abs(ends[::-1] - ref).max()) < 6
+    shadow = np.array(r["rod"]["shadow"])
+    assert (np.linalg.norm(shadow - ends, axis=1) < 250).all()      # paired: each shadow end near its own rod end

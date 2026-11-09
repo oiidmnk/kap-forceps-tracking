@@ -11,8 +11,9 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from .model import FLIP, KEYS
+from .model import FLIP, ROW_CH, ROWS
 from .relight import DiscRelight
+from .rodshadow import RodShadowBank
 from .shadowreloc import ShadowBank
 
 MEAN = np.array([0.485, 0.456, 0.406], np.float32) * 255
@@ -27,8 +28,18 @@ def load_frames(folder: str, kind: str | None = None):
         if kind and d["kind"] != kind:
             continue
         img = cv2.imread(jf[:-4] + "png", cv2.IMREAD_COLOR)
-        out.append((os.path.basename(jf)[:-5], img, np.array(d["pts"], np.float32), np.array(d["state"], np.int8)))
+        pts, st = pad_rows(np.array(d["pts"], np.float32), np.array(d["state"], np.int8))
+        out.append((os.path.basename(jf)[:-5], img, pts, st))
     return out
+
+
+def pad_rows(pts: np.ndarray, state: np.ndarray):
+    """Older 6-keypoint labels (forceps footage without a rod): the rod rows are absent."""
+    n = len(ROWS) - len(pts)
+    if n > 0:
+        pts = np.concatenate([pts, np.zeros((n, 2), np.float32)])
+        state = np.concatenate([state, np.zeros(n, np.int8)])
+    return pts, state
 
 
 def to_tensor(img: np.ndarray) -> torch.Tensor:
@@ -36,16 +47,28 @@ def to_tensor(img: np.ndarray) -> torch.Tensor:
     return torch.from_numpy(x.transpose(2, 0, 1).copy())
 
 
-def heatmaps(pts: np.ndarray, size: int, sigma: float, valid=None) -> np.ndarray:
-    """valid[i] False -> empty map (used for absent keypoints and for ones rotated out of the frame)."""
+def heatmaps(pts: np.ndarray, size: int, sigma: float, valid=None, row_ch=None) -> np.ndarray:
+    """valid[i] False -> no peak (used for absent keypoints and for ones rotated out of the frame).
+    row_ch maps label rows to channels (several rows may share one channel: the rod ends)."""
+    row_ch = range(len(pts)) if row_ch is None else row_ch
     yy, xx = np.mgrid[0:size, 0:size].astype(np.float32)
-    hm = np.zeros((len(pts), size, size), np.float32)
+    hm = np.zeros((max(row_ch) + 1, size, size), np.float32)
     for i, (x, y) in enumerate(pts):
         if valid is not None and not valid[i]:
             continue
-        hm[i] = np.exp(-((xx - x) ** 2 + (yy - y) ** 2) / (2 * sigma ** 2))
-        hm[i, int(round(y)), int(round(x))] = 1.0       # exactly one positive pixel per keypoint (focal loss)
+        c = row_ch[i]
+        hm[c] = np.maximum(hm[c], np.exp(-((xx - x) ** 2 + (yy - y) ** 2) / (2 * sigma ** 2)))
+        hm[c, int(round(y)), int(round(x))] = 1.0       # exactly one positive pixel per keypoint (focal loss)
     return hm
+
+
+def channel_mask(state: np.ndarray, row_ch) -> np.ndarray:
+    """Loss mask per channel: a channel is ignored if any of its rows is (an unknown peak must not be punished)."""
+    m = np.ones(max(row_ch) + 1, np.float32)
+    for i, c in enumerate(row_ch):
+        if state[i] == -1:
+            m[c] = 0.0
+    return m
 
 
 def affine(src: int, dst: int, angle: float, scale: float, shift, flip: bool) -> np.ndarray:
@@ -62,15 +85,19 @@ def affine(src: int, dst: int, angle: float, scale: float, shift, flip: bool) ->
 
 class Aug:
     def __init__(self, size=768, stride=2, sigma=3.0, train=True, relight: DiscRelight | None = None, relight_p=0.5,
-                 bank: ShadowBank | None = None, reloc_p=0.4):
+                 bank: ShadowBank | None = None, reloc_p=0.4, rod_bank: RodShadowBank | None = None, overlay_p=0.0):
         self.size, self.stride, self.sigma, self.train = size, stride, sigma, train
         self.relight, self.relight_p = relight, relight_p
         self.bank, self.reloc_p = bank, reloc_p
+        self.rod_bank, self.overlay_p = rod_bank, overlay_p
 
     def __call__(self, img, pts, rng: np.random.Generator, state=None, name=None):
         S, n = img.shape[0], self.size
         if self.train and self.bank is not None and name in self.bank and rng.random() < self.reloc_p:
             img, pts, state = self.bank.apply(name, rng)
+        if (self.train and self.rod_bank is not None and len(self.rod_bank) and state is not None
+                and (state[2:4] == 1).all() and (state[8:10] == 0).all() and rng.random() < self.overlay_p):
+            img, pts, state = self.rod_bank.apply(img, pts, state, rng)    # forceps shadow inside a rod shadow
         if self.train and self.relight is not None and rng.random() < self.relight_p:
             st = np.ones(len(pts)) if state is None else state
             tips = [q for q in (2, 3) if st[q] == 1] or [q for q in range(4) if st[q] == 1]
@@ -93,9 +120,10 @@ class Aug:
         if self.train:
             out = self.photometric(out, rng)
         inside = (p >= 0).all(1) & (p < n - self.stride).all(1)
-        hm = heatmaps(p / self.stride, n // self.stride, self.sigma, inside & (state == 1))
+        row_ch = ROW_CH[:len(p)]
+        hm = heatmaps(p / self.stride, n // self.stride, self.sigma, inside & (state == 1), row_ch)
         # loss mask per channel: ignored keypoints are masked; a present one rotated out of frame is a true negative
-        mask = (state != -1).astype(np.float32)
+        mask = channel_mask(state, row_ch)
         return out, hm, p.astype(np.float32), mask
 
     @staticmethod
