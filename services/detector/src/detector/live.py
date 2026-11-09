@@ -11,24 +11,95 @@ import numpy as np
 
 from .background import Background
 from .config import Settings
+from .contact import RodContact
 from .pipeline import Detection, Detector, annotate
 from .runtime import RuntimeConfig
 from .sources import frames, rotate_frame
 
 
 class Smoother:
-    """EMA on the pushed points; jaw points that vanish simply stop updating."""
+    """EMA on the pushed points. Points may come and go (forceps and rod are optional): a new one starts unsmoothed,
+    one that vanishes is held for `hold` pushes (bridges single missed frames) and then dropped. Values that are not
+    points (the rod_contact flag) pass through unchanged."""
 
-    def __init__(self, w: float):
-        self.w, self.last = w, None
+    def __init__(self, w: float, hold: int = 3):
+        self.w, self.hold, self.last, self.missing = w, hold, None, {}
+
+    # The rod's ends are unordered: keep each (end, its shadow) pair on the side it was on in the last push.
+    SWAP = (("rod_a_px", "rod_a_shadow_px"), ("rod_b_px", "rod_b_shadow_px"))
 
     def __call__(self, pts: dict) -> dict:
-        if self.last is None or self.w >= 1:
-            self.last = pts
-        else:
-            self.last = {k: [self.w * v[0] + (1 - self.w) * self.last[k][0],
-                             self.w * v[1] + (1 - self.w) * self.last[k][1]] for k, v in pts.items()}
-        return self.last
+        flags = {k: v for k, v in pts.items() if not isinstance(v, (list, tuple))}
+        pts = {k: v for k, v in pts.items() if k not in flags}
+        last = self.last or {}
+        pts = self._align(pts, last)
+        out = {}
+        for k, v in pts.items():
+            p = last.get(k)
+            out[k] = v if p is None or self.w >= 1 else [self.w * v[0] + (1 - self.w) * p[0],
+                                                         self.w * v[1] + (1 - self.w) * p[1]]
+            self.missing.pop(k, None)
+        for k, p in last.items():
+            if k not in pts and self.missing.get(k, 0) < self.hold:
+                self.missing[k] = self.missing.get(k, 0) + 1
+                out[k] = p
+        self.missing = {k: n for k, n in self.missing.items() if k in out}
+        self.last = out
+        return {**out, **flags}
+
+    def _align(self, pts: dict, last: dict) -> dict:
+        (a, a_s), (b, b_s) = self.SWAP
+        if not all(k in pts and k in last for k in (a, b)):
+            return pts
+        d = lambda p, q: (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2
+        if d(pts[a], last[b]) + d(pts[b], last[a]) < d(pts[a], last[a]) + d(pts[b], last[b]):
+            pts = {**pts, a: pts[b], b: pts[a], a_s: pts[b_s], b_s: pts[a_s]}
+        return pts
+
+
+ROD_KEYS = ("rod_a_px", "rod_b_px", "rod_a_shadow_px", "rod_b_shadow_px")
+
+
+class RodHold:
+    """The rod floats still unless something pushes it: while it is not found (hidden by the forceps, its shadow merged
+    with the forceps shadow, a weak frame) keep its last position instead of letting it vanish. If the forceps touched it
+    when it was lost, it is being carried (and is often hidden by the forceps then): it moves along with the tips for up
+    to `follow` frames, then stays where it is. Frames without anything found are still not pushed."""
+
+    def __init__(self, follow: int = 30):
+        self.follow = follow
+        self.reset()
+
+    def reset(self) -> None:
+        self.last: dict | None = None
+        self.tips: tuple[float, float] | None = None
+        self.lost = 0
+
+    @staticmethod
+    def _tips(pts: dict):
+        if "left_tip_px" not in pts or "right_tip_px" not in pts:
+            return None
+        (lx, ly), (rx, ry) = pts["left_tip_px"], pts["right_tip_px"]
+        return (lx + rx) / 2, (ly + ry) / 2
+
+    def __call__(self, pts: dict | None) -> dict | None:
+        if not pts:
+            return pts
+        tips = self._tips(pts)
+        if all(k in pts for k in ROD_KEYS):
+            self.last = {k: pts[k] for k in ROD_KEYS} | {"rod_contact": bool(pts.get("rod_contact"))}
+            self.tips, self.lost = tips, 0
+            return pts
+        if self.last is None:
+            return pts
+        self.lost += 1
+        if self.last["rod_contact"] and tips is not None and self.tips is not None and self.lost <= self.follow:
+            dx, dy = tips[0] - self.tips[0], tips[1] - self.tips[1]
+            self.last = {k: [self.last[k][0] + dx, self.last[k][1] + dy] for k in ROD_KEYS} | {"rod_contact": True}
+            self.tips = tips
+        elif self.lost > self.follow or tips is None:
+            self.last = {**self.last, "rod_contact": False}
+        return {**pts, **self.last}
 
 
 class LiveWorker(threading.Thread):
@@ -43,6 +114,8 @@ class LiveWorker(threading.Thread):
         self.cond = threading.Condition()
         self._stop = threading.Event()
         self._smooth = Smoother(cfg.smoothing)
+        self._contact = RodContact()
+        self._rod_hold = RodHold()
         self._last_push = 0.0
         self._applied_version = -1
         self._applied_resets = 0
@@ -61,6 +134,8 @@ class LiveWorker(threading.Thread):
         elif not first:
             self._reset_background(source, circle)
         self._smooth.last = None
+        self._contact.reset()
+        self._rod_hold.reset()
         self.stats.update(detect_error=None, source_error=None)
         with self.cond:
             self.jpeg, self.detection = None, None
@@ -111,6 +186,9 @@ class LiveWorker(threading.Thread):
             except Exception as exc:  # noqa: BLE001 - one bad frame must not kill the live loop
                 self.stats["detect_error"] = repr(exc)[:200]
                 continue
+            contact = self._contact(d)                     # every frame: the rod's motion is measured per frame
+            if d.rod is not None:
+                d.rod.contact = contact
             ok, buf = cv2.imencode(".jpg", annotate(self.det.view, d), [cv2.IMWRITE_JPEG_QUALITY, cfg.jpeg_quality])
             with self.cond:
                 self.detection, self.jpeg = d, buf.tobytes() if ok else None
@@ -120,7 +198,7 @@ class LiveWorker(threading.Thread):
             if time.monotonic() - t_fps >= 1.0:
                 self.stats["fps"] = round(n_fps / (time.monotonic() - t_fps), 1)
                 t_fps, n_fps = time.monotonic(), 0
-            pts = d.orchestrator_points()
+            pts = self._rod_hold(d.orchestrator_points())      # every frame: a carried rod follows the tips
             if client and pts and time.monotonic() - self._last_push >= 1.0 / cfg.push_hz:
                 self._last_push = time.monotonic()
                 try:
