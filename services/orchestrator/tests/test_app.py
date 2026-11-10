@@ -1,4 +1,5 @@
 import json
+import math
 from pathlib import Path
 
 import cv2
@@ -470,3 +471,65 @@ def test_decode_video_frame_reads_selected_frame(tmp_path):
 
     assert frame.shape[:2] == (12, 12)
     assert frame.mean() > 100
+
+
+def test_eye_roll_from_the_trocar_line_turns_both_trocars(tmp_path):
+    default_calibration = tmp_path / "default_calibration.json"
+    calibration_path = tmp_path / "calibration.json"
+    default_calibration.write_text(json.dumps(dict(CALIBRATION, trocar_line_deg=3.0)), encoding="utf-8")
+    put_payloads = []
+
+    async def stream_handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(200, json={"inputs": CALIBRATION, "positions": {}})
+        put_payloads.append(json.loads(request.content.decode("utf-8")))
+        return httpx.Response(200, json={"positions": {}})
+
+    client = TestClient(
+        create_app(
+            calibration_path=calibration_path,
+            default_calibration_source=default_calibration,
+            segmentation_url="http://segmentation.test",
+            stream_url="http://stream.test",
+            stream_transport=httpx.MockTransport(stream_handler),
+            detector_state_path=tmp_path / "detector.json",
+        )
+    )
+
+    # Right point first: the line is still measured left to right, at 8 deg.
+    right = [100 + 700 * math.cos(math.radians(8)), 700 + 700 * math.sin(math.radians(8))]
+    response = client.post("/api/eye-roll", json={"points": [right, [100, 700]]})
+    assert response.status_code == 200
+    assert response.json()["line_deg"] == pytest.approx(8.0)
+    assert response.json()["roll_deg"] == pytest.approx(5.0)
+    assert response.json()["not_applied"] is None
+    sent = put_payloads[-1]
+    assert sent["light_rot_clock"] == pytest.approx(4.3 + math.radians(5))
+    assert sent["forceps_rot_clock"] == pytest.approx(1.5 + math.radians(5))
+    assert "eye_roll_deg" not in sent and "trocar_line_deg" not in sent
+    # The saved trocars stay the reference ones; only the roll is stored.
+    saved = json.loads(calibration_path.read_text(encoding="utf-8"))
+    assert saved["forceps_rot_clock"] == 1.5 and saved["eye_roll_deg"] == pytest.approx(5.0)
+
+    far = [100 + 700 * math.cos(math.radians(30)), 700 + 700 * math.sin(math.radians(30))]
+    assert client.post("/api/eye-roll", json={"points": [[100, 700], far]}).status_code == 400
+    assert client.post("/api/eye-roll", json={"points": [[100, 700]]}).status_code == 400
+
+    assert client.delete("/api/eye-roll").json()["roll_deg"] == 0.0
+    assert put_payloads[-1]["forceps_rot_clock"] == pytest.approx(1.5)
+
+
+def test_eye_roll_needs_a_reference_line(tmp_path):
+    default_calibration = tmp_path / "default_calibration.json"
+    default_calibration.write_text(json.dumps(CALIBRATION), encoding="utf-8")
+    client = TestClient(
+        create_app(
+            calibration_path=tmp_path / "calibration.json",
+            default_calibration_source=default_calibration,
+            segmentation_url="http://segmentation.test",
+            stream_url="http://stream.test",
+        )
+    )
+    response = client.post("/api/eye-roll", json={"points": [[100, 700], [800, 740]]})
+    assert response.status_code == 400
+    assert "trocar_line_deg" in response.json()["detail"]

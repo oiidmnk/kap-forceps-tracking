@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import tempfile
 from pathlib import Path
@@ -170,17 +171,42 @@ def validate_calibration(payload: Any) -> dict[str, Any]:
         if not isinstance(center, (list, tuple)) or len(center) != 3:
             raise OrchestratorError("camera_center_mm must be [x, y, z]")
         calibration["camera_center_mm"] = [float(v) for v in center]
+    # Optional eye roll: reference trocar line (lens-off view) and this session's roll against it, degrees.
+    for key in ("trocar_line_deg", "eye_roll_deg"):
+        if payload.get(key) is not None:
+            calibration[key] = float(payload[key])
     return calibration
+
+
+MAX_EYE_ROLL_DEG = 15.0
+
+
+def trocar_line_deg(points: Any) -> float:
+    """Angle of the line through the two trocar entry points in the lens-off view, degrees, y down.
+
+    Measured from the left point to the right one, so it does not matter which trocar was clicked first. Scale and
+    shift of the frame cancel out; only a rotation of the image would change it.
+    """
+    if not isinstance(points, (list, tuple)) or len(points) != 2:
+        raise OrchestratorError("points must be two [x, y] trocar entry points")
+    (x0, y0), (x1, y1) = sorted(_as_vec2(point, "points[]") for point in points)
+    if math.hypot(x1 - x0, y1 - y0) < 20:
+        raise OrchestratorError("the two trocar points are too close together")
+    return math.degrees(math.atan2(y1 - y0, x1 - x0))
 
 
 def stream_calibration(calibration: dict[str, Any], detector_config: dict[str, Any] | None) -> dict[str, Any]:
     """Saved calibration -> stream inputs.
 
-    The camera is saved in video px. The stream wants it relative to its eye circle, in the coordinates the tip and
+    The session's eye roll turns both trocar clocks. The camera is saved in video px. The stream wants it relative to its eye circle, in the coordinates the tip and
     shadow points arrive in: the detector's normalised square when it crops to an eye circle, else video px. The
     circle cancels out, so a circle that is a few px off moves the crop but not the 3D.
     """
-    out = {key: value for key, value in calibration.items() if key not in ("camera_focal_px", "camera_pp_px")}
+    out = {key: value for key, value in calibration.items()
+           if key not in ("camera_focal_px", "camera_pp_px", "trocar_line_deg", "eye_roll_deg")}
+    roll = math.radians(calibration.get("eye_roll_deg", 0.0))  # the light aim is relative to its trocar: turns along
+    out["light_rot_clock"] = calibration["light_rot_clock"] + roll
+    out["forceps_rot_clock"] = calibration["forceps_rot_clock"] + roll
     if "camera_focal_px" not in calibration:
         return out
     focal, (px, py) = calibration["camera_focal_px"], calibration["camera_pp_px"]
@@ -592,6 +618,58 @@ def create_app(
             "stream_payload": stream_payload,
             "stream_result": stream_result,
         }
+
+    async def apply_if_seeded() -> str | None:
+        """Push the calibration to the stream; None when applied, else why not (e.g. no tip points yet)."""
+        try:
+            await apply_calibration()
+            return None
+        except HTTPException as exc:
+            return str(exc.detail)
+
+    def eye_roll_state(calibration: dict[str, Any]) -> dict[str, Any]:
+        return {"roll_deg": calibration.get("eye_roll_deg", 0.0), "reference_deg": calibration.get("trocar_line_deg")}
+
+    @service.get("/api/eye-roll")
+    async def get_eye_roll() -> dict[str, Any]:
+        try:
+            return eye_roll_state(service.state.calibration_store.load())
+        except OrchestratorError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @service.post("/api/eye-roll")
+    async def post_eye_roll(payload: dict[str, Any]) -> dict[str, Any]:
+        """Eye roll from the two trocar entry points clicked in the lens-off view (raw frame px).
+
+        The roll is the line's angle minus the calibration's reference line; the stream gets both trocar clocks
+        turned by it. Within a session this is noise (the instruments roll the eye by 1-2 deg anyway); it matters
+        when the eye was fixed differently, e.g. on another day.
+        """
+        try:
+            calibration = service.state.calibration_store.load()
+            if calibration.get("trocar_line_deg") is None:
+                raise OrchestratorError("the calibration has no reference trocar line (trocar_line_deg)")
+            line = trocar_line_deg(payload.get("points"))
+            roll = line - calibration["trocar_line_deg"]
+            if abs(roll) > MAX_EYE_ROLL_DEG:
+                raise OrchestratorError(
+                    f"trocar line at {line:.1f} deg is {roll:+.1f} deg off the reference: "
+                    "click where the light and forceps trocars enter the eye, lens off"
+                )
+            calibration = service.state.calibration_store.save({**calibration, "eye_roll_deg": roll})
+        except OrchestratorError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {**eye_roll_state(calibration), "line_deg": line, "not_applied": await apply_if_seeded()}
+
+    @service.delete("/api/eye-roll")
+    async def delete_eye_roll() -> dict[str, Any]:
+        try:
+            calibration = service.state.calibration_store.load()
+            calibration.pop("eye_roll_deg", None)
+            calibration = service.state.calibration_store.save(calibration)
+        except OrchestratorError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {**eye_roll_state(calibration), "not_applied": await apply_if_seeded()}
 
     @service.post("/api/manual-points")
     async def post_manual_points(payload: dict[str, Any]) -> dict[str, Any]:
