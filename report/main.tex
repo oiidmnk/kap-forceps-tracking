@@ -1,0 +1,562 @@
+%%
+% Project report – forceps, shadow and rod tracking in a retina simulator
+% Template: TUM Corporate Design, class tum-article
+% (https://gitlab.lrz.de/tum-templates/templates)
+%
+% Build:  cd report && latexmk -pdf main.tex
+%%
+
+\documentclass[english]{tum-article}
+% Variants:
+%\documentclass[english, twocolumn]{tum-article}
+%\documentclass[english, times]{tum-article}
+
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage{xcolor}
+
+% Marks open items – remove all before submission
+\newcommand{\todo}[1]{\textcolor{TUMOrange}{\textbf{[TODO:} #1\textbf{]}}}
+
+\title{Real-Time Tracking of Micro-Forceps, Shadow and Rod in a Retina Simulator}
+\subtitle{Project Report}
+\author{Luis Carilla}
+\titlerunning{Forceps Tracking in a Retina Simulator}
+\authorrunning{L. Carilla}
+
+% \email{...@tum.de}
+\affil{\todo{Chair / Department}, Technical University of Munich}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+  \todo{Polish the abstract (5--8 sentences): problem, approach, key results.}
+  We present a system that, in footage of a retina simulator, localises the two
+  jaw tips of a micro-forceps, the tips of its shadow and the junction of the
+  jaws in real time, and reconstructs the instrument's 3D position from them.
+  A classical detector without any training reaches a mean error of
+  \SI{4.3}{px} (forceps tips) and \SI{3.7}{px} (shadow tips) on 43
+  hand-labelled frames at \SIrange{20}{30}{ms} per frame on a CPU. A learned
+  keypoint detector (ResNet34 U-Net) reaches \SIrange{1.1}{1.5}{px} in
+  cross-validation, is robust where the classical rules fail, and additionally
+  tracks a rod that the forceps grasps. Whether the forceps touches the rod is
+  decided directly in the image.
+\end{abstract}
+
+\section{Introduction}
+\label{sec:intro}
+
+\todo{Motivation: vitreoretinal surgery, missing depth perception in the
+  microscope image, the instrument's shadow as a depth cue.}
+
+\todo{Goal of the project and contributions in 2--3 bullet points.}
+
+\section{System Overview}
+\label{sec:system}
+
+The system consists of four services started with Docker Compose
+(Fig.~\ref{fig:architecture}).
+
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}[
+      node distance=8mm and 14mm,
+      box/.style={draw=TUMBlau, thick, rounded corners, minimum width=22mm,
+        minimum height=9mm, align=center, font=\small},
+      arr/.style={-latex, thick, TUMBlauDunkel}]
+    \node[box, draw=TUMGrau] (src) {Video / RTSP /\\camera};
+    \node[box, right=of src] (det) {Detector\\\footnotesize :8000};
+    \node[box, right=of det] (orc) {Orchestrator\\\footnotesize :8090};
+    \node[box, below=of orc] (str) {Stream\\\footnotesize :8765};
+    \node[box, left=of str] (viz) {Viz\\\footnotesize :8080};
+    \draw[arr] (src) -- (det);
+    \draw[arr] (det) -- node[above, font=\scriptsize]{points} (orc);
+    \draw[arr] (orc) -- node[right, font=\scriptsize]{inputs} (str);
+    \draw[arr] (str) -- node[below, font=\scriptsize]{WebSocket} (viz);
+  \end{tikzpicture}
+  \caption{Architecture: the detector finds image points, the orchestrator
+    adds the calibration, the stream reconstructs the 3D pose and the viz
+    displays it.}
+  \label{fig:architecture}
+\end{figure}
+
+\begin{description}
+  \item[Detector] Finds the image points. There are two interchangeable
+    variants with the same interface: a classical computer-vision detector
+    (Sections~\ref{sec:masks}--\ref{sec:geometry}) and a learned keypoint
+    detector (Section~\ref{sec:mlseg}). Both serve an annotated MJPEG stream.
+  \item[Orchestrator] Source selection, eye circle and calibration; forwards
+    the points.
+  \item[Stream] Computes the 3D positions and publishes them over a WebSocket.
+  \item[Viz] React/Three.js dashboard with a 3D view.
+\end{description}
+
+\section{Method}
+\label{sec:method}
+
+\subsection{Preprocessing and Background Model}
+\label{sec:pre}
+
+The input can be a video file, a network stream (RTSP, MJPEG) or a local
+camera or capture card. The frame can first be rotated by \SI{90}{\degree},
+\SI{180}{\degree} or \SI{270}{\degree}. This is needed because the 3D stage
+is calibrated for one orientation, with the instruments entering from the
+right. The content of the eye circle is then cut out, everything outside it
+is set to black, and the result is scaled to a $1080 \times 1080$\,px square.
+All detections and all points sent to the 3D stage live in this normalised
+space, with the eye centre at $(540, 540)$ and a radius of \SI{540}{px}. The
+circle can be drawn in the user interface or found automatically. The
+automatic search takes the largest bright, saturated blob; its brightness
+threshold is relative to the 98th percentile, because the lens ring around
+the retina is darker.
+
+Shadows are detected as ``darker than the tool-free retina''. The detector
+therefore needs a reference image $V_\text{bg}$, the V channel (HSV) of the
+background. Two variants are supported:
+\begin{description}
+  \item[Static] A median image of the sample video. This is the most accurate
+    variant.
+  \item[Learned] For new cameras and scenes. Over \SI{8}{s}, 30 frames are
+    collected while the tools move, and the per-pixel 80th percentile is
+    taken. Tools and shadows are darker than the retina, so they disappear in
+    this percentile. Afterwards the background follows slow illumination
+    changes with a running average ($\alpha = 0.02$), but only where no tool
+    or shadow currently is (eroded mask).
+\end{description}
+Without a background the detector uses a weaker single-frame fallback: a
+smoothed local maximum envelope of $V$.
+
+\subsection{Classical Detector: Masks}
+\label{sec:masks}
+
+The first detector needs no training. It separates forceps and shadow by
+colour and brightness: the forceps is grey, while the retina and the shadow on
+it are red. The forceps mask is therefore
+\begin{equation}
+  M_\text{F} = (S < 150) \wedge (V < 135) \wedge \text{eye disc}.
+\end{equation}
+A shadow darkens the retina multiplicatively but keeps its colour. It is
+therefore found through the brightness ratio to the background:
+\begin{equation}
+  M_\text{S} = \Bigl(\frac{V}{V_\text{bg}} < 0.88\Bigr) \wedge (S \ge 150)
+  \wedge \neg M_\text{F} \wedge \text{eye disc}.
+\end{equation}
+Vessels are also present in the background, so they cancel out in the ratio.
+A shape filter removes regions glued to vessels and blotchy background. After
+a morphological opening only the thick shaft is left. Of all components, the
+one that is longest and most extended is chosen; its aspect ratio must be at
+least 3. Its principal axis defines a strip of $\pm\SI{56}{px}$, and only
+inside this strip is the original mask kept, including the thin jaws. Without
+such a shaft no shadow is reported, so vessel debris cannot pass as a tool.
+
+\subsection{Geometry: Tips and Junction}
+\label{sec:geometry}
+
+Tips and junction are found the same way for the forceps and for its shadow:
+\begin{enumerate}
+  \item The largest connected blob is taken. Its principal-axis ratio must be
+    at least 4, because a tool is long and thin.
+  \item The principal axis comes from the covariance matrix of the pixels.
+    The tool enters from the rim, so the end closer to the image centre is the
+    tip.
+  \item The image is rotated so that the tip points to the left. The angle is
+    refined three times, each time by fitting a line to the centres of the
+    straight shaft.
+  \item Starting at the tip, the image is scanned column by column (up to
+    \SI{320}{px}). The longest contiguous stretch in which a column contains
+    \emph{two} runs is the open jaw pair. It must be at least 8 columns long.
+  \item The outer ends of the two runs are the \textbf{tips}. The point where
+    the gap closes is the \textbf{junction}; it lies on a line fitted through
+    the gap centres. ``Left'' and ``right'' follow the labelling convention:
+    left is the lower side when heading towards the tip.
+\end{enumerate}
+Closed jaws form no fork. Such frames are reported as invalid with a reason,
+e.g.\ ``no fork (jaws closed?)''.
+
+\subsection{Learned Keypoint Detector}
+\label{sec:mlseg}
+
+The classical detector fails on red objects, on partly hidden tools and on
+shadows over the bright optic disc. For these cases there is a learned
+detector (service \texttt{mlseg}). It has the same HTTP interface and is
+therefore a drop-in replacement.
+
+\paragraph{Model.} A U-Net with a ResNet34 encoder predicts one heatmap per
+keypoint type. There are six channels for the forceps and its shadow (two tips
+and a junction each) and two more for the rod: rod end and rod-shadow end. It
+is trained with Gaussian targets and the penalty-reduced focal loss of
+CornerNet. The Gaussian targets make training tolerant of labels that are not
+pixel-perfect. Uncertain keypoints are masked out of the loss. The input is
+\SI{768}{px}. A frame takes about \SI{10}{ms} on a GPU and about
+\SI{500}{ms} on a CPU. A ResNet50 was no better than the ResNet34 and is
+slower.
+
+\paragraph{Data.} Only 41 hand-labelled frames exist, so the training set is
+extended:
+\begin{itemize}
+  \item \emph{Pseudo-labels}: junctions from the classical detector, but only
+    where its tips agree with the hand labels within \SI{3}{px}. In addition,
+    confident predictions of an earlier model on the videos, and empty frames
+    as negatives.
+  \item \emph{Hard positives}: frames where the model is unsure but the
+    classical detector confirms the spot within \SI{8}{px}. Also gaps with
+    confident predictions before and after them, and frames with closed jaws.
+  \item \emph{Augmentation}: the gain of the optic disc is cut out of the
+    empty background and multiplied onto training frames (relighting). Real
+    shadows are divided out of their frame and multiplied back next to the
+    forceps tips, rotated and scaled (shadow relocation). This teaches the
+    configuration ``shadow tip a few pixels from the forceps tip''.
+  \item \emph{Active learning}: uncertain frames of new videos are exported
+    to LabelMe with pre-filled points, corrected by hand and added back.
+\end{itemize}
+A shadow is only reported when \emph{both} shadow tips pass the threshold. If
+the forceps is visible but its shadow is not, the last tip-to-shadow offset is
+held for up to \SI{1}{s}.
+
+\subsection{Rod Tracking and Contact Detection}
+\label{sec:rod}
+
+In the grasping task a red rod (a capsule) has to be picked up and moved. The
+capsule is symmetric, so both ends share one heatmap and are decoded as the
+two strongest peaks at least 6 heatmap pixels apart. The same holds for the
+rod's shadow. Both ends of a shadow are shifted by about the same offset,
+which tells which shadow end belongs to which rod end: the wrong pairing
+differs by about twice the rod length.
+
+\paragraph{Labels.} The rod ends can be found by colour ($G/R < 0.13$), since
+the rod is the only saturated red. The shadow ends had to be read by hand:
+every 79th frame, on zoomed grid crops. They were then snapped with a capsule
+template on a vessel-free darkness map. Self-training grew this set from 52 to
+1074 frames. A prediction only becomes a label if an independent capsule fit
+confirms both ends within \SI{5}{px}. While grasping, the forceps shadow merges
+with the rod shadow. So that the model can still infer the hidden tips from
+the visible shaft shadow, real rod shadows are laid over the shadow tips
+during training.
+
+\paragraph{Temporal filters.} The rod rests unless something pushes it. Two
+filters use this:
+\begin{description}
+  \item[RodHold] When the rod is not found, e.g.\ because it is hidden or the
+    frame is weak, its last position is kept. If the forceps touched it when
+    it was lost, it is being carried and follows the tips for up to 30
+    frames.
+  \item[RodFilter] An adaptive EMA on the rod and shadow ends. At rest a new
+    sample has weight 0.1; from \SI{6}{px} of motion on its weight is 1, so a
+    pushed rod follows at once. A shadow end that jumps by more than
+    \SI{40}{px} while the rod rests is ignored for up to 10 frames. This
+    matters because small jumps of the shadow ends shift the 3D height by
+    millimetres.
+\end{description}
+
+\paragraph{Contact.} Whether the forceps touches the rod is decided in the
+image and is therefore independent of the 3D calibration. A tip that lies on
+the rod in the image may also hover above it. It only counts as touching if
+there is one of two further pieces of evidence:
+\begin{itemize}
+  \item The forceps shadow meets the rod shadow at the same position along the
+    rod, within 1.3 rod widths. Same image point and same shadow means the same
+    3D point.
+  \item The rod moves along with the tips, in the same direction and faster
+    than \SI{1.3}{px} per frame.
+\end{itemize}
+Contact starts after two frames with evidence in a row. It only ends when the
+tips leave the rod or the shadows clearly separate ($> 2.5$ widths), for three
+frames in a row, so a single noisy frame does not end a grasp. On contact the
+3D stage places the rod so that its axis passes through the midpoint of the
+tips, and the viz makes it glow.
+
+\subsection{3D Reconstruction}
+\label{sec:3d}
+
+The reconstruction works in a normalised eye frame. The origin is the eye
+centre, the unit of length is the eye radius, and the $z$ axis is the viewing
+direction of the microscope: $z = -1$ is the top pole and $z = +1$ the deepest
+point of the retina. A trocar lies on the unit sphere and is given by two
+angles, $\vartheta$ from the vertical and the azimuth $\varphi$ in the image:
+\begin{equation}
+  \mathbf{t}(\vartheta, \varphi) =
+  (\sin\vartheta\cos\varphi,\; \sin\vartheta\sin\varphi,\; -\cos\vartheta)^\top.
+\end{equation}
+The tip of the light pipe, $\mathbf{L}$, is a point light source. It lies an
+insertion depth $d$ from the light trocar along its aim direction, which by
+default points at the eye centre.
+
+\paragraph{Tip from shadow.} A shadow pixel $\mathbf{s}_\text{px}$ is
+back-projected onto the far retina, i.e.\ the sphere, giving $\mathbf{S}$. The
+tool tip must lie on the light ray
+$\mathbf{L} + \lambda (\mathbf{S} - \mathbf{L})$. Its image position fixes
+where on the ray:
+\begin{itemize}
+  \item With an \emph{orthographic} camera, $\lambda$ is the least-squares
+    solution of the condition that the $xy$ projection of the ray point hits
+    the tip's image point.
+  \item With a \emph{pinhole} camera $c$ eye radii in front of the centre,
+    i.e.\ at $(0, 0, -c)$, a point is imaged as
+    \begin{equation}
+      (x, y, z) \mapsto \frac{1 + c}{z + c}\,(x, y).
+    \end{equation}
+    The tip is then the point of the light ray closest to the viewing ray of
+    the tip pixel.
+\end{itemize}
+The junction lies on the shaft axis from the forceps trocar to the midpoint of
+the tips, far enough behind that midpoint that each jaw has its known length
+$\ell$. With half the tip spread $h$ this distance is $\sqrt{\ell^2 - h^2}$.
+Each rod end is reconstructed from its shadow end exactly like a forceps tip.
+
+\paragraph{Calibration.} The calibration made for the forceps video does not
+fit the scene of the rod video: only 3\,\% of the rod ends lie inside the eye,
+and the length of the rigid rod varies by 10--20\,mm. A script therefore fits
+the light position and the forceps trocar to the video under three
+conditions: constant rod length, all points inside the eye, and shaft axes
+through a common point. The optic disc gives the image scale: about
+\SI{85}{px} for about \SI{1.8}{mm}, i.e.\ \SI{0.021}{mm/px}. With an
+orthographic camera the simulator's wide-angle optics would be absorbed into
+an eye radius that is far too large. A pinhole camera fits much better
+(Table~\ref{tab:camera}). We chose $c = 2.2$, where both trocars come out at
+plausible places without clamping them.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Camera model on the rod video: spread of the reconstructed rod
+    length and position of the trocars (angle from the vertical; the pars
+    plana lies at about \SIrange{45}{50}{\degree}).}
+  \label{tab:camera}
+  \begin{tabular}{lcccc}
+    \toprule
+    Camera       & Length IQR  & Length $\pm$30\,\% & Light trocar     & Forceps trocar   \\
+    \midrule
+    orthographic & $\pm$8\,\%  & 91\,\%             & \SI{57}{\degree} & outside the eye  \\
+    $c = 2.0$    & $\pm$5\,\%  & 94\,\%             & \SI{45}{\degree} & \SI{41}{\degree} \\
+    $c = 2.2$    & $\pm$4\,\%  & 93\,\%             & \SI{33}{\degree} & \SI{52}{\degree} \\
+    $c = 2.6$    & $\pm$3\,\%  & 94\,\%             & \SI{39}{\degree} & misses the eye   \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Evaluation}
+\label{sec:eval}
+
+All pixel errors refer to the normalised $1080 \times 1080$ frame. PCK@5 is
+the share of keypoints within \SI{5}{px} of the label.
+
+\subsection{Classical Detector}
+
+The classical detector was evaluated on 43 hand-labelled frames of the sample
+video (LabelMe, \texttt{make eval}). It has no trained parameters; its
+thresholds were tuned by hand on the same video. Table~\ref{tab:classical}
+shows the result. With the background model it finds forceps and shadow in
+all 43 frames. Without it, the forceps is unaffected, but the shadow error
+grows about eightfold and one shadow is missed.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Classical detector on 43 labelled frames (86 tips per tool).}
+  \label{tab:classical}
+  \begin{tabular}{llrrrr}
+    \toprule
+    Background & Tips    & Mean [px] & Median [px] & Max [px] & PCK@5  \\
+    \midrule
+    static     & forceps & 4.3       & 4.2         & 7.9      & 67\,\% \\
+               & shadow  & 3.7       & 3.8         & 11.9     & 78\,\% \\
+    none       & forceps & 4.3       & 4.2         & 7.9      & 67\,\% \\
+               & shadow  & 31.2      & 27.8        & 138.1    & 19\,\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The runtime is about \SI{20}{ms} per frame in the live worker and
+\SI{32}{ms} (median) for single images on a laptop CPU, i.e.\ real time at
+\SI{30}{fps}.
+
+\subsection{Learned Detector}
+
+\paragraph{Accuracy.} The learned detector was evaluated with 5-fold block
+cross-validation on the 41 hand-labelled frames, so that every score comes
+from frames the model did not see. The 4-point model (tips only) reaches a
+mean tip error of \SIrange{1.1}{1.5}{px} with PCK@5 of 100\,\%. The 6-point
+model with pseudo-labels reaches \SIrange{1.3}{1.4}{px} on the tips; the
+forceps junction is at about \SI{1.6}{px} and the shadow junction at
+\SIrange{2}{5}{px} relative to the classical detector.
+
+\paragraph{Shadow recall.} The hard part is not accuracy but finding the
+shadow at all. On the sample video the first model missed the shadow in
+13.4\,\% of the frames where it found the forceps. Two rounds of
+hard-positive mining brought this to 4.9\,\%, and later models to under 1\,\%, with no
+false alarms on 284 empty frames. On a second, harder video
+(\texttt{video.mp4}), in which the shadow often lies directly beside the
+forceps tips, recall was measured against a hand-annotated presence set
+(every 60th frame; 62 frames with a visible shadow, 8 tool frames without
+one, 9 empty). Table~\ref{tab:recall} shows how each training step helped.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Shadow recall of the learned detector on \texttt{video.mp4}
+    (share of frames with a visible shadow in which at least one shadow tip is
+    reported).}
+  \label{tab:recall}
+  \begin{tabular}{lrr}
+    \toprule
+    Model                                       & Threshold 0.3 & Threshold 0.1 \\
+    \midrule
+    6-point model + hard positives              & 56\,\%        & 60\,\%        \\
+    + disc relighting + shadow relocation       & 68\,\%        & 79\,\%        \\
+    + 3 rounds of verified hard positives       & 82\,\%        & 90\,\%        \\
+    + shadows of \texttt{video.mp4} in the bank & 86\,\%        & 94\,\%        \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+For the shipped model the share with \emph{both} shadow tips, which is what
+the service reports, is 84\,\% and 90\,\%. False alarms on empty frames stay at
+zero.
+
+\subsection{Rod Tracking and Contact}
+
+The rod models were evaluated on two blocks of the rod video (frames
+2400--3200 and 6000--6800) that were never used for training, not even as
+pseudo-labels (Table~\ref{tab:rod}). Rod ends are compared with the colour
+finder (67 frames), rod-shadow ends with 13 hand-read frames. Most misses of
+the rod are a rod held by the forceps, with one end hidden. The shadow is
+clearly visible in only about 65\,\% of the frames; otherwise it lies under the
+rod or forceps or merges with the forceps shadow.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Rod models on the held-out blocks of the rod video. ``Both found''
+    is the share of every 5th held-out frame (320) with rod and shadow found
+    (threshold 0.1).}
+  \label{tab:rod}
+  \begin{tabular}{lrrrr}
+    \toprule
+    Model                       & Rod median & Rod found & Shadow median & Both found \\
+    \midrule
+    r1: 52 hand-read shadows    & \SI{1.1}{px} & 82\,\% & \SI{3.5}{px} & 63\,\% \\
+    r2: + 799 self-trained      & \SI{1.0}{px} & 85\,\% & \SI{2.9}{px} & 70\,\% \\
+    r3: + 1074 self-trained     & \SI{1.2}{px} & 86\,\% & \SI{2.5}{px} & 72\,\% \\
+    r4: + shadow overlay        & \SI{1.3}{px} & 84\,\% & \SI{2.3}{px} & 76\,\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The shadow overlay in training (r4) mainly helps while grasping. In real frames
+where the forceps tips lie within \SI{60}{px} of the rod shadow, the forceps
+shadow is found in 74\,\% instead of 46\,\% of the frames (r3). The forceps
+results on the old footage stay the same or improve slightly.
+
+On the rod video the contact detection flags 32 stretches. A frame-by-frame
+check showed that these are exactly the stretches in which the forceps pushes,
+turns or carries the rod, with no isolated frames. A tip that lies on the rod
+in the image but hovers above it, with its shadow elsewhere, is not flagged.
+
+\todo{Optional: screenshots of the viz, 3D accuracy of the forceps tips.}
+
+\section{Classical vs.\ Learned Segmentation}
+\label{sec:comparison}
+
+Both detectors deliver the same keypoints through the same interface, so they
+can be compared directly. Table~\ref{tab:comparison} summarises the
+differences.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Comparison of the two detectors. Accuracy: classical on all 43
+    labelled frames, learned with 5-fold cross-validation on 41 frames.}
+  \label{tab:comparison}
+  \begin{tabular}{p{0.26\linewidth}p{0.31\linewidth}p{0.31\linewidth}}
+    \toprule
+                         & Classical (rules)                        & Learned (ResNet34 U-Net)                     \\
+    \midrule
+    Training data        & none                                     & 41 hand labels + pseudo-labels, self-training \\
+    Tip error (mean)     & \SI{4.3}{px} forceps, \SI{3.7}{px} shadow & \SIrange{1.1}{1.5}{px}                      \\
+    PCK@5                & 67\,\% forceps, 78\,\% shadow            & 100\,\%                                      \\
+    Junction             & by construction, not labelled            & \SI{1.6}{px} (vs.\ classical)                \\
+    Runtime              & \SIrange{20}{30}{ms}, CPU                & \SI{10}{ms} GPU, \SI{500}{ms} CPU            \\
+    Background image     & required for shadows                     & not needed                                   \\
+    Red objects, partly hidden tools & fails                        & handled                                      \\
+    Shadow next to the tips & confuses forceps and shadow tips in about half of the hard frames & recall 84--90\,\% (both tips) \\
+    Rod                  & --                                       & ends, shadow ends, contact                   \\
+    Closed jaws          & no fork, frame invalid                   & only one tip, no full pair                   \\
+    Adapting to a new setup & retune thresholds by hand             & label a few frames, retrain                  \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Accuracy.} On the labelled frames the learned detector is about
+three times more accurate. The classical tips are systematically a few pixels
+off, because the end of a thresholded mask does not coincide with the tip a
+human marks; only two thirds of its forceps tips are within \SI{5}{px}. The
+two protocols differ: the classical detector has no trained parameters but its
+thresholds were tuned on the same video, while the learned scores come from
+held-out folds. The gap is large enough that this does not change the
+conclusion.
+
+\paragraph{Robustness.} The rules encode assumptions: the forceps is grey,
+the shadow is red and darker than a known background, and a tool is the
+largest elongated blob. Where these hold, as in the sample video, the
+classical detector works well. Where they break, it fails without warning:
+on red objects in the scene, on tools that are partly out of view, on shadows
+over the bright optic disc and, above all, on shadows that lie directly next
+to the forceps tips. In the hard frames of \texttt{video.mp4} it confuses
+forceps and shadow tips in about half of the cases. Where the two detectors
+disagree on that video, the learned detector is the correct one. The learned
+detector also needs no background image, which removes the \SI{8}{s}
+bootstrap and the eightfold shadow error of the fallback.
+
+\paragraph{Cost.} The classical detector runs on any CPU in real time and
+can be understood and debugged parameter by parameter. The learned detector
+needs a GPU for real time, an 86\,MB checkpoint, and a substantial data
+pipeline (pseudo-labels, hard-positive mining, two augmentations, active
+learning). Its errors are harder to explain: the open failure mode in which
+the lower shadow tip lands on the forceps' own prong is not fixed by adding
+labels of the same frames, and a colour rule does not separate prong from
+shadow either.
+
+\paragraph{Complementary use.} The two approaches are not only alternatives.
+The classical detector bootstrapped the learned one: its junctions served as
+pseudo-labels where its tips agreed with the hand labels, and its
+confirmation turned uncertain model predictions into hard positives. In the
+same spirit, the rod labels came from a colour rule and a capsule fit. Rules
+are cheap labellers where they are reliable; the network generalises beyond
+them.
+
+\paragraph{Conclusion.} For the controlled sample video the classical
+detector is sufficient and needs no GPU. For new footage, the rod task and
+the cases that matter during grasping (shadow merged or next to the tips), the
+learned detector is clearly better and was therefore used for the rod
+pipeline.
+
+\section{Discussion and Limitations}
+\label{sec:discussion}
+
+\begin{itemize}
+  \item Closed jaws form no fork; neither detector reports a full pair then.
+  \item Junctions are not hand-labelled, so they are only compared between the
+    detectors.
+  \item The learned detector's generalisation beyond the labelled video is
+    judged mostly qualitatively. In some open-jaw frames of
+    \texttt{video.mp4}, the lower shadow tip is reported about \SI{35}{px}
+    away, on the forceps' own prong.
+  \item The light pipe in the simulator is hand-held and moves. A single
+    calibration is therefore a compromise, and the light's depth is only
+    weakly determined.
+  \item The 3D stage assumes a fixed image orientation; an upside-down capture
+    gives a tip behind the retina unless the source is rotated.
+  \item \todo{Further limitations, e.g.\ capture cards, parameters per setup.}
+\end{itemize}
+
+\section{Conclusion and Outlook}
+\label{sec:conclusion}
+
+\todo{Summary and possible next steps.}
+
+% \section*{Acknowledgements}
+
+The layout follows the TUM corporate design template~\cite{tumtemplates}.
+
+\bibliographystyle{IEEEtran}
+\bibliography{literature}
+
+\end{document}
