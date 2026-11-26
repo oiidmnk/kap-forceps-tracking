@@ -52,11 +52,12 @@ export default function Forceps({ frame, levels, ghost = false }) {
       ].map(([base, tip, inward], i) => {
         const level = levels?.[i ? 'right' : 'left']
         const color = !ghost && level ? STATUS[level].color : GHOST_TIP
+        const critical = !ghost && level === 'danger'
         return (
           <group key={i}>
             <Jaw base={base} tip={tip} axis={shaftDir} inward={inward} widthDir={widthDir} ghost={ghost} />
             <mesh position={tip}>
-              <sphereGeometry args={[TIP_INDICATOR_MM, 12, 10]} />
+              <sphereGeometry args={[TIP_INDICATOR_MM * (critical ? 1.5 : 1), 12, 10]} />
               <meshStandardMaterial
                 color={color}
                 emissive={color}
@@ -64,6 +65,13 @@ export default function Forceps({ frame, levels, ghost = false }) {
                 {...ghostMaterial(ghost)}
               />
             </mesh>
+            {critical && (
+              <mesh position={tip}>
+                {/* Back-face shell: a light silhouette from every camera angle. */}
+                <sphereGeometry args={[TIP_INDICATOR_MM * 1.9, 16, 12]} />
+                <meshBasicMaterial color="#fff4e8" side={THREE.BackSide} toneMapped={false} />
+              </mesh>
+            )}
           </group>
         )
       })}

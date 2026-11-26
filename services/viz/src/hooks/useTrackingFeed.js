@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { WS_URL } from '../config.js'
 import { sampleFrame } from '../feed/mockGenerator.js'
-import { parseTrackingFrame, trackingIsStale } from '../feed/trackingState.js'
+import { parseTrackingFrame } from '../feed/trackingState.js'
 
 // Connects the selected data source (mock generator or live WebSocket) and
 // forwards every frame to `onFrame(frame, status, now)`. No React state: the
@@ -21,15 +21,8 @@ export function useTrackingFeed(source, onFrame) {
     }
     if (source !== 'live') return
 
-    let ws,
-      closed = false,
-      lastReceived = null
-    const staleTimer = setInterval(() => {
-      if (!closed && trackingIsStale(lastReceived, performance.now())) {
-        publish(null, 'stale')
-        lastReceived = null
-      }
-    }, 250)
+    // The pipeline checks receipt/source freshness on its animation clock.
+    let ws, closed = false
     try {
       ws = new WebSocket(WS_URL)
       ws.onopen = () => {
@@ -43,12 +36,10 @@ export function useTrackingFeed(source, onFrame) {
         } catch {
           /* malformed data is explicitly unavailable */
         }
-        lastReceived = frame ? performance.now() : null
         publish(frame, frame ? 'live' : 'degraded')
       }
       const disconnect = () => {
         if (!closed) {
-          lastReceived = null
           publish(null, 'error')
         }
       }
@@ -59,7 +50,6 @@ export function useTrackingFeed(source, onFrame) {
     }
     return () => {
       closed = true
-      clearInterval(staleTimer)
       ws?.close()
     }
   }, [source, onFrame])

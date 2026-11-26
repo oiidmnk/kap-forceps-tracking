@@ -160,3 +160,8 @@ test('without contact the rod is moved off tips that pierce it', async () => {
   assert.equal(rodGap(held), 0) // in contact: left where the stream put it
   assert.equal(rodGap({ ...free, rod_a: null }), null)
 })
+
+test('both source-time spellings are preserved for native frames', () => {
+  assert.equal(parseTrackingFrame({ ...native, t: undefined, timestamp: 42 }).t, 42)
+  assert.equal(parseTrackingFrame({ ...native, t: 0, timestamp: 42 }).t, 0)
+})

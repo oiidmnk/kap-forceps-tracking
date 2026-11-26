@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { navigationHelpOpen } from '../hooks/navigationHelp.js'
 
 const presets = [
   { key: 'overview', label: 'Overview' },
@@ -17,7 +18,7 @@ export const typing = (e) =>
 export default function ViewPresets({ view, onSelect }) {
   useEffect(() => {
     const onKey = (e) => {
-      if (typing(e)) return
+      if (navigationHelpOpen() || typing(e)) return
       const preset = presets[Number(e.key) - 1]
       if (preset) onSelect(preset.key)
     }

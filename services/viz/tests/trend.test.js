@@ -3,25 +3,24 @@ import assert from 'node:assert/strict'
 import { createTrend, TREND_WINDOW_MS } from '../src/feed/trend.js'
 import { instrumentMetrics } from '../src/geometry.js'
 
-test('steady approach gives speed and time to contact', () => {
+test('steady approach gives negative velocity', () => {
   const trend = createTrend()
   // 3 mm, approaching at 1 mm/s, sampled at 60 Hz
   for (let t = 0; t <= 1000; t += 16) trend.push(t, 3 - t / 1000)
   const s = trend.snapshot(1000)
   assert.ok(Math.abs(s.velocity + 1) < 0.05, `velocity ${s.velocity}`)
-  assert.ok(Math.abs(s.ttc - 2) < 0.15, `ttc ${s.ttc}`)
+  assert.equal('ttc' in s, false)
 })
 
-test('holding still has no time to contact; retracting has none either', () => {
+test('holding is near zero velocity; retracting has positive velocity', () => {
   const hold = createTrend()
   for (let t = 0; t <= 1000; t += 16) hold.push(t, 2 + 0.01 * Math.sin(t))
-  assert.equal(hold.snapshot(1000).ttc, null)
+  assert.ok(Math.abs(hold.snapshot(1000).velocity) < 0.15)
 
   const back = createTrend()
   for (let t = 0; t <= 1000; t += 16) back.push(t, 1 + t / 1000)
   const s = back.snapshot(1000)
   assert.ok(s.velocity > 0.9)
-  assert.equal(s.ttc, null)
 })
 
 test('a tracking gap breaks the slope and stays visible in the history', () => {

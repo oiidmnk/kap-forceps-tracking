@@ -1,0 +1,16 @@
+{
+  "screenshot": "synthetic:dark-ui",
+  "css_width": 1600,
+  "crop": [20, 70, 1560, 860],
+  "output_scale": 2,
+  "dpi": 300,
+  "accent": "#ffd400",
+  "dim_outside": true,
+  "legend": {"position": "right", "width": 350, "padding": 26, "title": "Tracking interface"},
+  "callouts": [
+    {"number": 1, "point": [180, 94], "target": [45, 115, 275, 220], "leader": true, "text": "Session controls select the camera and tracking configuration."},
+    {"number": 2, "point": [790, 94], "target": [370, 115, 795, 590], "leader": true, "text": "Live view shows the instrument and its tracked position."},
+    {"number": 3, "point": [1390, 94], "target": [1215, 115, 340, 250], "leader": true, "text": "Quality metrics report the current tracking confidence."},
+    {"number": 4, "point": [1192, 820], "target": [370, 755, 795, 145], "leader": true, "rounded": false, "text": "Playback controls support reviewing the recorded sequence."}
+  ]
+}

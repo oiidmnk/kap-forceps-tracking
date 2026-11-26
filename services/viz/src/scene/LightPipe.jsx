@@ -14,12 +14,15 @@ const LIGHT_TINT = '#d9b06a' // light-pipe trocar
 // emits light into the scene (a real point light — the retina picks up its
 // warm falloff), plus (optionally) the beam
 // cone toward the illuminated spot. The probe continues a little outside the
-// eye. Fed by light_trocar + light_tip.
+// eye. Fed by light_trocar + light_tip. When the tip sits at the trocar (the
+// light is not inserted, light_depth_mm = 0) the pipe aims at the eye centre,
+// like the tracker's default light aim.
 // `ghost` (tracking lost) fades the pipe and hides the aim guides; the point
 // light stays so the light count, and therefore every shader, is unchanged.
 export default function LightPipe({ lightTrocar, lightTip, showBeam = false, ghost = false }) {
   if (!lightTrocar || !lightTip) return null
-  const axis = normalize(sub(lightTip, lightTrocar))
+  const inserted = sub(lightTip, lightTrocar)
+  const axis = Math.hypot(...inserted) > 1e-6 ? normalize(inserted) : normalize(scale(lightTrocar, -1))
   const lightedCenter = raySphereIntersection(lightTip, axis)
   const fiberStart = sub(lightTip, scale(axis, FIBER_LENGTH_MM))
 
@@ -45,7 +48,7 @@ export default function LightPipe({ lightTrocar, lightTip, showBeam = false, gho
       <pointLight position={lightTip} color="#ffd27a" intensity={22} distance={30} decay={2} />
 
       {/* Aim line to the illuminated center */}
-      {!ghost && lightedCenter && (
+      {!ghost && showBeam && lightedCenter && (
         <DynamicLine
           points={[lightTip, lightedCenter]}
           color="#ffe9a6"
@@ -60,7 +63,7 @@ export default function LightPipe({ lightTrocar, lightTip, showBeam = false, gho
 
       {!ghost && showBeam && lightedCenter && <BeamCone apex={lightTip} base={lightedCenter} />}
 
-      {!ghost && lightedCenter && (
+      {!ghost && showBeam && lightedCenter && (
         <mesh position={lightedCenter}>
           <sphereGeometry args={[0.12, 16, 12]} />
           <meshStandardMaterial color="#fff7cc" emissive="#c68a00" />

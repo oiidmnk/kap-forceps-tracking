@@ -1,10 +1,11 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import { midpoint, normalize, scale } from '../geometry.js'
+import { midpoint, nearestTip, normalize, scale } from '../geometry.js'
 import { EYE_RADIUS_MM } from '../config.js'
 
-const VIEW_DIST_MM = 8 // fixed camera distance from the wall — no zoom-to-fit, tune here if the framing feels off
+const VIEW_DIST_MM = 8
+const TIGHT_CLEARANCE_MM = 1.5
 
 const FOCUS_TAU_S = 0.08 // follow time constant; frame-rate independent
 
@@ -28,20 +29,21 @@ const _rB = new THREE.Vector3()
 // Drives the proximity-scope camera and owns the shared scope focus.
 // - focus: the retinal point under the jaw midpoint, followed with a short
 //   time constant and published in `focusRef` so ProximityWall centres its
-//   patch on exactly the point the camera looks at. Runs at priority -1, before
+//   patch on the foot point even when the camera aims above it. Priority -1, before
 //   the wall reads it.
 // - orientation: an instrument-relative basis (outward/rightAxis/forward) from
 //   the focus, so it never flips on world axes, plus the user-adjustable
 //   (azimuth, elevation) from `dragState`. Elevation is clamped away from the
 //   tangent plane, so the camera never ends up under the retina.
-// The camera is rigidly attached to the focus at a fixed distance: all motion
-// smoothing happens in one place, so the wall, reticle and instrument never
-// swim against each other.
+// Below 1.5 mm the original 8 mm wall framing is preserved. Further out,
+// smoothed clearance raises the aim and backs the camera away to show the gap.
 export default function ScopeCamera({ frame, dragState, focusRef }) {
   const { camera } = useThree()
+  const clearanceRef = useRef(null)
   const v = useMemo(
     () => ({
       target: new THREE.Vector3(),
+      aim: new THREE.Vector3(),
       desiredPos: new THREE.Vector3(),
       up: new THREE.Vector3(),
       dir: new THREE.Vector3(),
@@ -54,17 +56,23 @@ export default function ScopeCamera({ frame, dragState, focusRef }) {
   // Start fresh (no glide from an old position) whenever the scope reactivates.
   useEffect(() => () => {
     focusRef.current.valid = false
+    clearanceRef.current = null
   }, [focusRef])
 
   useFrame((_, dt) => {
     if (!frame) return
     const focus = focusRef.current
+    const alpha = 1 - Math.exp(-Math.min(dt, 0.1) / FOCUS_TAU_S)
+    const clearance = nearestTip(frame).dist
+    clearanceRef.current = !focus.valid || clearanceRef.current === null
+      ? clearance
+      : THREE.MathUtils.lerp(clearanceRef.current, clearance, alpha)
     v.target.set(...scopeFocusTarget(frame))
     if (!focus.valid) {
       focus.point.copy(v.target)
       focus.valid = true
     } else {
-      focus.point.lerp(v.target, 1 - Math.exp(-Math.min(dt, 0.1) / FOCUS_TAU_S))
+      focus.point.lerp(v.target, alpha)
     }
     v.outward.copy(focus.point).normalize()
 
@@ -100,7 +108,14 @@ export default function ScopeCamera({ frame, dragState, focusRef }) {
       .addScaledVector(v.outward, -Math.sin(elevation))
       .normalize()
 
-    v.desiredPos.copy(focus.point).addScaledVector(v.dir, VIEW_DIST_MM)
+    // Smooth onset (zero slope at 1.5 mm), then a predictable linear pullback.
+    // Filter before mapping to avoid zoom pumping from per-frame tracker noise.
+    const excess = Math.max(0, clearanceRef.current - TIGHT_CLEARANCE_MM)
+    const transition = THREE.MathUtils.smoothstep(excess, 0, 1)
+    const framing = excess * transition
+    const distance = VIEW_DIST_MM + 1.6 * framing
+    v.aim.copy(focus.point).addScaledVector(v.outward, -0.5 * framing)
+    v.desiredPos.copy(v.aim).addScaledVector(v.dir, distance)
 
     // Up = the part of "away from the wall" that's still perpendicular to the
     // view direction — stays well-defined (never collinear with the view dir)
@@ -109,7 +124,7 @@ export default function ScopeCamera({ frame, dragState, focusRef }) {
 
     camera.position.copy(v.desiredPos)
     camera.up.copy(v.up)
-    camera.lookAt(focus.point)
+    camera.lookAt(v.aim)
   }, -1)
 
   return null

@@ -55,8 +55,9 @@ TROCAR = scale(normalize([0.35, 0.9, 0.45]), EYE_RADIUS)
 # Light pipe (illumination): a second, roughly static instrument entering on the
 # opposite side near the top and aiming at the posterior pole.
 LIGHT_TROCAR = scale(normalize([-0.5, 0.82, -0.28]), EYE_RADIUS)
-LIGHT_AXIS = normalize(sub([1.5, -EYE_RADIUS, 1.0], LIGHT_TROCAR))
-LIGHT_TIP = add(LIGHT_TROCAR, scale(LIGHT_AXIS, 9))
+# The emitting tip sits at its trocar (light_depth_mm = 0, as in the tracker's
+# calibration), so the light position is fixed and known.
+LIGHT_TIP = LIGHT_TROCAR
 
 
 def perp_basis(d):

@@ -1,8 +1,9 @@
 import { useMemo } from 'react'
 import DynamicLine from './DynamicLine.jsx'
 import { DoubleSide, Quaternion, Vector3 } from 'three'
-import { nearestTip } from '../geometry.js'
+import { readoutTip } from '../geometry.js'
 import { hasForceps } from '../feed/trackingState.js'
+import { useStore } from '../feed/store.js'
 import { STATUS } from '../ui.js'
 
 // Landing reticle: projects the nearest forceps tip radially onto the retina
@@ -12,8 +13,9 @@ import { STATUS } from '../ui.js'
 // the nearest tip's safety `level` from the shared hysteresis tracker (hue is
 // redundant here: the drop line already
 // encodes the gap by length).
-export default function LandingReticle({ frame, level }) {
-  const info = hasForceps(frame) ? nearestTip(frame) : null
+export default function LandingReticle({ frame, level, readout }) {
+  const { nearestTip } = useStore(readout)
+  const info = hasForceps(frame) && nearestTip ? readoutTip(frame, nearestTip) : null
 
   // Orient the flat ring so its face is tangent to the sphere at the contact
   // point (ring normal = outward radial direction at that wall point).

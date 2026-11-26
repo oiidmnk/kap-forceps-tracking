@@ -10,11 +10,12 @@ import { add, sub, scale, normalize, cross, dot } from '../geometry.js'
 const TROCAR = scale(normalize([0.35, 0.9, 0.45]), EYE_RADIUS_MM)
 const INWARD = normalize(scale(TROCAR, -1)) // straight-in shaft direction
 
-// Light pipe (illumination): a second instrument, held roughly static. Enters
-// on the opposite side near the top and aims down at the posterior pole.
+// Light pipe (illumination): a second instrument, fixed. Enters on the
+// opposite side near the top. Its emitting tip sits exactly at its trocar (as
+// in the lab setup and the tracker's calibration, light_depth_mm = 0), so the
+// shadow geometry can be inverted with a known, fixed light position.
 const LIGHT_TROCAR = scale(normalize([-0.5, 0.82, -0.28]), EYE_RADIUS_MM)
-const LIGHT_AXIS = normalize(sub([1.5, -EYE_RADIUS_MM, 1.0], LIGHT_TROCAR))
-const LIGHT_TIP = add(LIGHT_TROCAR, scale(LIGHT_AXIS, 9))
+const LIGHT_TIP = LIGHT_TROCAR
 
 // Screen-space basis (right, up) of a camera at `camPos` looking at the origin
 // with world +Y up — the same framing drei's CameraControls produces.

@@ -8,8 +8,7 @@ const H = 64
 const y = (mm) => H - depthScale(mm) * H
 
 // Minimum distance over the last 10 s on the same square-root scale as the
-// depth bars, with the threshold zones behind it, plus approach speed and an
-// estimated time to contact (only while approaching, at most 10 s ahead).
+// depth bars, with labelled threshold boundaries and approach speed.
 export default function ApproachTrend({ readout }) {
   const { trend, levels, frame } = useStore(readout)
   const color = levels ? STATUS[levels.min].color : 'var(--muted)'
@@ -31,16 +30,14 @@ export default function ApproachTrend({ readout }) {
   }
 
   const v = frame ? trend?.velocity : null
-  const ttc = frame ? trend?.ttc : null
-  const ttcTone = ttc == null ? null : ttc < 1 ? 'var(--danger)' : ttc < 3 ? 'var(--warn)' : undefined
   const motion =
     v == null
       ? '—'
       : v < -STEADY_MM_S
-        ? `Approaching · ${(-v).toFixed(2)} mm/s`
+        ? `Approaching · ${(-v).toFixed(1)} mm/s`
         : v > STEADY_MM_S
-          ? `Retracting · ${v.toFixed(2)} mm/s`
-          : 'Holding steady'
+          ? `Retracting · ${v.toFixed(1)} mm/s`
+          : `Holding steady · ${Math.abs(v).toFixed(1)} mm/s`
 
   return (
     <section className="approach-panel" aria-labelledby="approach-title">
@@ -50,7 +47,7 @@ export default function ApproachTrend({ readout }) {
       </div>
       <svg
         className="approach-chart"
-        viewBox={`0 0 ${W} ${H}`}
+        viewBox={`0 0 ${W + 32} ${H}`}
         preserveAspectRatio="none"
         role="img"
         aria-label="Minimum distance to the retina over the last 10 seconds"
@@ -61,12 +58,16 @@ export default function ApproachTrend({ readout }) {
           <path d={path} fill="none" stroke={color} strokeWidth="1.75" vectorEffect="non-scaling-stroke" />
         )}
         {last && frame && <circle cx={last[0]} cy={last[1]} r="2.5" fill={color} />}
+        {[DIST_WARN_MM, DIST_SAFE_MM].map((mm) => (
+          <g key={mm} className="approach-boundary">
+            <line x1="0" x2={W} y1={y(mm)} y2={y(mm)} />
+            <text x={W + 8} y={y(mm)} dominantBaseline="middle">{mm}</text>
+          </g>
+        ))}
       </svg>
+      <div className="approach-axis" aria-hidden><span>−10 s</span><span>now</span></div>
       <div className="approach-readout">
         <span>{motion}</span>
-        {ttc != null && (
-          <strong style={{ color: ttcTone }}>Contact in ≈ {ttc.toFixed(1)} s</strong>
-        )}
       </div>
     </section>
   )

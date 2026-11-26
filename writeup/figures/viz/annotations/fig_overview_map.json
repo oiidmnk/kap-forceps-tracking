@@ -1,0 +1,243 @@
+{
+ "screenshot": "../after/03_warning_overview.png",
+ "css_width": 1600,
+ "output_scale": 1.25,
+ "dpi": 200,
+ "accent": "#e879f9",
+ "badge_radius": 15,
+ "font_size": 17,
+ "legend": {
+  "position": "right",
+  "width": 440,
+  "padding": 22,
+  "title": "Region -> question it answers"
+ },
+ "callouts": [
+  {
+   "number": 1,
+   "point": [
+    372,
+    176
+   ],
+   "target": [
+    24,
+    104,
+    296,
+    98
+   ],
+   "leader": true,
+   "text": "Q1  Estimated clearance: minimum of both tips, 1 decimal, status word + symbol + colour"
+  },
+  {
+   "number": 2,
+   "point": [
+    372,
+    236
+   ],
+   "target": [
+    24,
+    220,
+    296,
+    34
+   ],
+   "leader": true,
+   "text": "Trust  Reserved qualifier row: simulation here; live notes use DISPLAYED-level evidence (Critical/Near p10–p90, Clear median bias). Real stream quality telemetry is absent."
+  },
+  {
+   "number": 3,
+   "point": [
+    372,
+    330
+   ],
+   "target": [
+    24,
+    260,
+    296,
+    138
+   ],
+   "leader": true,
+   "text": "Q2  Nearest tip (L / R / L ≈ R) and per-tip depth bars on a square-root scale, tick 0 / 0.5 / 2 / 5 / 10 mm"
+  },
+  {
+   "number": 4,
+   "point": [
+    372,
+    490
+   ],
+   "target": [
+    14,
+    414,
+    317,
+    159
+   ],
+   "leader": true,
+   "text": "Q3  Approach trend: last 10 s, same scale and zones as the bars, motion word + rate"
+  },
+  {
+   "number": 5,
+   "point": [
+    372,
+    610
+   ],
+   "target": [
+    14,
+    574,
+    317,
+    76
+   ],
+   "leader": true,
+   "text": "Context  Instrument state: jaws open/closed, insertion, shaft angle to retina"
+  },
+  {
+   "number": 6,
+   "point": [
+    372,
+    760
+   ],
+   "target": [
+    24,
+    668,
+    296,
+    310
+   ],
+   "leader": true,
+   "text": "Q1 + Q2  Persistent scope, drop line from the nearest tip: tight below 1.5 mm, smoothly wider above; active below 5 mm, off at 5.25 mm"
+  },
+  {
+   "number": 7,
+   "point": [
+    1080,
+    141
+   ],
+   "target": [
+    886,
+    126,
+    159,
+    28
+   ],
+   "leader": true,
+   "text": "Q1  Scene alarm: frame + banner (Near / Critical), visible without looking at the panel"
+  },
+  {
+   "number": 8,
+   "point": [
+    1060,
+    690
+   ],
+   "target": [
+    912,
+    718,
+    104,
+    34
+   ],
+   "leader": true,
+   "text": "Q1  Drop line, landing reticle and in-scene label follow the stabilised nearest tip (tie → midpoint); number stays min(L,R)."
+  },
+  {
+   "number": 9,
+   "point": [
+    1170,
+    875
+   ],
+   "target": [
+    940,
+    760,
+    190,
+    110
+   ],
+   "leader": true,
+   "text": "Q1  Instrument shadow (cast from the tracked light pipe) as a depth cue"
+  },
+  {
+   "number": 10,
+   "point": [
+    1340,
+    600
+   ],
+   "target": [
+    1240,
+    560,
+    50,
+    60
+   ],
+   "leader": true,
+   "highlight": false,
+   "text": "Context  Eye globe (12 mm sphere), retina hemisphere, near half cut away"
+  },
+  {
+   "number": 11,
+   "point": [
+    690,
+    86
+   ],
+   "target": [
+    358,
+    66,
+    296,
+    37
+   ],
+   "leader": true,
+   "text": "Views  Overview / Surgeon / Sagittal / Fundus presets (keys 1-4)"
+  },
+  {
+   "number": 12,
+   "point": [
+    1450,
+    86
+   ],
+   "target": [
+    1477,
+    69,
+    98,
+    32
+   ],
+   "leader": true,
+   "text": "Views  Display layers (shadow, rays, cutaway, beam, reticle, scope)"
+  },
+  {
+   "number": 13,
+   "point": [
+    1400,
+    800
+   ],
+   "target": [
+    1430,
+    746,
+    140,
+    128
+   ],
+   "leader": true,
+   "text": "Views  Orbit pivot, zoom, reset, shortcut help"
+  },
+  {
+   "number": 14,
+   "point": [
+    1230,
+    24
+   ],
+   "target": [
+    1261,
+    8,
+    327,
+    32
+   ],
+   "leader": true,
+   "text": "Trust  Data source + connection: muted/accent for connecting/waiting/stale; error remains red. Live quality fields are Unknown / —."
+  },
+  {
+   "number": 15,
+   "point": [
+    580,
+    880
+   ],
+   "target": [
+    362,
+    846,
+    183,
+    137
+   ],
+   "leader": true,
+   "text": "Legend of scene encodings"
+  }
+ ]
+}

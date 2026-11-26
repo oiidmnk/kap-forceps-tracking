@@ -1,0 +1,14 @@
+{
+  "screenshot": "../baseline/08_approach_trend.png",
+  "crop": [8, 60, 322, 578],
+  "output_scale": 2, "dpi": 200, "accent": "#e879f9", "badge_radius": 14,
+  "callouts": [
+    {"number": 1, "point": [165, 87], "target": [32, 78, 112, 18], "leader": true},
+    {"number": 2, "point": [225, 140], "target": [34, 112, 162, 56], "leader": true},
+    {"number": 3, "point": [185, 190], "target": [32, 182, 130, 16], "leader": true},
+    {"number": 6, "point": [236, 200], "target": [250, 218, 62, 46], "leader": true},
+    {"number": 7, "point": [170, 364], "target": [33, 382, 278, 63], "leader": true},
+    {"number": 8, "point": [185, 485], "target": [208, 453, 104, 15], "leader": true},
+    {"number": 9, "point": [230, 566], "target": [32, 512, 170, 40], "leader": true}
+  ]
+}
