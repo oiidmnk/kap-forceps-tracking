@@ -1,0 +1,747 @@
+{
+  "camera": {
+    "11-25-32": {
+      "lag_ms": 166.666666666668,
+      "fx": 1348.07383218261,
+      "fy": 1346.4564915847907,
+      "skew": 1.1822150058778178,
+      "focal_mean": 1347.2651618837003,
+      "pp": [
+        512.4260191830748,
+        543.4371823931849
+      ],
+      "distance_mm": 22.013240073040407,
+      "distance_eye_mm": 21.981530001027206,
+      "center_mm": [
+        -0.8070127245012811,
+        0.24466372611204623,
+        -21.965348422223517
+      ],
+      "reproj_median_px": 0.3860743434572545,
+      "reproj_p95_px": 8.417782124905015,
+      "fit_frames": 3145
+    },
+    "11-32-14": {
+      "lag_ms": 166.666666666668,
+      "fx": 1346.9225021153686,
+      "fy": 1344.5416415970649,
+      "skew": 2.914986169134056,
+      "focal_mean": 1345.7320718562169,
+      "pp": [
+        518.5118035454067,
+        547.5558484878792
+      ],
+      "distance_mm": 21.96865600111017,
+      "distance_eye_mm": 21.927576408769163,
+      "center_mm": [
+        -0.6804971798254923,
+        0.3617264271417069,
+        -21.914029404529117
+      ],
+      "reproj_median_px": 0.48362070911631017,
+      "reproj_p95_px": 11.052860785490152,
+      "fit_frames": 3137
+    }
+  },
+  "runs": {
+    "11-25-32": {
+      "perspective": {
+        "model": {
+          "n": 3337,
+          "found_pct": 100.0,
+          "err3d_median": 0.144,
+          "err3d_p95": 0.272,
+          "height_abs_median": 0.062,
+          "height_abs_p95": 0.174,
+          "height_bias": -0.034
+        },
+        "pipe": {
+          "n": 2168,
+          "found_pct": 65.0,
+          "err3d_median": 0.142,
+          "err3d_p95": 0.657,
+          "height_abs_median": 0.079,
+          "height_abs_p95": 0.487,
+          "height_bias": -0.029
+        }
+      },
+      "orthographic": {
+        "model": {
+          "n": 3337,
+          "found_pct": 100.0,
+          "err3d_median": 2.014,
+          "err3d_p95": 7.875,
+          "height_abs_median": 0.934,
+          "height_abs_p95": 4.89,
+          "height_bias": -0.878
+        },
+        "pipe": {
+          "n": 2037,
+          "found_pct": 61.0,
+          "err3d_median": 1.45,
+          "err3d_p95": 7.524,
+          "height_abs_median": 0.66,
+          "height_abs_p95": 4.033,
+          "height_bias": -0.464
+        }
+      },
+      "orthographic_fitted": {
+        "model": {
+          "n": 3337,
+          "found_pct": 100.0,
+          "err3d_median": 1.012,
+          "err3d_p95": 5.81,
+          "height_abs_median": 0.748,
+          "height_abs_p95": 3.42,
+          "height_bias": -0.725
+        },
+        "pipe": {
+          "n": 2050,
+          "found_pct": 61.4,
+          "err3d_median": 0.922,
+          "err3d_p95": 5.469,
+          "height_abs_median": 0.609,
+          "height_abs_p95": 2.23,
+          "height_bias": -0.542
+        }
+      },
+      "own": {
+        "model": {
+          "n": 3337,
+          "found_pct": 100.0,
+          "err3d_median": 0.139,
+          "err3d_p95": 0.292,
+          "height_abs_median": 0.074,
+          "height_abs_p95": 0.175,
+          "height_bias": -0.052
+        },
+        "pipe": {
+          "n": 2168,
+          "found_pct": 65.0,
+          "err3d_median": 0.126,
+          "err3d_p95": 0.619,
+          "height_abs_median": 0.079,
+          "height_abs_p95": 0.477,
+          "height_bias": -0.04
+        }
+      },
+      "roll5": {
+        "model": {
+          "n": 3337,
+          "found_pct": 100.0,
+          "err3d_median": 0.322,
+          "err3d_p95": 0.458,
+          "height_abs_median": 0.086,
+          "height_abs_p95": 0.246,
+          "height_bias": -0.06
+        },
+        "pipe": {
+          "n": 2169,
+          "found_pct": 65.0,
+          "err3d_median": 0.316,
+          "err3d_p95": 0.672,
+          "height_abs_median": 0.087,
+          "height_abs_p95": 0.457,
+          "height_bias": -0.038
+        }
+      }
+    },
+    "11-32-14": {
+      "perspective": {
+        "model": {
+          "n": 3307,
+          "found_pct": 100.0,
+          "err3d_median": 0.115,
+          "err3d_p95": 0.549,
+          "height_abs_median": 0.048,
+          "height_abs_p95": 0.333,
+          "height_bias": -0.041
+        },
+        "pipe": {
+          "n": 2293,
+          "found_pct": 69.3,
+          "err3d_median": 0.118,
+          "err3d_p95": 0.641,
+          "height_abs_median": 0.061,
+          "height_abs_p95": 0.443,
+          "height_bias": -0.001
+        }
+      },
+      "orthographic": {
+        "model": {
+          "n": 3307,
+          "found_pct": 100.0,
+          "err3d_median": 1.916,
+          "err3d_p95": 12.37,
+          "height_abs_median": 0.862,
+          "height_abs_p95": 10.279,
+          "height_bias": -0.649
+        },
+        "pipe": {
+          "n": 2151,
+          "found_pct": 65.0,
+          "err3d_median": 1.781,
+          "err3d_p95": 9.975,
+          "height_abs_median": 0.72,
+          "height_abs_p95": 8.001,
+          "height_bias": -0.494
+        }
+      },
+      "orthographic_fitted": {
+        "model": {
+          "n": 3307,
+          "found_pct": 100.0,
+          "err3d_median": 1.376,
+          "err3d_p95": 13.033,
+          "height_abs_median": 0.745,
+          "height_abs_p95": 10.141,
+          "height_bias": -0.605
+        },
+        "pipe": {
+          "n": 2161,
+          "found_pct": 65.3,
+          "err3d_median": 1.33,
+          "err3d_p95": 10.178,
+          "height_abs_median": 0.675,
+          "height_abs_p95": 8.088,
+          "height_bias": -0.567
+        }
+      },
+      "own": {
+        "model": {
+          "n": 3307,
+          "found_pct": 100.0,
+          "err3d_median": 0.126,
+          "err3d_p95": 0.496,
+          "height_abs_median": 0.046,
+          "height_abs_p95": 0.295,
+          "height_bias": -0.018
+        },
+        "pipe": {
+          "n": 2291,
+          "found_pct": 69.3,
+          "err3d_median": 0.155,
+          "err3d_p95": 0.672,
+          "height_abs_median": 0.075,
+          "height_abs_p95": 0.465,
+          "height_bias": 0.01
+        }
+      },
+      "roll5": {
+        "model": {
+          "n": 3307,
+          "found_pct": 100.0,
+          "err3d_median": 0.234,
+          "err3d_p95": 0.441,
+          "height_abs_median": 0.062,
+          "height_abs_p95": 0.314,
+          "height_bias": -0.048
+        },
+        "pipe": {
+          "n": 2298,
+          "found_pct": 69.5,
+          "err3d_median": 0.254,
+          "err3d_p95": 0.757,
+          "height_abs_median": 0.069,
+          "height_abs_p95": 0.523,
+          "height_bias": -0.017
+        }
+      }
+    }
+  },
+  "ortho_fit": {
+    "11-25-32": {
+      "scale_factor": 1.1900000000000006,
+      "centre_shift_px": [
+        -20.0,
+        -12.0
+      ]
+    },
+    "11-32-14": {
+      "scale_factor": 1.1700000000000006,
+      "centre_shift_px": [
+        -52.0,
+        -4.0
+      ]
+    }
+  },
+  "detection_tail": {
+    "11-25-32": {
+      "eligible": 3337,
+      "with_result": 2168,
+      "within_1mm": 2105,
+      "above_1mm": 63,
+      "shadow_offset_px_median_above_1mm": 361.0,
+      "shadow_offset_px_median_within_1mm": 2.2
+    },
+    "11-32-14": {
+      "eligible": 3307,
+      "with_result": 2293,
+      "within_1mm": 2209,
+      "above_1mm": 84,
+      "shadow_offset_px_median_above_1mm": 69.2,
+      "shadow_offset_px_median_within_1mm": 3.1
+    }
+  },
+  "height_tail": {
+    "11-25-32": {
+      "above_1mm": 59,
+      "too_low": 57,
+      "with_result": 2168,
+      "detected_shadow_to_tip_px": [
+        16.9,
+        133.6
+      ],
+      "modelled_shadow_to_true_tip_px": [
+        372.0,
+        132.9
+      ],
+      "shadow_tip_spread_px": [
+        6.0,
+        38.1
+      ],
+      "modelled_shadow_outside_circle": 31,
+      "true_height_median": 8.0,
+      "reconstructed_height_median": 0.2
+    },
+    "11-32-14": {
+      "above_1mm": 81,
+      "too_low": 79,
+      "with_result": 2293,
+      "detected_shadow_to_tip_px": [
+        26.2,
+        152.1
+      ],
+      "modelled_shadow_to_true_tip_px": [
+        93.7,
+        150.6
+      ],
+      "shadow_tip_spread_px": [
+        1.4,
+        38.7
+      ],
+      "modelled_shadow_outside_circle": 5,
+      "true_height_median": 4.6,
+      "reconstructed_height_median": 1.4
+    }
+  },
+  "pooled": {
+    "perspective": {
+      "model": {
+        "median": 0.137,
+        "p95": 0.507,
+        "height_bias": -0.038
+      },
+      "pipe": {
+        "median": 0.135,
+        "p95": 0.643,
+        "height_bias": -0.013
+      }
+    },
+    "orthographic": {
+      "model": {
+        "median": 1.953,
+        "p95": 10.869,
+        "height_bias": -0.787
+      },
+      "pipe": {
+        "median": 1.623,
+        "p95": 9.279,
+        "height_bias": -0.475
+      }
+    },
+    "orthographic_fitted": {
+      "model": {
+        "median": 1.133,
+        "p95": 10.774,
+        "height_bias": -0.669
+      },
+      "pipe": {
+        "median": 0.977,
+        "p95": 8.851,
+        "height_bias": -0.556
+      }
+    }
+  },
+  "height_range_mm": [
+    3.03,
+    5.86,
+    9.53
+  ],
+  "geometry": {
+    "tan_circle": 0.3298870154953345,
+    "camera_distance_mm": 21.954553204898183,
+    "tip_shift_mm": 0.9257801655189141,
+    "shadow_shift_mm": 1.0358535361341545,
+    "tip_height_mm": 5.341796067500631,
+    "tip_height_ortho_mm": 4.968889008176145
+  },
+  "cdf": {
+    "perspective_model_below_1mm": 100.0,
+    "orthographic_model_below_1mm": 14.4,
+    "perspective_pipe_below_1mm": 96.7,
+    "orthographic_pipe_below_1mm": 21.1
+  },
+  "height_scatter": {
+    "orthographic": {
+      "n": 4188,
+      "height_abs_median": 0.69,
+      "height_bias": -0.475,
+      "below_axis": 111,
+      "above_axis": 0,
+      "below_retina": 260
+    },
+    "perspective": {
+      "n": 4461,
+      "height_abs_median": 0.069,
+      "height_bias": -0.013,
+      "below_axis": 2,
+      "above_axis": 0,
+      "below_retina": 13
+    }
+  },
+  "height_bins": {
+    "perspective_model": [
+      [
+        2.25,
+        -0.014
+      ],
+      [
+        2.75,
+        -0.02
+      ],
+      [
+        3.25,
+        -0.034
+      ],
+      [
+        3.75,
+        -0.035
+      ],
+      [
+        4.25,
+        -0.018
+      ],
+      [
+        4.75,
+        -0.042
+      ],
+      [
+        5.25,
+        -0.02
+      ],
+      [
+        5.75,
+        -0.025
+      ],
+      [
+        6.25,
+        -0.025
+      ],
+      [
+        6.75,
+        -0.056
+      ],
+      [
+        7.25,
+        -0.069
+      ],
+      [
+        7.75,
+        -0.08
+      ],
+      [
+        8.25,
+        -0.049
+      ],
+      [
+        8.75,
+        -0.123
+      ],
+      [
+        9.25,
+        -0.075
+      ],
+      [
+        9.75,
+        -0.05
+      ]
+    ],
+    "perspective_pipe": [
+      [
+        2.25,
+        0.053
+      ],
+      [
+        2.75,
+        0.001
+      ],
+      [
+        3.25,
+        -0.052
+      ],
+      [
+        3.75,
+        -0.048
+      ],
+      [
+        4.25,
+        -0.011
+      ],
+      [
+        4.75,
+        -0.024
+      ],
+      [
+        5.25,
+        -0.019
+      ],
+      [
+        5.75,
+        0.021
+      ],
+      [
+        6.25,
+        0.023
+      ],
+      [
+        6.75,
+        0.019
+      ],
+      [
+        7.25,
+        -0.013
+      ],
+      [
+        7.75,
+        -0.018
+      ],
+      [
+        8.25,
+        -0.024
+      ],
+      [
+        8.75,
+        -0.025
+      ],
+      [
+        9.25,
+        -0.041
+      ],
+      [
+        9.75,
+        -0.038
+      ]
+    ],
+    "orthographic_model": [
+      [
+        2.25,
+        -0.844
+      ],
+      [
+        2.75,
+        -0.986
+      ],
+      [
+        3.25,
+        -0.939
+      ],
+      [
+        3.75,
+        -0.792
+      ],
+      [
+        4.25,
+        -0.688
+      ],
+      [
+        4.75,
+        -0.787
+      ],
+      [
+        5.25,
+        -0.631
+      ],
+      [
+        5.75,
+        -0.2
+      ],
+      [
+        6.25,
+        -0.021
+      ],
+      [
+        6.75,
+        -1.351
+      ],
+      [
+        7.25,
+        -1.78
+      ],
+      [
+        7.75,
+        -2.043
+      ],
+      [
+        8.25,
+        -2.2
+      ],
+      [
+        8.75,
+        -2.41
+      ],
+      [
+        9.25,
+        -2.684
+      ],
+      [
+        9.75,
+        -2.883
+      ]
+    ],
+    "orthographic_pipe": [
+      [
+        2.25,
+        0.085
+      ],
+      [
+        2.75,
+        -1.451
+      ],
+      [
+        3.25,
+        -0.854
+      ],
+      [
+        3.75,
+        -0.732
+      ],
+      [
+        4.25,
+        -0.725
+      ],
+      [
+        4.75,
+        -0.718
+      ],
+      [
+        5.25,
+        -0.444
+      ],
+      [
+        5.75,
+        -0.136
+      ],
+      [
+        6.25,
+        0.054
+      ],
+      [
+        6.75,
+        -0.273
+      ],
+      [
+        7.25,
+        -0.412
+      ],
+      [
+        7.75,
+        -0.965
+      ],
+      [
+        8.25,
+        -0.166
+      ],
+      [
+        8.75,
+        -0.196
+      ],
+      [
+        9.25,
+        -0.473
+      ],
+      [
+        9.75,
+        -0.575
+      ]
+    ]
+  },
+  "radial": {
+    "perspective": [
+      [
+        0.05,
+        0.115
+      ],
+      [
+        0.15,
+        0.139
+      ],
+      [
+        0.25,
+        0.162
+      ],
+      [
+        0.35,
+        0.157
+      ],
+      [
+        0.45,
+        0.125
+      ],
+      [
+        0.55,
+        0.128
+      ],
+      [
+        0.65,
+        0.138
+      ],
+      [
+        0.75,
+        0.134
+      ],
+      [
+        0.85,
+        0.134
+      ]
+    ],
+    "orthographic": [
+      [
+        0.05,
+        0.938
+      ],
+      [
+        0.15,
+        1.188
+      ],
+      [
+        0.25,
+        1.978
+      ],
+      [
+        0.35,
+        1.414
+      ],
+      [
+        0.45,
+        1.793
+      ],
+      [
+        0.55,
+        1.961
+      ],
+      [
+        0.65,
+        2.123
+      ],
+      [
+        0.75,
+        2.706
+      ],
+      [
+        0.85,
+        3.566
+      ]
+    ]
+  }
+}

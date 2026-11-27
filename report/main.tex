@@ -16,6 +16,7 @@
 \usepackage{booktabs}
 \usepackage{siunitx}
 \usepackage{xcolor}
+\usepackage{parskip}  % paragraphs separated by space, not indented
 
 % Marks open items – remove all before submission
 \newcommand{\todo}[1]{\textcolor{TUMOrange}{\textbf{[TODO:} #1\textbf{]}}}
@@ -103,26 +104,7 @@ assistance and, in the future, to automate.
 \todo{Model (ResNet34 U-Net heatmaps), labels, training, drop-in backend.}
 
 % ---------------------------------------------------------------------------
-\section{3D Reconstruction}
-\label{sec:reconstruction}
-
-\subsection{Geometry: Eye, Trocars and Light}
-\label{sec:reconstruction-geometry}
-
-\todo{Eye sphere, trocar entry points, light position; tip position from
-  instrument and shadow.}
-
-\subsection{From an Orthographic to a Pinhole Camera}
-\label{sec:reconstruction-camera}
-
-\todo{Orthographic assumption, its error, pinhole model
-  (\texttt{camera\_distance}).}
-
-\subsection{Calibration}
-\label{sec:reconstruction-calibration}
-
-\todo{Calibration from the simulator log (trocars, eye radius, jaw length);
-  eye tilt between sessions; need for per-session calibration.}
+\input{sections/reconstruction}
 
 % ---------------------------------------------------------------------------
 \section{Rod Tracking and Contact Detection}
@@ -159,10 +141,7 @@ assistance and, in the future, to automate.
 
 \todo{Classical vs.\ learned: pixel error, runtime, failure cases.}
 
-\subsection{3D Accuracy}
-\label{sec:eval-3d}
-
-\todo{Error budget: detection vs.\ camera model; orthographic vs.\ pinhole.}
+\input{sections/eval_3d}
 
 \subsection{Rod Contact and Alarms}
 \label{sec:eval-rod-alarms}
