@@ -293,46 +293,6 @@ def fig_geometry(path, tan_circle, R_eye=12.05, d_cam=21.9):
             "tip_height_mm": float(R_eye - np.linalg.norm(P)), "tip_height_ortho_mm": float(R_eye - np.linalg.norm(P_o))}
 
 
-def fig_cdf(path, pooled):
-    """Two panels: ideal input and detected input."""
-    from matplotlib.ticker import FixedLocator, FuncFormatter, NullLocator, PercentFormatter
-    ticks = [0.1, 0.2, 0.5, 1, 2, 5, 10]
-    fig, axes = plt.subplots(1, 2, figsize=(7.4, 3.0), sharey=True)
-    titles = {"model": "ideal input", "pipe": "detected input"}
-    shares = {}
-    for ax, inp in zip(axes, ("model", "pipe")):
-        ax.axvline(1.0, color=GRID, lw=1.2, zorder=0)
-        for cam, color in (("perspective", PERSP), ("orthographic", ORTHO)):
-            e = np.sort(pooled[cam][inp][np.isfinite(pooled[cam][inp])])
-            y = np.arange(1, len(e) + 1) / len(e)
-            ax.plot(e, y, color=color, lw=2.0, solid_capstyle="round")
-            med = float(np.median(e))
-            ax.plot(med, 0.5, "o", ms=6, color=color, mec="white", mew=1.2, zorder=3)
-            side = dict(xytext=(6, 0), va="center") if cam == "perspective" else dict(xytext=(6, -4), va="top")
-            ax.annotate(f"{med:.2f} mm", (med, 0.5), textcoords="offset points", ha="left", fontsize=7.5,
-                        color=INK, **side)
-            shares[(cam, inp)] = float(np.mean(e < 1.0))
-        ax.set_xscale("log")
-        ax.set_xlim(0.05, 20)
-        ax.set_ylim(0, 1.02)
-        ax.set_yticks([0, 0.2, 0.4, 0.6, 0.8, 1.0])
-        ax.xaxis.set_major_locator(FixedLocator(ticks))
-        ax.xaxis.set_minor_locator(NullLocator())
-        ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
-        ax.yaxis.set_major_formatter(PercentFormatter(1.0, decimals=0))
-        ax.set_title(titles[inp], fontsize=9, color=INK)
-        ax.set_xlabel("3D tip error (mm)")
-        ax.text(1.08, 0.04, "1 mm", fontsize=7, color=MUTED)
-    axes[0].set_ylabel("frames with at most this error")
-    fig.legend(handles=[plt.Line2D([], [], color=PERSP, lw=2, label="perspective"),
-                        plt.Line2D([], [], color=ORTHO, lw=2, label=LABEL["orthographic"]),
-                        plt.Line2D([], [], color=MUTED, ls="", marker="o", ms=5, label="median")],
-               loc="upper center", bbox_to_anchor=(0.5, -0.04), ncol=3, fontsize=7.5)
-    save(fig, path)
-    plt.close(fig)
-    return {f"{cam}_{inp}_below_1mm": round(100 * v, 1) for (cam, inp), v in shares.items()}
-
-
 def binned(x, y, edges):
     mids, med, lo, hi = [], [], [], []
     for a, b in zip(edges[:-1], edges[1:]):
@@ -475,7 +435,6 @@ def main():
     d_cam = float(np.mean([runs[r]["camera"]["distance_eye_mm"] for r in RUNS]))
     out["geometry"] = {"tan_circle": tan_circle, "camera_distance_mm": d_cam,
                        **fig_geometry(os.path.join(OUT, "geometry.png"), tan_circle, d_cam=d_cam)}
-    out["cdf"] = fig_cdf(os.path.join(OUT, "error_cdf.png"), pooled)
     out["height_scatter"] = fig_height(os.path.join(OUT, "height_error.png"), pooled)
     out["height_bins"] = height_bins(pooled)
     out["radial"] = radial(pooled)

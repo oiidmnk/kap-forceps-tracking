@@ -376,12 +376,6 @@
     "tip_height_mm": 5.341796067500631,
     "tip_height_ortho_mm": 4.968889008176145
   },
-  "cdf": {
-    "perspective_model_below_1mm": 100.0,
-    "orthographic_model_below_1mm": 14.4,
-    "perspective_pipe_below_1mm": 96.7,
-    "orthographic_pipe_below_1mm": 21.1
-  },
   "height_scatter": {
     "orthographic": {
       "n": 4188,
