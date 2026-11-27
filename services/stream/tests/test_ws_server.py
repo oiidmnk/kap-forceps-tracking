@@ -147,18 +147,32 @@ def _project(p, c, center, rpx):
     return (center[0] + rpx * k * p[0], center[1] + rpx * k * p[1])
 
 
-def test_pinhole_camera_reconstructs_a_point_from_its_image_and_shadow():
+def test_camera_distance_is_the_on_axis_case_of_the_perspective_camera():
+    """``camera_distance`` c (older rod calibrations) goes through the perspective
+    model and still inverts the on-axis pinhole projection exactly."""
     import math
-    from tool_positions import light_tip_position, reconstruct_tip_from_shadow, _add3, _scale3, _sub3, _norm3
+    from ws_server import camera_kwargs
+    from tool_positions import light_tip_position, reconstruct_tip_perspective, _add3, _scale3, _sub3, _norm3
 
-    c, center, rpx = 2.2, (540.0, 540.0), 600.0
+    c, center, rpx, r_mm = 2.2, (540.0, 540.0), 600.0, 24.0
+    kwargs = camera_kwargs({"camera_distance": c, "eye_radius_mm": r_mm})
+    assert kwargs["camera_focal_r"] == 1 + c and kwargs["camera_pp_r"] == (0.0, 0.0)
+    assert kwargs["camera_center_mm"] == (0.0, 0.0, -c * r_mm)
+    assert camera_kwargs({"camera_distance": 0.0, "eye_radius_mm": r_mm}) == {}
+    # an explicit perspective camera wins
+    explicit = {"camera_distance": c, "eye_radius_mm": r_mm, "camera_focal_r": 3.0, "camera_center_mm": [0, 0, -20]}
+    assert camera_kwargs(explicit)["camera_focal_r"] == 3.0
+
     light = light_tip_position(0.6, -0.5, 0.005)
     tip = (0.15, -0.1, 0.55)
     # its shadow: continue the light ray through the tip to the far retina
     d = _sub3(tip, light)
     a, b, cc = sum(x * x for x in d), 2 * sum(x * y for x, y in zip(light, d)), sum(x * x for x in light) - 1
     shadow = _add3(light, _scale3(d, (-b + math.sqrt(b * b - 4 * a * cc)) / (2 * a)))
-    got = reconstruct_tip_from_shadow(light, _project(tip, c, center, rpx), _project(shadow, c, center, rpx), center, rpx, c)
+    got = reconstruct_tip_perspective(
+        light, _project(tip, c, center, rpx), _project(shadow, c, center, rpx), center, rpx,
+        _scale3(kwargs["camera_center_mm"], 1 / r_mm), kwargs["camera_focal_r"], kwargs["camera_pp_r"],
+    )
     assert _norm3(_sub3(got, tip)) < 1e-9
 
 

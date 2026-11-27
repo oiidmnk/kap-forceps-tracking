@@ -8,6 +8,7 @@
   const applyBtn = $('#circle-apply'), autoBtn = $('#circle-auto'), clearBtn = $('#circle-clear')
   const drawBtn = $('#circle-draw'), revertBtn = $('#circle-revert')
   const normView = $('#normalized-view')
+  const rollBtn = $('#roll-mark'), rollResetBtn = $('#roll-reset'), rollReadout = $('#roll-readout')
   const detectorUrl = $('#detector-url')
   const uploadForm = $('#source-upload-form'), uploadInput = $('#source-upload')
   const uploadButton = $('#source-upload-button'), uploadStatus = $('#source-upload-status')
@@ -30,6 +31,8 @@
   let savingCircle = false
   let loaded = false
   let switchingSource = false
+  let marking = false         // clicking the two trocar entry points for the eye roll
+  let rollPoints = []         // those points in raw-frame px
 
   const setStatus = (msg, ok = true) => { statusEl.textContent = msg; statusEl.className = `status ${ok ? 'ok' : 'error'}` }
   async function api(path, opts) {
@@ -138,7 +141,7 @@
       ctx.save()
       ctx.beginPath(); ctx.rect(0, 0, canvas.width, canvas.height)
       ctx.arc(circle.cx * s, circle.cy * s, circle.r * s, 0, Math.PI * 2, true)
-      ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fill('evenodd')
+      ctx.fillStyle = marking ? 'rgba(0,0,0,0)' : 'rgba(0,0,0,.55)'; ctx.fill('evenodd')   // trocars sit outside
       ctx.beginPath(); ctx.arc(circle.cx * s, circle.cy * s, circle.r * s, 0, Math.PI * 2)
       ctx.lineWidth = 2; ctx.strokeStyle = dirty ? '#f59e0b' : '#22c55e'; ctx.stroke()
       ctx.beginPath(); ctx.arc(circle.cx * s, circle.cy * s, 4, 0, Math.PI * 2); ctx.fillStyle = ctx.strokeStyle; ctx.fill()
@@ -149,6 +152,16 @@
       }
       ctx.restore()
     }
+    if (rollPoints.length && frameSize) {
+      const s = scale()
+      ctx.save()
+      ctx.strokeStyle = ctx.fillStyle = '#38bdf8'; ctx.lineWidth = 2
+      if (rollPoints.length === 2) {
+        ctx.beginPath(); ctx.moveTo(rollPoints[0].x * s, rollPoints[0].y * s); ctx.lineTo(rollPoints[1].x * s, rollPoints[1].y * s); ctx.stroke()
+      }
+      for (const p of rollPoints) { ctx.beginPath(); ctx.arc(p.x * s, p.y * s, 5, 0, Math.PI * 2); ctx.fill() }
+      ctx.restore()
+    }
   }
   function updateReadout() {
     readout.textContent = circle ? `c=(${circle.cx.toFixed(0)}, ${circle.cy.toFixed(0)})  r=${circle.r.toFixed(0)} · ${dirty ? 'Unsaved adjustments' : 'Applied'}` : 'no circle'
@@ -156,7 +169,8 @@
     revertBtn.disabled = !dirty && !drawing
     revertBtn.hidden = !dirty && !drawing
     drawBtn.setAttribute('aria-pressed', String(drawing))
-    canvas.style.cursor = drawing || !circle ? 'crosshair' : 'default'
+    rollBtn.setAttribute('aria-pressed', String(marking))
+    canvas.style.cursor = marking || drawing || !circle ? 'crosshair' : 'default'
     draw()
   }
 
@@ -202,6 +216,7 @@
     if (!frameSize || ev.button !== 0 || drag) return
     canvas.focus({ preventScroll: true })
     const p = toRaw(ev)
+    if (marking) { ev.preventDefault(); markTrocar(p); return }
     const original = circle ? { ...circle } : null
     let mode
     if (drawing || !circle) mode = 'draw'
@@ -217,6 +232,7 @@
   canvas.addEventListener('pointermove', (ev) => {
     const p = frameSize && toRaw(ev)
     if (!p) return
+    if (marking) return
     if (!drag) {
       const handle = hitHandle(p)
       canvas.style.cursor = drawing || !circle ? 'crosshair' : handle ? handle.cursor : Math.hypot(p.x - circle.cx, p.y - circle.cy) < circle.r ? 'move' : 'default'
@@ -248,6 +264,7 @@
       ev.preventDefault()
       finishDrag(true)
       drawing = false
+      if (marking) { marking = false; rollPoints = [] }
       editorRevision++
       updateReadout()
       return
@@ -309,6 +326,39 @@
     finally { savingCircle = false; updateReadout() }
   })
 
+  // ---- eye roll -------------------------------------------------------------
+  function showRoll(state) {
+    const sign = state.roll_deg > 0 ? '+' : ''
+    rollReadout.textContent = state.reference_deg == null ? 'no reference trocar line in the calibration'
+      : `roll ${sign}${state.roll_deg.toFixed(1)}°` + (state.line_deg == null ? '' : ` · line ${state.line_deg.toFixed(1)}° vs ${state.reference_deg.toFixed(1)}°`)
+  }
+  async function markTrocar(p) {
+    rollPoints = [...rollPoints, { x: p.x, y: p.y }]
+    if (rollPoints.length < 2) { draw(); return }
+    marking = false
+    updateReadout()
+    try {
+      const res = await post('/api/eye-roll', { points: rollPoints.map((q) => [q.x, q.y]) })
+      showRoll(res)
+      setStatus(res.not_applied ? `eye roll saved; applies with the next tip points (${res.not_applied})` : 'eye roll saved and applied to the stream', true)
+    } catch (e) { rollPoints = []; draw(); setStatus(e.message, false) }
+  }
+  rollBtn.addEventListener('click', () => {
+    finishDrag(true)
+    drawing = false
+    marking = !marking
+    rollPoints = []
+    editorRevision++
+    updateReadout()
+    if (marking) setStatus('lens off: click the two trocar entry points', true)
+    canvas.focus({ preventScroll: true })
+  })
+  rollResetBtn.addEventListener('click', async () => {
+    marking = false; rollPoints = []; updateReadout()
+    try { showRoll(await api('/api/eye-roll', { method: 'DELETE' })); setStatus('eye roll reset to 0°', true) }
+    catch (e) { setStatus(e.message, false) }
+  })
+
   // ---- preview loop ---------------------------------------------------------
   async function refreshFrame() {
     try {
@@ -328,6 +378,7 @@
     setTimeout(refreshFrame, drag ? 400 : 700)
   }
   loadSource().catch((e) => setStatus(e.message, false))
+  api('/api/eye-roll').then(showRoll).catch(() => {})
   setInterval(() => { if (!dirty && !drag && !drawing && !savingCircle && !switchingSource) loadSource().catch(() => {}) }, 5000)
   refreshFrame()
 })()

@@ -75,7 +75,7 @@ def validate_inputs(data: Dict[str, Any]) -> Dict[str, Any]:
 
     ``light_aim_tilt``/``light_aim_clock`` are optional and default to ``0.0``
     (aiming straight at the eye center) so existing input files and payloads
-    keep working unchanged; so is ``camera_distance`` (``0`` = orthographic).
+    keep working unchanged. The camera is optional too (``camera_kwargs``).
     """
     missing = [key for key in REQUIRED_KEYS if key not in data]
     if missing:
@@ -122,7 +122,7 @@ def compute_positions(data: Dict[str, Any]) -> Dict[str, Any]:
         eye_radius_px=float(data["eye_radius_px"]),
         eye_radius_mm=float(data["eye_radius_mm"]),
         jaw_length_mm=float(data["jaw_length_mm"]),
-        camera_distance=float(data.get("camera_distance", 0.0)),
+        **camera_kwargs(data),
     )
     return {key: [value[0], value[1], value[2]] for key, value in positions.items()}
 
@@ -144,7 +144,7 @@ def rod_positions(data: Dict[str, Any]) -> Dict[str, Any]:
         eye_center_px=_as_vec2(data["eye_center_px"]),
         eye_radius_px=float(data["eye_radius_px"]),
         eye_radius_mm=float(data["eye_radius_mm"]),
-        camera_distance=float(data.get("camera_distance", 0.0)),
+        **camera_kwargs(data),
     )
     return {key: [value[0], value[1], value[2]] for key, value in positions.items()}
 
@@ -163,6 +163,30 @@ def snap_rod_to_forceps(positions: Dict[str, Any]) -> None:
     shift = [m - (p + t * c) for m, p, c in zip(mid, a, v)]
     positions["rod_a"] = [p + d for p, d in zip(a, shift)]
     positions["rod_b"] = [p + d for p, d in zip(b, shift)]
+
+
+def camera_kwargs(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Optional perspective camera; without one the model stays orthographic.
+
+    ``camera_focal_r`` (with ``camera_pp_r``/``camera_center_mm``) takes
+    precedence. Otherwise ``camera_distance`` c > 0, an on-axis pinhole c eye
+    radii from the eye centre (e.g. ``config/rod_calibration.json``), becomes
+    the same model: focal length 1 + c, no offset, centre (0, 0, -c) radii.
+    """
+    if data.get("camera_focal_r") is not None:
+        return {
+            "camera_focal_r": float(data["camera_focal_r"]),
+            "camera_pp_r": _as_vec2(data.get("camera_pp_r", [0.0, 0.0])),
+            "camera_center_mm": tuple(float(v) for v in data["camera_center_mm"]),
+        }
+    c = float(data.get("camera_distance") or 0.0)
+    if c <= 0.0:
+        return {}
+    return {
+        "camera_focal_r": 1.0 + c,
+        "camera_pp_r": (0.0, 0.0),
+        "camera_center_mm": (0.0, 0.0, -c * float(data["eye_radius_mm"])),
+    }
 
 
 def anchor_positions(data: Dict[str, Any]) -> Dict[str, Any]:

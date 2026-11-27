@@ -10,15 +10,11 @@ function setStatus(el, message, ok) {
   el.className = `status ${ok ? 'ok' : 'error'}`
 }
 
-// Keys without a form field (the light aim, the camera model) are kept as loaded.
-let hiddenCalibration = {}
+// Keys the form has no field for (light aim, perspective camera) are kept from the last loaded calibration.
+let loadedCalibration = {}
 
 function fillCalibration(data) {
-  hiddenCalibration = {
-    light_aim_tilt: data.light_aim_tilt ?? 0,
-    light_aim_clock: data.light_aim_clock ?? 0,
-    camera_distance: data.camera_distance ?? 0,
-  }
+  loadedCalibration = data
   for (const [key, value] of Object.entries(data)) {
     if (key === 'eye_center_px') {
       calibrationForm.elements.eye_center_px_0.value = value[0]
@@ -32,7 +28,7 @@ function fillCalibration(data) {
 function readCalibration() {
   const f = calibrationForm.elements
   return {
-    ...hiddenCalibration,
+    ...loadedCalibration,
     light_rot_up: Number(f.light_rot_up.value),
     light_rot_clock: Number(f.light_rot_clock.value),
     light_depth_mm: Number(f.light_depth_mm.value),

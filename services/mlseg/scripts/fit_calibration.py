@@ -111,13 +111,13 @@ CAM = a.camera_distance
 
 
 def cam_ray(p, rpx):
-    """tool_positions.camera_ray, vectorised: origin (0, 0, -c), direction per pixel"""
+    """on-axis pinhole ray, vectorised: origin (0, 0, -c), direction per pixel (the stream maps c onto its perspective camera, ws_server.camera_kwargs)"""
     u = (p - C) / rpx
     return np.concatenate([u / (1 + CAM), np.ones(u.shape[:-1] + (1,))], -1)
 
 
 def rec(L, p, s, rpx):
-    """tool_positions.reconstruct_tip_from_shadow, vectorised"""
+    """tool_positions.reconstruct_tip_perspective for the on-axis pinhole, vectorised"""
     if CAM <= 0:
         sxy = (s - C) / rpx
         S3 = np.concatenate([sxy, np.sqrt(np.clip(1 - (sxy ** 2).sum(-1), 0, None))[..., None]], -1)

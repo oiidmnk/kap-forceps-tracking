@@ -29,11 +29,15 @@ function editorHarness() {
     clearBtn: selectElement('#circle-clear'),
     drawBtn: selectElement('#circle-draw'),
     revertBtn: selectElement('#circle-revert'),
+    rollBtn: selectElement('#roll-mark'),
+    rollResetBtn: selectElement('#roll-reset'),
+    rollReadout: selectElement('#roll-readout'),
     frame: null, frameSize: [1920, 1080],
     circle: { cx: 600, cy: 450, r: 300 },
     savedCircle: { cx: 600, cy: 450, r: 300 },
     dirty: false, drawing: false, drag: null,
     editorRevision: 0, sourceRequestId: 0, savingCircle: false,
+    marking: false, rollPoints: [],
   })
   const source = fs.readFileSync('services/orchestrator/static/source.js', 'utf8')
   vm.runInContext(source.slice(source.indexOf('  const scale ='), source.indexOf('  // ---- preview loop')), context)
@@ -155,4 +159,32 @@ test('poll responses cannot replace an active drag or changes since the request 
   resolvePoll({ config: { ...data.config, circle: { cx: 555, cy: 450, r: 300 } } })
   await secondPoll
   assert.equal(editor.context.circle.cx, 600)
+})
+
+test('Mark trocars turns two clicks into an eye-roll request without touching the circle', async () => {
+  const editor = editorHarness()
+  const posted = []
+  editor.context.post = (path, body) => { posted.push([path, body]); return Promise.resolve({ roll_deg: 1.5, reference_deg: 3.3, line_deg: 4.8 }) }
+  editor.context.setStatus = () => {}
+  editor.fire('click', {}, '#roll-mark')
+  assert.equal(editor.context.marking, true)
+  editor.fire('pointerdown', { clientX: 40, clientY: 240 })
+  editor.fire('pointerdown', { clientX: 280, clientY: 250 })
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(JSON.stringify(posted), JSON.stringify([['/api/eye-roll', { points: [[120, 720], [840, 750]] }]]))
+  assert.equal(editor.context.marking, false)
+  assert.equal(editor.context.drag, null)
+  assert.equal(JSON.stringify(editor.context.circle), JSON.stringify({ cx: 600, cy: 450, r: 300 }))
+  assert.equal(editor.context.dirty, false)
+  assert.equal(editor.elements.get('#roll-readout').textContent, 'roll +1.5° · line 4.8° vs 3.3°')
+})
+
+test('Escape cancels marking trocars', () => {
+  const editor = editorHarness()
+  editor.context.setStatus = () => {}
+  editor.fire('click', {}, '#roll-mark')
+  editor.fire('pointerdown', { clientX: 40, clientY: 240 })
+  editor.fire('keydown', { key: 'Escape' })
+  assert.equal(editor.context.marking, false)
+  assert.equal(editor.context.rollPoints.length, 0)
 })

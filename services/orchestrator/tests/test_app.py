@@ -1,9 +1,11 @@
 import json
+import math
 from pathlib import Path
 
 import cv2
 import httpx
 import numpy as np
+import pytest
 from fastapi.testclient import TestClient
 
 from orchestrator.app import (
@@ -331,8 +333,75 @@ def test_calibration_update_persists(tmp_path):
     assert client.put("/api/calibration", json=aimed).json()["light_aim_tilt"] == 0.9
     saved = json.loads(calibration_path.read_text(encoding="utf-8"))
     assert saved["light_aim_clock"] == -0.1 and saved["camera_distance"] == 2.2
-    assert client.put("/api/calibration", json=CALIBRATION).json()["camera_distance"] == 0.0   # default: orthographic
+    assert "camera_distance" not in client.put("/api/calibration", json=CALIBRATION).json()   # default: orthographic
     assert client.put("/api/calibration", json=dict(CALIBRATION, camera_distance=-1)).status_code == 400
+
+
+def test_calibration_keeps_optional_light_aim_and_camera(tmp_path):
+    default_calibration = tmp_path / "default_calibration.json"
+    calibration_path = tmp_path / "calibration.json"
+    default_calibration.write_text(json.dumps(CALIBRATION), encoding="utf-8")
+    client = TestClient(
+        create_app(
+            calibration_path=calibration_path,
+            default_calibration_source=default_calibration,
+            segmentation_url="http://segmentation.test",
+            stream_url="http://stream.test",
+        )
+    )
+
+    camera = {
+        "light_aim_tilt": 0.3,
+        "light_aim_clock": 1.1,
+        "camera_focal_px": 1345.0,
+        "camera_pp_px": [517.0, 546.0],
+        "camera_center_mm": [-0.75, 0.3, -21.9],
+    }
+    assert client.put("/api/calibration", json=dict(CALIBRATION, **camera)).status_code == 200
+    saved = json.loads(calibration_path.read_text(encoding="utf-8"))
+    assert {key: saved[key] for key in camera} == camera
+
+    bad = dict(CALIBRATION, camera_focal_px=1345.0, camera_pp_px=[517.0, 546.0], camera_center_mm=[0.0, -22.0])
+    assert client.put("/api/calibration", json=bad).status_code == 400
+
+
+def test_apply_calibration_converts_camera_to_the_detector_crop(tmp_path):
+    default_calibration = tmp_path / "default_calibration.json"
+    calibration_path = tmp_path / "calibration.json"
+    calibration = dict(CALIBRATION, eye_center_px=[540.0, 540.0], eye_radius_px=540.0, camera_focal_px=1345.0,
+                       camera_pp_px=[517.0, 546.0], camera_center_mm=[-0.75, 0.3, -21.9])
+    default_calibration.write_text(json.dumps(calibration), encoding="utf-8")
+    put_payloads = []
+
+    async def detector_handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/config"
+        return httpx.Response(200, json={"circle": {"cx": 577.0, "cy": 559.0, "r": 444.0}, "normalized_size": 1080})
+
+    async def stream_handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(200, json={"inputs": {**CALIBRATION, "camera_focal_r": 9.0}, "positions": {}})
+        put_payloads.append(json.loads(request.content.decode("utf-8")))
+        return httpx.Response(200, json={"positions": {}})
+
+    client = TestClient(
+        create_app(
+            calibration_path=calibration_path,
+            default_calibration_source=default_calibration,
+            segmentation_url="http://segmentation.test",
+            stream_url="http://stream.test",
+            segmentation_transport=httpx.MockTransport(detector_handler),
+            stream_transport=httpx.MockTransport(stream_handler),
+            detector_state_path=tmp_path / "detector.json",
+        )
+    )
+
+    assert client.post("/api/apply-calibration").status_code == 200
+    sent = put_payloads[-1]
+    # Crop: side 888 px from (133, 115), scaled to 1080 -> relative to the square's circle (centre 540, radius 540).
+    assert sent["camera_focal_r"] == pytest.approx(1345.0 * 2 / 888)
+    assert sent["camera_pp_r"] == pytest.approx([(517 - 133) * 2 / 888 - 1, (546 - 115) * 2 / 888 - 1])
+    assert sent["camera_center_mm"] == [-0.75, 0.3, -21.9]
+    assert "camera_focal_px" not in sent and "camera_pp_px" not in sent
 
 
 def test_index_renders_template_with_static_assets(tmp_path):
@@ -464,3 +533,65 @@ def test_manual_points_rejects_an_incomplete_rod(tmp_path):
     response = client.post("/api/manual-points", json={"rod_a_px": [1, 2], "rod_b_px": [3, 4]})
     assert response.status_code == 400
     assert "rod_a_shadow_px" in response.json()["detail"]
+
+
+def test_eye_roll_from_the_trocar_line_turns_both_trocars(tmp_path):
+    default_calibration = tmp_path / "default_calibration.json"
+    calibration_path = tmp_path / "calibration.json"
+    default_calibration.write_text(json.dumps(dict(CALIBRATION, trocar_line_deg=3.0)), encoding="utf-8")
+    put_payloads = []
+
+    async def stream_handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(200, json={"inputs": CALIBRATION, "positions": {}})
+        put_payloads.append(json.loads(request.content.decode("utf-8")))
+        return httpx.Response(200, json={"positions": {}})
+
+    client = TestClient(
+        create_app(
+            calibration_path=calibration_path,
+            default_calibration_source=default_calibration,
+            segmentation_url="http://segmentation.test",
+            stream_url="http://stream.test",
+            stream_transport=httpx.MockTransport(stream_handler),
+            detector_state_path=tmp_path / "detector.json",
+        )
+    )
+
+    # Right point first: the line is still measured left to right, at 8 deg.
+    right = [100 + 700 * math.cos(math.radians(8)), 700 + 700 * math.sin(math.radians(8))]
+    response = client.post("/api/eye-roll", json={"points": [right, [100, 700]]})
+    assert response.status_code == 200
+    assert response.json()["line_deg"] == pytest.approx(8.0)
+    assert response.json()["roll_deg"] == pytest.approx(5.0)
+    assert response.json()["not_applied"] is None
+    sent = put_payloads[-1]
+    assert sent["light_rot_clock"] == pytest.approx(4.3 + math.radians(5))
+    assert sent["forceps_rot_clock"] == pytest.approx(1.5 + math.radians(5))
+    assert "eye_roll_deg" not in sent and "trocar_line_deg" not in sent
+    # The saved trocars stay the reference ones; only the roll is stored.
+    saved = json.loads(calibration_path.read_text(encoding="utf-8"))
+    assert saved["forceps_rot_clock"] == 1.5 and saved["eye_roll_deg"] == pytest.approx(5.0)
+
+    far = [100 + 700 * math.cos(math.radians(30)), 700 + 700 * math.sin(math.radians(30))]
+    assert client.post("/api/eye-roll", json={"points": [[100, 700], far]}).status_code == 400
+    assert client.post("/api/eye-roll", json={"points": [[100, 700]]}).status_code == 400
+
+    assert client.delete("/api/eye-roll").json()["roll_deg"] == 0.0
+    assert put_payloads[-1]["forceps_rot_clock"] == pytest.approx(1.5)
+
+
+def test_eye_roll_needs_a_reference_line(tmp_path):
+    default_calibration = tmp_path / "default_calibration.json"
+    default_calibration.write_text(json.dumps(CALIBRATION), encoding="utf-8")
+    client = TestClient(
+        create_app(
+            calibration_path=tmp_path / "calibration.json",
+            default_calibration_source=default_calibration,
+            segmentation_url="http://segmentation.test",
+            stream_url="http://stream.test",
+        )
+    )
+    response = client.post("/api/eye-roll", json={"points": [[100, 700], [800, 740]]})
+    assert response.status_code == 400
+    assert "trocar_line_deg" in response.json()["detail"]
