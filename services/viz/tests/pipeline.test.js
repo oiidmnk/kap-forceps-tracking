@@ -96,6 +96,23 @@ test('waiting for a first live frame shows no ghost', () => {
   assert.equal(p.scene.get().ghost, false)
 })
 
+test('blending a frame whose rod ends came swapped never folds the rod', async () => {
+  const { lerpFrame } = await import('../src/feed/displayInterpolation.js')
+  const a = { tip_left: [0, 0, 0], rod_a: [-1, 0, 0], rod_b: [1, 0, 0] }
+  const b = { tip_left: [0, 0, 0], rod_a: [1, 0, 0], rod_b: [-1, 0, 0] }
+  const mid = lerpFrame(a, b, 0.5)
+  assert.deepEqual([mid.rod_a, mid.rod_b], [[-1, 0, 0], [1, 0, 0]])
+})
+
+test('a rod-only frame reaches the scene without forceps levels', () => {
+  const p = createTrackingPipeline()
+  p.reset('mock', 0)
+  const frame = { tip_left: null, tip_right: null, trocar: null, rod_a: [0, -10, 0], rod_b: [1, -10, 0] }
+  p.publish(frame, 'mock', 1)
+  assert.equal(p.scene.get().frame, frame)
+  assert.equal(p.scene.get().levels, null)
+})
+
 test('dropout grace holds danger with one trend gap, then expires without messages', () => {
   const p = createTrackingPipeline()
   p.reset('live', 0)

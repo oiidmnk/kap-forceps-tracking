@@ -63,12 +63,17 @@ Two camera models map image pixels into this frame:
       on the light -> shadow line closest to the tip's ray. Measured against
       the simulator's trajectory log, this removes most of the orthographic
       model's error (issue #1).
+
+      An on-axis pinhole ``c`` eye radii from the eye centre (the older
+      ``camera_distance`` input) is the special case focal length ``1 + c``,
+      no principal-point offset, centre ``(0, 0, -c)`` eye radii; the stream
+      converts it (``ws_server.camera_kwargs``).
 """
 
 from __future__ import annotations
 
 import math
-from typing import Dict, Optional, Tuple
+from typing import Callable, Dict, Optional, Tuple
 
 Vec2 = Tuple[float, float]
 Vec3 = Tuple[float, float, float]
@@ -333,6 +338,36 @@ def jaw_meeting_point(
     return _sub3(midpoint, _scale3(axis_dir, back_distance))
 
 
+def _tip_reconstructor(
+    tip_light: Vec3,
+    eye_center_px: Vec2,
+    eye_radius_px: float,
+    eye_radius_mm: float,
+    camera_focal_r: Optional[float],
+    camera_pp_r: Vec2,
+    camera_center_mm: Optional[Vec3],
+) -> Callable[[Vec2, Vec2], Vec3]:
+    """(point px, its shadow px) -> 3D point, with the orthographic camera
+    or, given ``camera_focal_r``, the perspective one."""
+    if camera_focal_r is None:
+        def reconstruct(tip_px: Vec2, shadow_px: Vec2) -> Vec3:
+            return reconstruct_tip_from_shadow(
+                tip_light, tip_px, shadow_px, eye_center_px, eye_radius_px
+            )
+        return reconstruct
+
+    if camera_center_mm is None:
+        raise ValueError("camera_focal_r needs camera_center_mm")
+    camera_center = _scale3(camera_center_mm, 1.0 / eye_radius_mm)
+
+    def reconstruct_perspective(tip_px: Vec2, shadow_px: Vec2) -> Vec3:
+        return reconstruct_tip_perspective(
+            tip_light, tip_px, shadow_px, eye_center_px, eye_radius_px,
+            camera_center, camera_focal_r, camera_pp_r,
+        )
+    return reconstruct_perspective
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -409,21 +444,10 @@ def compute_tool_positions(
 
     trocar_forceps = trocar_position(forceps_rot_up, forceps_rot_clock)
 
-    if camera_focal_r is None:
-        def reconstruct(tip_px: Vec2, shadow_px: Vec2) -> Vec3:
-            return reconstruct_tip_from_shadow(
-                tip_light, tip_px, shadow_px, eye_center_px, eye_radius_px
-            )
-    else:
-        if camera_center_mm is None:
-            raise ValueError("camera_focal_r needs camera_center_mm")
-        camera_center = _scale3(camera_center_mm, 1.0 / eye_radius_mm)
-
-        def reconstruct(tip_px: Vec2, shadow_px: Vec2) -> Vec3:
-            return reconstruct_tip_perspective(
-                tip_light, tip_px, shadow_px, eye_center_px, eye_radius_px,
-                camera_center, camera_focal_r, camera_pp_r,
-            )
+    reconstruct = _tip_reconstructor(
+        tip_light, eye_center_px, eye_radius_px, eye_radius_mm,
+        camera_focal_r, camera_pp_r, camera_center_mm,
+    )
 
     left_tip_forceps = reconstruct(left_tip_px, left_shadow_px)
     right_tip_forceps = reconstruct(right_tip_px, right_shadow_px)
@@ -439,6 +463,48 @@ def compute_tool_positions(
         "left_tip_forceps": left_tip_forceps,
         "right_tip_forceps": right_tip_forceps,
         "jaw_meet_forceps": jaw_meet_forceps,
+    }
+
+
+def compute_rod_positions(
+    light_rot_up: float,
+    light_rot_clock: float,
+    light_depth_mm: float,
+    rod_a_px: Vec2,
+    rod_a_shadow_px: Vec2,
+    rod_b_px: Vec2,
+    rod_b_shadow_px: Vec2,
+    eye_center_px: Vec2,
+    eye_radius_px: float,
+    eye_radius_mm: float,
+    light_aim_tilt: float = 0.0,
+    light_aim_clock: float = 0.0,
+    camera_focal_r: Optional[float] = None,
+    camera_pp_r: Vec2 = (0.0, 0.0),
+    camera_center_mm: Optional[Vec3] = None,
+) -> Dict[str, Vec3]:
+    """3D end points of a free-floating rod (e.g. a dropped capsule).
+
+    Like a forceps tip, each end lies on the line from the light tip through
+    the shadow it casts on the retina, and its image position (with the same
+    camera model as ``compute_tool_positions``) fixes where on that line.
+    ``rod_a_shadow_px`` must be the shadow of ``rod_a_px``. Returns ``rod_a``
+    and ``rod_b`` in the normalized eye frame.
+    """
+    tip_light = light_tip_position(
+        light_rot_up,
+        light_rot_clock,
+        light_depth_mm / eye_radius_mm,
+        light_aim_tilt,
+        light_aim_clock,
+    )
+    reconstruct = _tip_reconstructor(
+        tip_light, eye_center_px, eye_radius_px, eye_radius_mm,
+        camera_focal_r, camera_pp_r, camera_center_mm,
+    )
+    return {
+        "rod_a": reconstruct(rod_a_px, rod_a_shadow_px),
+        "rod_b": reconstruct(rod_b_px, rod_b_shadow_px),
     }
 
 

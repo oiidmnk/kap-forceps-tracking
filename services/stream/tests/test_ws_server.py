@@ -82,3 +82,108 @@ def test_viewer_and_websocket_routes_coexist(tmp_path):
             assert {'/', '/ws', '/viewer'} <= paths
 
     asyncio.run(exercise())
+
+
+def test_rod_is_reconstructed_from_its_shadow_like_a_tip():
+    from ws_server import resilient_positions
+    from tool_positions import _norm3, _sub3
+
+    data = dict(VALID_INPUTS)
+    # the rod's ends sit exactly where the forceps tips are, with the same shadows -> same 3D points
+    data.update(rod_a_px=data["left_tip_px"], rod_a_shadow_px=data["left_shadow_px"],
+                rod_b_px=data["right_tip_px"], rod_b_shadow_px=data["right_shadow_px"])
+    positions, error = resilient_positions(data)
+    assert error is None
+    assert _norm3(_sub3(positions["rod_a"], positions["left_tip_forceps"])) < 1e-9
+    assert _norm3(_sub3(positions["rod_b"], positions["right_tip_forceps"])) < 1e-9
+
+
+def test_rod_is_optional_and_never_breaks_the_forceps():
+    from ws_server import resilient_positions
+
+    positions, error = resilient_positions(dict(VALID_INPUTS))
+    assert error is None and positions["rod_a"] is None and positions["rod_b"] is None
+    bad = dict(VALID_INPUTS, rod_a_px=[10, 10], rod_a_shadow_px=[10, 10], rod_b_px=[1, 1], rod_b_shadow_px="x")
+    positions, error = resilient_positions(bad)
+    assert positions["left_tip_forceps"] is not None and positions["rod_a"] is None and "rod" in error
+
+
+def test_rod_contact_moves_the_rod_onto_the_forceps():
+    from ws_server import resilient_positions
+    from tool_positions import _norm3, _sub3
+
+    data = dict(VALID_INPUTS, rod_a_px=[120.0, 140.0], rod_a_shadow_px=[200.0, 80.0],
+                rod_b_px=[170.0, 140.0], rod_b_shadow_px=[240.0, 80.0])
+    apart, _ = resilient_positions(dict(data))
+    touching, error = resilient_positions(dict(data, rod_contact=True))
+    assert error is None and apart["rod_contact"] is False and touching["rod_contact"] is True
+
+    def to_axis(pos):
+        a, b = pos["rod_a"], pos["rod_b"]
+        mid = [(l + r) / 2 for l, r in zip(pos["left_tip_forceps"], pos["right_tip_forceps"])]
+        v = _sub3(b, a)
+        t = min(1.0, max(0.0, sum(x * y for x, y in zip(_sub3(mid, a), v)) / sum(x * x for x in v)))
+        return _norm3(_sub3(mid, [p + t * c for p, c in zip(a, v)]))
+
+    assert to_axis(apart) > 1e-3 and to_axis(touching) < 1e-9
+    # moved as a whole: same length, same direction
+    assert _norm3(_sub3(_sub3(touching["rod_b"], touching["rod_a"]), _sub3(apart["rod_b"], apart["rod_a"]))) < 1e-9
+
+
+def test_rod_contact_without_forceps_changes_nothing():
+    from ws_server import rod_positions, resilient_positions
+
+    data = dict(VALID_INPUTS, rod_a_px=[120.0, 140.0], rod_a_shadow_px=[200.0, 80.0],
+                rod_b_px=[170.0, 140.0], rod_b_shadow_px=[240.0, 80.0], rod_contact=True,
+                left_tip_px=[1000.0, 1000.0])          # tips outside the eye -> no forceps
+    positions, _ = resilient_positions(data)
+    assert positions["left_tip_forceps"] is None and positions["rod_contact"] is False
+    assert positions["rod_a"] == rod_positions(data)["rod_a"]
+
+
+def _project(p, c, center, rpx):
+    """Pinhole camera at (0, 0, -c): 3D point (eye radii) -> pixel."""
+    k = (1 + c) / (p[2] + c)
+    return (center[0] + rpx * k * p[0], center[1] + rpx * k * p[1])
+
+
+def test_camera_distance_is_the_on_axis_case_of_the_perspective_camera():
+    """``camera_distance`` c (older rod calibrations) goes through the perspective
+    model and still inverts the on-axis pinhole projection exactly."""
+    import math
+    from ws_server import camera_kwargs
+    from tool_positions import light_tip_position, reconstruct_tip_perspective, _add3, _scale3, _sub3, _norm3
+
+    c, center, rpx, r_mm = 2.2, (540.0, 540.0), 600.0, 24.0
+    kwargs = camera_kwargs({"camera_distance": c, "eye_radius_mm": r_mm})
+    assert kwargs["camera_focal_r"] == 1 + c and kwargs["camera_pp_r"] == (0.0, 0.0)
+    assert kwargs["camera_center_mm"] == (0.0, 0.0, -c * r_mm)
+    assert camera_kwargs({"camera_distance": 0.0, "eye_radius_mm": r_mm}) == {}
+    # an explicit perspective camera wins
+    explicit = {"camera_distance": c, "eye_radius_mm": r_mm, "camera_focal_r": 3.0, "camera_center_mm": [0, 0, -20]}
+    assert camera_kwargs(explicit)["camera_focal_r"] == 3.0
+
+    light = light_tip_position(0.6, -0.5, 0.005)
+    tip = (0.15, -0.1, 0.55)
+    # its shadow: continue the light ray through the tip to the far retina
+    d = _sub3(tip, light)
+    a, b, cc = sum(x * x for x in d), 2 * sum(x * y for x, y in zip(light, d)), sum(x * x for x in light) - 1
+    shadow = _add3(light, _scale3(d, (-b + math.sqrt(b * b - 4 * a * cc)) / (2 * a)))
+    got = reconstruct_tip_perspective(
+        light, _project(tip, c, center, rpx), _project(shadow, c, center, rpx), center, rpx,
+        _scale3(kwargs["camera_center_mm"], 1 / r_mm), kwargs["camera_focal_r"], kwargs["camera_pp_r"],
+    )
+    assert _norm3(_sub3(got, tip)) < 1e-9
+
+
+def test_camera_distance_defaults_to_the_orthographic_camera():
+    from ws_server import resilient_positions
+    from tool_positions import _norm3, _sub3
+
+    data = dict(VALID_INPUTS, rod_a_px=[120.0, 140.0], rod_a_shadow_px=[200.0, 80.0],
+                rod_b_px=[170.0, 140.0], rod_b_shadow_px=[240.0, 80.0])
+    ortho, _ = resilient_positions(dict(data))
+    assert resilient_positions(dict(data, camera_distance=0.0))[0] == ortho
+    far, _ = resilient_positions(dict(data, camera_distance=1e6))     # a very distant pinhole is orthographic
+    for key in ("left_tip_forceps", "right_tip_forceps", "rod_a", "rod_b"):
+        assert _norm3(_sub3(far[key], ortho[key])) < 1e-4

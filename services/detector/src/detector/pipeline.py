@@ -15,6 +15,7 @@ POINTS = ("left_tip", "right_tip", "junction")
 # colours (BGR)
 COL = {"left_tip": (255, 255, 0), "right_tip": (255, 0, 255), "junction": (0, 255, 255)}
 LINE = {"forceps": (0, 255, 0), "shadow": (255, 160, 0)}
+ROD_COL, ROD_SHADOW_COL = (80, 255, 80), (255, 160, 0)
 
 
 @dataclass
@@ -32,23 +33,51 @@ class ToolPose:
 
 
 @dataclass
+class RodPose:
+    """The rod's two end points and the matching ends of its shadow (`shadow[i]` is cast by `ends[i]`)."""
+    ends: tuple[tuple[float, float], tuple[float, float]] | None = None
+    shadow: tuple[tuple[float, float], tuple[float, float]] | None = None
+    scores: dict = field(default_factory=dict)
+    contact: bool = False               # forceps touching the rod (set by the live worker, see contact.RodContact)
+
+    @property
+    def ok(self) -> bool:
+        return self.ends is not None and self.shadow is not None
+
+    def as_dict(self) -> dict:
+        r = lambda pts: None if pts is None else [[round(p[0], 1), round(p[1], 1)] for p in pts]
+        return {"ok": self.ok, "ends": r(self.ends), "shadow": r(self.shadow), "contact": self.contact,
+                "scores": {k: round(float(v), 3) for k, v in self.scores.items()}}
+
+
+@dataclass
 class Detection:
     forceps: ToolPose
     shadow: ToolPose
     frame_size: tuple[int, int] = (0, 0)
     background: str = "none"
     ms: float = 0.0
+    rod: RodPose | None = None          # learned backend with rod channels only
 
     def as_dict(self) -> dict:
-        return {"forceps": self.forceps.as_dict(), "shadow": self.shadow.as_dict(),
-                "frame_size": list(self.frame_size), "background": self.background, "ms": round(self.ms, 1)}
+        d = {"forceps": self.forceps.as_dict(), "shadow": self.shadow.as_dict(),
+             "frame_size": list(self.frame_size), "background": self.background, "ms": round(self.ms, 1)}
+        if self.rod is not None:
+            d["rod"] = self.rod.as_dict()
+        return d
 
     def orchestrator_points(self) -> dict | None:
-        """The four points the orchestrator needs, or None unless all are present."""
-        if not (self.forceps.ok and self.shadow.ok):
-            return None
-        return {"left_tip_px": list(self.forceps.left_tip), "right_tip_px": list(self.forceps.right_tip),
-                "left_shadow_px": list(self.shadow.left_tip), "right_shadow_px": list(self.shadow.right_tip)}
+        """Forceps tips + their shadows when all four are present, rod ends + their shadows when all four are
+        present (plus ``rod_contact``); None if neither is complete."""
+        pts = {}
+        if self.forceps.ok and self.shadow.ok:
+            pts.update({"left_tip_px": list(self.forceps.left_tip), "right_tip_px": list(self.forceps.right_tip),
+                        "left_shadow_px": list(self.shadow.left_tip), "right_shadow_px": list(self.shadow.right_tip)})
+        if self.rod is not None and self.rod.ok:
+            pts.update({"rod_a_px": list(self.rod.ends[0]), "rod_b_px": list(self.rod.ends[1]),
+                        "rod_a_shadow_px": list(self.rod.shadow[0]), "rod_b_shadow_px": list(self.rod.shadow[1]),
+                        "rod_contact": bool(self.rod.contact)})
+        return pts or None
 
 
 class Detector:
@@ -125,7 +154,24 @@ def annotate(frame: np.ndarray, det: Detection) -> np.ndarray:
         for k in ("left_tip", "right_tip"):
             if j is not None:
                 cv2.line(out, j, tuple(map(int, getattr(p, k))), LINE[tool], 1, cv2.LINE_AA)
-            cv2.circle(out, tuple(map(int, getattr(p, k))), r, COL[k], 2, cv2.LINE_AA)
+            # thin ring: not seen in this frame, carried over (learned backend, see MLDetector._hold_shadow)
+            cv2.circle(out, tuple(map(int, getattr(p, k))), r, COL[k], 1 if p.reason == "held" else 2, cv2.LINE_AA)
         if j is not None:
             cv2.drawMarker(out, j, COL["junction"], cv2.MARKER_CROSS, 2 * r + 4, 2)
+    rod = det.rod
+    if rod is not None:
+        for pts, col in ((rod.ends, ROD_COL), (rod.shadow, ROD_SHADOW_COL)):
+            if pts is None:
+                continue
+            a, b = (tuple(map(int, p)) for p in pts)
+            cv2.line(out, a, b, col, 3 if rod.contact and col == ROD_COL else 1, cv2.LINE_AA)
+            for p in (a, b):
+                cv2.circle(out, p, r, col, 2, cv2.LINE_AA)
+        if rod.ok:                                         # which shadow end belongs to which rod end
+            for e, s in zip(rod.ends, rod.shadow):
+                cv2.line(out, tuple(map(int, e)), tuple(map(int, s)), (200, 200, 200), 1, cv2.LINE_AA)
+        if rod.contact and rod.ends is not None:
+            c = np.mean(rod.ends, axis=0).astype(int)
+            cv2.putText(out, "CONTACT", (int(c[0]) + 2 * r, int(c[1])), cv2.FONT_HERSHEY_SIMPLEX, 0.7, ROD_COL, 2,
+                        cv2.LINE_AA)
     return out

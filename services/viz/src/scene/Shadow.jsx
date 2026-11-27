@@ -1,5 +1,6 @@
 import DynamicLine from './DynamicLine.jsx'
 import { shadowOf, forcepsRenderPose } from '../geometry.js'
+import { hasForceps } from '../feed/trackingState.js'
 
 // Estimated shadows of the forceps tips on the retina, cast by the light pipe:
 // a ray from the light tip through each forceps tip onto the sphere interior.
@@ -7,7 +8,7 @@ import { shadowOf, forcepsRenderPose } from '../geometry.js'
 // Rendered and tracked tip positions coincide, so rays and distance guides
 // meet the same points on the instrument.
 export default function Shadow({ frame, showRays = true }) {
-  if (!frame?.light_tip) return null
+  if (!frame?.light_tip || !hasForceps(frame)) return null
   const { light_tip } = frame
   const { tipLeftRender, tipRightRender } = forcepsRenderPose(frame)
   const ls = shadowOf(tipLeftRender, light_tip)

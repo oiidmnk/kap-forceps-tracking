@@ -3,6 +3,7 @@ import { createInterpolator } from './displayInterpolation.js'
 import { createLevelTracker } from './levels.js'
 import { createTrend } from './trend.js'
 import { distanceToRetina } from '../geometry.js'
+import { hasForceps } from './trackingState.js'
 import { READOUT_INTERVAL_MS, DROPOUT_GRACE_MS, MISSED_UPDATE_MS, STALE_MS, NEAREST_TIE_ENTER_MM, NEAREST_TIE_EXIT_MM, NEAREST_SIDE_LEAD_MM, NEAREST_DWELL_MS } from '../config.js'
 
 /* Readout additions (all times use the local monotonic receipt clock):
@@ -183,9 +184,10 @@ export function createTrackingPipeline({ nearestDwellMs = NEAREST_DWELL_MS } = {
       const previousLevels = levels
       if (heldSinceMs == null) {
         levels = tracker.update(frame, now)
-        trend.push(now, frame ? Math.min(distanceToRetina(frame.tip_left), distanceToRetina(frame.tip_right)) : null)
-        nearest = frame ? nearestTracker.update(distanceToRetina(frame.tip_left), distanceToRetina(frame.tip_right), now) : null
-        if (!frame) nearestTracker.reset()
+        const forceps = hasForceps(frame) // a frame may carry only the rod
+        trend.push(now, forceps ? Math.min(distanceToRetina(frame.tip_left), distanceToRetina(frame.tip_right)) : null)
+        nearest = forceps ? nearestTracker.update(distanceToRetina(frame.tip_left), distanceToRetina(frame.tip_right), now) : null
+        if (!forceps) nearestTracker.reset()
       }
 
       if (heldSinceMs != null) {

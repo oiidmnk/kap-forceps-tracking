@@ -27,7 +27,7 @@ const LUMEN_DEPTH_MM = 0.6
 const GHOST_TIP = '#8a97a3'
 
 export default function Forceps({ frame, levels, ghost = false }) {
-  if (!frame) return null
+  if (!frame?.tip_left) return null
   const pose = forcepsRenderPose(frame)
   const { tubeEnd, shaftDir, openingDir, widthDir } = pose
   const inwardLeft = openingDir

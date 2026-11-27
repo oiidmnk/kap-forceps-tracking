@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import DynamicLine from './DynamicLine.jsx'
 import { DoubleSide, Quaternion, Vector3 } from 'three'
 import { readoutTip } from '../geometry.js'
+import { hasForceps } from '../feed/trackingState.js'
 import { useStore } from '../feed/store.js'
 import { STATUS } from '../ui.js'
 
@@ -14,7 +15,7 @@ import { STATUS } from '../ui.js'
 // encodes the gap by length).
 export default function LandingReticle({ frame, level, readout }) {
   const { nearestTip } = useStore(readout)
-  const info = frame && nearestTip ? readoutTip(frame, nearestTip) : null
+  const info = hasForceps(frame) && nearestTip ? readoutTip(frame, nearestTip) : null
 
   // Orient the flat ring so its face is tangent to the sphere at the contact
   // point (ring normal = outward radial direction at that wall point).

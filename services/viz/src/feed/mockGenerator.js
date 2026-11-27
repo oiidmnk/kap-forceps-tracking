@@ -90,5 +90,14 @@ export function sampleFrame(t) {
   // Jaws open/close within the simulator's range: tip separation ~0.1–0.7 mm.
   const half = 0.03 + 0.18 * (0.5 + 0.5 * Math.sin(s * 1.3)) // radians (half-angle)
 
-  return { t, confidence: 0.99, ...poseFrame({ depth, wobbleU, wobbleV, half }) }
+  return { t, confidence: 0.99, ...poseFrame({ depth, wobbleU, wobbleV, half }), ...rodFrame(s) }
+}
+
+// A free-floating rod (the simulator's rod task) sinking towards the retina and
+// rising again while it slowly turns.
+function rodFrame(s) {
+  const centre = [-2.5 + 0.8 * Math.sin(s * 0.3), -EYE_RADIUS_MM + 2.2 + 1.6 * Math.sin(s * 0.25), 1.5]
+  const yaw = s * 0.2
+  const half = scale(normalize([Math.cos(yaw), 0.25 * Math.sin(s * 0.5), Math.sin(yaw)]), 1.4)
+  return { rod_a: add(centre, half), rod_b: sub(centre, half) }
 }

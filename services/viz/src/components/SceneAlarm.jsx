@@ -1,10 +1,11 @@
 import { nearestTip } from '../geometry.js'
+import { hasForceps } from '../feed/trackingState.js'
 import { STATUS, formatClearance } from '../ui.js'
 import { useStore } from '../feed/store.js'
 import { CRITICAL_PULSE_LIVE } from '../config.js'
 
 const selectLevel = (s) => s.levels?.min ?? null
-const selectDistance = (s) => (s.frame ? nearestTip(s.frame).dist : null)
+const selectDistance = (s) => (hasForceps(s.frame) ? nearestTip(s.frame).dist : null)
 
 // View-wide warning: a colored frame around the 3D view plus a banner while
 // the nearest tip is in the warning or critical zone, so the state is visible

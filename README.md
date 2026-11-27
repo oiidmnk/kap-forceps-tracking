@@ -109,7 +109,11 @@ and eye roll. API: `GET/PUT /api/calibration`, `POST /api/apply-calibration`, `G
    *Reset & relearn* in the orchestrator).
 3. **Geometry** (`detector/geometry.py`) – largest blob → principal axis → the stretch with two runs is the open jaw
    pair; outer ends = tips, where the gap closes = junction.
-4. **Live** – points EMA-smoothed (`SMOOTHING`) and pushed at `PUSH_HZ`, only frames with all four tips.
+4. **Live** – points EMA-smoothed (`SMOOTHING`) and pushed at `PUSH_HZ`; forceps points only in frames with all four
+   tips. The learned segmenter also pushes the **rod** (both ends + the shadow each casts): a rod-only frame keeps the
+   last forceps pose, a lost rod is held (`live.RodHold`), a resting one steadied (`live.RodFilter`). The stream
+   reconstructs each rod end like a forceps tip, with the same camera. Contact is decided in the image
+   (`detector/contact.py`); on contact the stream puts the rod onto the tips and the viz lets it glow.
 
 ~20 ms/frame at 1080². On 43 hand-labelled frames (`make eval`): forceps tips 4.4 px mean / 7.9 px max, shadow tips
 3.7 / 11.9 px. `FORCEPS_ANGLE` adds a colour cue for forceps as saturated as the retina (not validated).

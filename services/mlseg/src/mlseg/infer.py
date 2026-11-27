@@ -1,4 +1,4 @@
-"""Inference wrapper: BGR square frame(s) -> 4 keypoints in that frame's pixel coords + confidence."""
+"""Inference wrapper: BGR square frame(s) -> keypoint rows in that frame's pixel coords + confidence."""
 from __future__ import annotations
 
 import cv2
@@ -6,7 +6,7 @@ import numpy as np
 import torch
 
 from .data import to_tensor
-from .model import KEYS, KeypointNet, decode
+from .model import KeypointNet, decode_rows
 
 
 class Segmenter:
@@ -22,10 +22,11 @@ class Segmenter:
 
     @torch.no_grad()
     def __call__(self, frames: list[np.ndarray]):
-        """-> pts [N,4,2] (px of the input frames), score [N,4]. Frames must be square."""
+        """-> pts [N,R,2] (px of the input frames), score [N,R]; rows as model.ROWS (6 for older checkpoints).
+        Frames must be square."""
         S = frames[0].shape[0]
         x = torch.stack([to_tensor(cv2.resize(f, (self.size, self.size), interpolation=cv2.INTER_AREA)) for f in frames])
         with torch.autocast(self.device, dtype=torch.bfloat16, enabled=self.amp):
             lg = self.model(x.to(self.device))
-        xy, sc = decode(lg)
+        xy, sc = decode_rows(lg)
         return xy.cpu().numpy() * 2 * S / self.size, sc.cpu().numpy()

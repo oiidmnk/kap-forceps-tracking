@@ -64,6 +64,17 @@ export const JAW_WIDTH_TIP_MM = 0.09 // blade width toward the tip
 export const JAW_HOOK_MM = 0.07 // inward-bent grasping hook at the tip
 export const TIP_INDICATOR_MM = 0.045 // small accent centered on the tracked tip
 
+// Free-floating rod (red capsule in the simulator's rod task), tracked by its
+// two end points. It is rigid, so it is drawn at a fixed size around the
+// tracked midpoint and direction (the per-frame reconstructed length jitters
+// by ~10 %): the median reconstructed length of rod.mp4, and a thickness from
+// the footage (~6.5x as long as thick, 185 px vs. 28 px).
+export const ROD_LENGTH_MM = 2.9
+export const ROD_RADIUS_MM = ROD_LENGTH_MM / 13
+export const ROD_COLOR = '#c8141c'
+// Glow of the rod while the forceps touches it.
+export const ROD_CONTACT_GLOW = '#ff5a3c'
+
 // --- Clinical view presets --------------------------------------------------
 // Named camera framings for the main overview (+Y up; instruments enter +Y;
 // retina = -Y hemisphere). All keep a common world up (+Y) so preset-to-preset

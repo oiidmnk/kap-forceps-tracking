@@ -14,7 +14,10 @@ def create_app(ckpt: str | None = None, cfg: Settings | None = None):
     det = MLDetector(ckpt or os.environ.get("MLSEG_CKPT", "/weights/last.pt"), cfg,
                      device=os.environ.get("MLSEG_DEVICE") or None,
                      min_score=float(os.environ.get("MLSEG_MIN_SCORE") or 0.3),
-                     shadow_min_score=float(os.environ.get("MLSEG_SHADOW_MIN_SCORE") or 0.1))
+                     shadow_min_score=float(os.environ.get("MLSEG_SHADOW_MIN_SCORE") or 0.1),
+                     rod_min_score=float(os.environ.get("MLSEG_ROD_MIN_SCORE") or 0.3),
+                     rod_shadow_min_score=float(os.environ.get("MLSEG_ROD_SHADOW_MIN_SCORE") or 0.2),
+                     shadow_hold_s=float(os.environ.get("MLSEG_SHADOW_HOLD_S") or 1.0))
     app = create_detector_app(cfg, det)
     app.title = "Forceps Segmenter (learned)"
     return app

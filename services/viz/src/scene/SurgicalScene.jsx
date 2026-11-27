@@ -1,6 +1,7 @@
 import EyeGlobe from './EyeGlobe.jsx'
 import Trocar from './Trocar.jsx'
 import Forceps from './Forceps.jsx'
+import RodObject from './RodObject.jsx'
 import LightPipe from './LightPipe.jsx'
 import Shadow from './Shadow.jsx'
 import LandingReticle from './LandingReticle.jsx'
@@ -46,6 +47,7 @@ export default function SurgicalScene({
       <group ref={pickRef}>
         <Forceps key={`forceps-${variant}`} frame={frame} levels={levels} ghost={ghost} />
       </group>
+      <RodObject key={`rod-${variant}`} frame={frame} ghost={ghost} />
       {showInstrumentShadow && !ghost && (
         <>
           <ShadowLight frame={frame} angle={0.75} />

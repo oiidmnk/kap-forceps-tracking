@@ -41,7 +41,7 @@ CALIBRATION_KEYS = [
     "jaw_length_mm",
 ]
 
-CAMERA_KEYS = ("camera_focal_r", "camera_pp_r", "camera_center_mm")       # as the stream takes them
+CAMERA_KEYS = ("camera_focal_r", "camera_pp_r", "camera_center_mm", "camera_distance")  # as the stream takes them
 
 REQUIRED_CLASS_TO_INPUT = {
     "tip_left": "left_tip_px",
@@ -56,6 +56,9 @@ REQUIRED_CLASS_ID_TO_INPUT = {
     2: "left_shadow_px",
     3: "right_shadow_px",
 }
+
+# Optional free-floating rod: both end points and the shadow each one casts.
+ROD_INPUT_KEYS = ["rod_a_px", "rod_a_shadow_px", "rod_b_px", "rod_b_shadow_px"]
 
 DEFAULT_SEGMENTATION_URL = "http://segmentation:8000"
 DEFAULT_STREAM_URL = "http://stream:8765"
@@ -175,6 +178,12 @@ def validate_calibration(payload: Any) -> dict[str, Any]:
     for key in ("trocar_line_deg", "eye_roll_deg"):
         if payload.get(key) is not None:
             calibration[key] = float(payload[key])
+    # Optional on-axis pinhole this many eye radii from the eye centre (older rod calibrations); the stream turns it
+    # into the perspective camera above, which wins when both are given.
+    if payload.get("camera_distance") is not None:
+        calibration["camera_distance"] = float(payload["camera_distance"])
+        if calibration["camera_distance"] < 0:
+            raise OrchestratorError("camera_distance must not be negative")
     return calibration
 
 
@@ -263,19 +272,30 @@ def point_from_instance(instance: dict[str, Any]) -> list[float]:
     )
 
 
-def validate_manual_points(payload: Any) -> dict[str, list[float]]:
-    """Validate hand-clicked points meant to stand in for segmentation output.
+def validate_manual_points(payload: Any) -> dict[str, Any]:
+    """Validate hand-clicked / detector points meant to stand in for segmentation output.
 
-    Same four keys ``select_preprocessor_points`` would have produced from a
-    trained model, so callers (the stream merge) can't tell the difference.
+    The four forceps keys ``select_preprocessor_points`` would have produced
+    from a trained model, and/or the four rod keys (rod ends + their shadows).
+    Each group is all-or-nothing; at least one group must be complete. With the
+    rod, ``rod_contact`` (the forceps touches it, decided in the image) is kept.
     """
     if not isinstance(payload, dict):
         raise OrchestratorError("manual points payload must be a JSON object")
     required = list(REQUIRED_CLASS_TO_INPUT.values())
-    missing = [key for key in required if key not in payload]
-    if missing:
-        raise OrchestratorError("manual points missing keys: " + ", ".join(missing))
-    return {key: _as_vec2(payload[key], key) for key in required}
+    has_rod = any(payload.get(key) is not None for key in ROD_INPUT_KEYS)
+    groups = [required] if not has_rod or any(key in payload for key in required) else []
+    if has_rod:
+        groups.append(ROD_INPUT_KEYS)
+    points = {}
+    for keys in groups:
+        missing = [key for key in keys if payload.get(key) is None]
+        if missing:
+            raise OrchestratorError("manual points missing keys: " + ", ".join(missing))
+        points.update({key: _as_vec2(payload[key], key) for key in keys})
+    if has_rod:
+        points["rod_contact"] = bool(payload.get("rod_contact", False))
+    return points
 
 
 def select_preprocessor_points(segmentation: dict[str, Any]) -> dict[str, list[float]]:
@@ -679,12 +699,21 @@ def create_app(
         points a trained model would have produced (in the same native camera
         pixel space as the live-calibration trocars), merges them with the saved
         calibration exactly like ``/api/process`` merges segmentation output, and
-        pushes the result straight to the stream.
+        pushes the result straight to the stream. The live detectors use it too,
+        optionally with the rod points; a frame with only the rod keeps the last
+        forceps points of the stream (as if the forceps had not moved), a frame
+        without the rod removes it.
         """
         try:
             points = validate_manual_points(payload)
             calibration = service.state.calibration_store.load()
-            stream_payload = {**await to_stream(calibration), **points}
+            forceps = {}
+            if "left_tip_px" not in points:
+                current = (await get_stream_inputs(service.state.stream_url, service.state.stream_transport)).get("inputs") or {}
+                forceps = {key: current[key] for key in REQUIRED_CLASS_TO_INPUT.values() if current.get(key) is not None}
+                if len(forceps) < len(REQUIRED_CLASS_TO_INPUT):
+                    raise OrchestratorError("no forceps points yet: the stream needs one frame with the forceps first")
+            stream_payload = {**await to_stream(calibration), **forceps, **points}
             stream_result = await put_stream_inputs(
                 service.state.stream_url,
                 stream_payload,

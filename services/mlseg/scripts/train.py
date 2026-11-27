@@ -16,6 +16,7 @@ from mlseg.losses import focal
 from mlseg.model import KeypointNet
 from mlseg.relight import DiscRelight
 from mlseg.shadowreloc import ShadowBank
+from mlseg.rodshadow import RodShadowBank
 import cv2
 
 ap = argparse.ArgumentParser()
@@ -37,6 +38,11 @@ ap.add_argument("--real-weight", type=int, default=6, help="repeat factor of rea
 ap.add_argument("--relight", default="", help="empty-retina background image -> disc relight augmentation")
 ap.add_argument("--reloc", type=float, default=0.0, help="prob. of the shadow relocation augmentation (needs --relight bg)")
 ap.add_argument("--reloc-bg", nargs="*", default=[], help="further empty-retina backgrounds (other videos) for shadow relocation")
+ap.add_argument("--init", default="", help="start from this checkpoint (a 6-channel head is widened to the rod channels)")
+ap.add_argument("--rod", nargs="*", default=[], help="further gen_rod.py folders (rod video frames), all treated as pseudo")
+ap.add_argument("--rod-repeat", type=int, default=1)
+ap.add_argument("--rod-val", default="", help="gen_rod.py folder of held-out rod frames, scored every 5 epochs")
+ap.add_argument("--overlay", type=float, default=0.0, help="prob. of laying a real rod shadow over the forceps shadow tips")
 ap.add_argument("--seed", type=int, default=0)
 a = ap.parse_args()
 
@@ -51,14 +57,27 @@ if a.fold >= 0:                       # contiguous block = the harder, honest sp
     b = np.array_split(idx, a.folds)[a.fold]
     val_m = np.isin(idx, b)
 train = [f for f, v in zip(frames, val_m) if not v]
-train = train * a.real_weight + pseudo
+rod = [f for d in a.rod for f in load_frames(d)] * a.rod_repeat
+train = train * a.real_weight + pseudo + rod
 val = [f for f, v in zip(frames, val_m) if v]
-print(f"train {len(train)} (real {len(train) - len(pseudo)} incl. repeats, pseudo {len(pseudo)}) val {len(val)}", flush=True)
+print(f"train {len(train)} (real {len(train) - len(pseudo) - len(rod)} incl. repeats, pseudo {len(pseudo)}, rod {len(rod)}) val {len(val)}", flush=True)
 
 dl = DataLoader(PointDataset(train, Aug(a.size, 2, a.sigma, True, DiscRelight(cv2.imread(a.relight)) if a.relight else None, 0.5,
-                                       ShadowBank(train, [cv2.imread(b) for b in [a.relight] + a.reloc_bg]) if a.reloc > 0 else None, a.reloc), max(1, a.repeat // a.real_weight), a.seed), batch_size=a.bs, shuffle=True,
+                                       ShadowBank(train, [cv2.imread(b) for b in [a.relight] + a.reloc_bg]) if a.reloc > 0 else None, a.reloc,
+                                       RodShadowBank(rod) if a.overlay > 0 else None, a.overlay), max(1, a.repeat // a.real_weight), a.seed), batch_size=a.bs, shuffle=True,
                 num_workers=8, drop_last=True, persistent_workers=True)
-model = KeypointNet(a.backbone).cuda().to(memory_format=torch.channels_last)
+model = KeypointNet(a.backbone)
+if a.init:
+    sd = torch.load(a.init, map_location="cpu")["model"]
+    own = model.state_dict()
+    for k in ("head.1.weight", "head.1.bias"):           # widen the head: keep the forceps channels, new rod channels
+        if sd[k].shape != own[k].shape:
+            w = own[k].clone()
+            w[:sd[k].shape[0]] = sd[k]
+            sd[k] = w
+    model.load_state_dict(sd)
+model = model.cuda().to(memory_format=torch.channels_last)
+rod_val = load_frames(a.rod_val) if a.rod_val else []
 enc = list(model.enc.parameters())
 ids = {id(p) for p in enc}
 opt = torch.optim.AdamW([{"params": enc, "lr": a.lr / 4}, {"params": [p for p in model.parameters() if id(p) not in ids], "lr": a.lr}],
@@ -85,6 +104,10 @@ for ep in range(a.epochs):
         pr, sc = predict(model, val, a.size)
         s, _ = report(val, pr, sc)
         row.update({"val_" + k: v for k, v in s.items()})
+    if rod_val and (ep % 5 == 4 or ep == a.epochs - 1):
+        pr, sc = predict(model, rod_val, a.size)
+        s, _ = report(rod_val, pr, sc)
+        row.update({"rodval_" + k: round(v, 3) for k, v in s.items()})
     log.append(row)
     print(json.dumps(row), flush=True)
 torch.save({"model": model.state_dict(), "args": vars(a)}, os.path.join(a.out, "last.pt"))

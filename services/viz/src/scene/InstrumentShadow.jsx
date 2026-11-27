@@ -28,7 +28,7 @@ export function ShadowLight({ frame, angle = 0.7 }) {
   const target = useMemo(() => new THREE.Object3D(), [])
   const lightTip = frame?.light_tip
   if (!lightTip) return null
-  const jaws = midpoint(frame.tip_left, frame.tip_right)
+  const jaws = frame.tip_left ? midpoint(frame.tip_left, frame.tip_right) : midpoint(frame.rod_a, frame.rod_b)
   const aim = shadowOf(jaws, lightTip) ?? jaws
   return (
     <>
