@@ -15,9 +15,12 @@
 
 \usepackage{booktabs}
 \usepackage{siunitx}
+\sisetup{mode=match}
 \usepackage{xcolor}
+\usepackage{flafter}   % floats never appear before the text that introduces them
 \usepackage{tikz}
 \usetikzlibrary{positioning, arrows.meta, calc}
+\graphicspath{{./}{../writeup/latex/}}   % figures/viz_* live in writeup/latex/figures
 
 % Marks open items – remove all before submission
 \newcommand{\todo}[1]{\textcolor{TUMOrange}{\textbf{[TODO:} #1\textbf{]}}}
@@ -44,13 +47,15 @@
 \section{Introduction}
 \label{sec:intro}
 
-In retinal surgery, the microscope gives little depth perception. Surgeons judge
-the distance to the retina by the instrument's shadow.
+In vitreoretinal surgery, the surgical microscope offers only limited depth
+perception. Surgeons therefore judge the distance between instrument and retina
+largely from the shadow the instrument casts.
 
-We track the forceps and its shadow in the video of a retina simulator,
-reconstruct the 3D position of the tips and show their distance to the retina in
-real time. We also track a rod and detect when the forceps grasps it. The goal is to make such tasks easier to support with human
-assistance and, in the future, to automate.
+This work presents a system that tracks a micro-forceps and its shadow in the
+video of a retina simulator, reconstructs the 3D position of the jaw tips and
+displays their distance to the retina in real time. It also tracks a rod and
+detects when the forceps grasps it. The aim is to make such tasks easier to
+support with human assistance and, in the future, to automate them.
 
 % ---------------------------------------------------------------------------
 \section{Background and Related Work}
@@ -69,33 +74,34 @@ assistance and, in the future, to automate.
 \subsection{Retina Simulator and Footage}
 \label{sec:system-sim}
 
-We use the Haag-Streit Eyesi vitreoretinal simulator. Its microscope image is
-captured at $1080 \times 1080$\,px and \SI{30}{fps}. Microscope zoom
-(\num{6.5}$\times$) and lens--cornea distance (\SI{6}{mm}) are fixed, since they
-determine the camera. We use two tasks: forceps training and grasping a rod.
+All recordings come from the Haag-Streit Eyesi vitreoretinal simulator. Its
+microscope image is captured at $1080 \times 1080$\,px and \SI{30}{fps}. The
+microscope zoom (\num{6.5}$\times$) and the lens--cornea distance (\SI{6}{mm})
+are kept constant, because they determine the camera geometry. Two tasks are
+used: forceps training and grasping a rod.
 
-For evaluation, the simulator logs the poses of eye, forceps and light at
-\SI{\sim 30}{Hz}, in millimetres in the eye's frame. The log contains neither the
-jaw opening nor the camera.
+For evaluation, the simulator logs the poses of the eye, the forceps and the
+light source in the eye's coordinate frame. The log contains neither the jaw
+opening nor the camera parameters.
 
 \subsection{Pipeline Architecture}
 \label{sec:system-pipeline}
 
 The system consists of four services (Figure~\ref{fig:pipeline}):
 \begin{description}
-  \item[Detector] reads frames from a capture card, a video file or a stream,
-    crops them to the eye circle and finds the tip and shadow points
-    (Section~\ref{sec:detection}). It is either the classical or the learned
-    detector and pushes its points at \SI{15}{Hz}.
-  \item[Orchestrator] holds the source, the eye circle and the calibration,
-    merges them with the points and forwards the result.
+  \item[Detector] reads frames from a capture card, a video file or a network
+    stream, crops them to the eye circle and locates the tip and shadow points
+    (Section~\ref{sec:detection}). Either the classical or the learned detector
+    can be used.
+  \item[Orchestrator] manages the video source, the eye circle and the
+    calibration, and combines them with the detected points.
   \item[Stream] computes the 3D positions (Section~\ref{sec:reconstruction})
-    and broadcasts them over a WebSocket.
-  \item[Viz] renders the scene and the distance to the retina in the browser
+    and distributes them over a WebSocket.
+  \item[Viz] displays the scene and the distance to the retina in a web browser
     (Section~\ref{sec:viz}).
 \end{description}
-All services except the learned detector run in Docker; the learned detector
-runs natively to use the GPU.
+All services except the learned detector run in Docker containers. The learned
+detector runs natively so that it can use the GPU.
 
 \begin{figure}[t]
   \centering
@@ -124,31 +130,31 @@ runs natively to use the GPU.
 \section{Detecting the Forceps and Its Shadow}
 \label{sec:detection}
 
-In every frame we look for five points: the left and right jaw tip of the
-forceps, the left and right tip of its shadow, and the junction where the jaws
-meet the shaft. Left and right refer to the image, and each shadow tip belongs to
-the jaw tip of the same side. The four tips are what the 3D reconstruction
-needs.
+Five points are located in every frame: the left and right jaw tips of the
+forceps, the left and right tips of its shadow, and the junction where the jaws
+meet the shaft. Left and right refer to the image, and each shadow tip belongs
+to the jaw tip on the same side. The 3D reconstruction uses the four tips.
 
 \subsection{First Attempt: YOLO}
 \label{sec:detection-yolo}
 
-We first fine-tuned pretrained YOLO pose models, from YOLO11n-pose up to
-YOLO26x-pose, which detect the tips as keypoints. We
-trained them on three kinds of data: 106 hand-labelled frames of a camera
-recording of a physical eye model, synthetic images (forceps and shadows drawn
-onto fundus photographs), and later 28 labelled simulator frames. SAM3
-pre-labelled 237 further frames but missed the tips in about 9\,\% of them. The
-validation scores were high (mAP\textsubscript{50} up to 0.995), but on frames
-from the training videos.
+The first approach fine-tuned pretrained YOLO pose models, from YOLO11n-pose
+to YOLO26x-pose, which detect the tips as keypoints. Three kinds of training
+data were used: 106 hand-labelled frames from a camera recording of a physical
+eye model, synthetic images with forceps and shadows drawn onto fundus
+photographs, and later 28 labelled simulator frames. A further 237 frames were
+pre-labelled with SAM3, which missed the tips in about 9\,\% of them. The
+validation scores were high, but they are not meaningful: the validation frames
+came from the same videos as the training frames.
 
-Figure~\ref{fig:yolo} evaluates every checkpoint we still have on the 43
-labelled simulator frames. The models trained on the eye model find nothing.
-Those trained on synthetic data place up to 74\,\% of the forceps tips within
-10\,px, but at most 40\,\% of the shadow tips; the largest ones (YOLO26x) hardly ever
-find the shadow. Even the model trained on simulator frames reaches only about 40\,\%.
+Figure~\ref{fig:yolo} evaluates all remaining checkpoints on the 43 labelled
+simulator frames. The models trained on the eye-model recording detect no tips.
+The models trained on synthetic data detect some forceps tips but few shadow
+tips; the largest models (YOLO26x) almost never detect the shadow. Even the model
+trained on simulator frames places only about 40\,\% of the tips within 10\,px.
 The classical detector (Section~\ref{sec:detection-classical}) places 99\,\% of
-all tips within 10\,px without any training data, so we replaced YOLO by it.
+the tips within 10\,px and needs no training data. It therefore replaced the
+YOLO approach.
 
 \begin{figure}[t]
   \centering
@@ -163,16 +169,109 @@ all tips within 10\,px without any training data, so we replaced YOLO by it.
 \subsection{Classical Detector}
 \label{sec:detection-classical}
 
-\todo{Preprocessing, eye-circle normalisation, background model.}
+The classical detector needs no training. It first crops the eye circle and
+scales it to a $1080 \times 1080$\,px square, so that all points are given in
+one normalised frame.
 
-\todo{Forceps and shadow masks.}
+\paragraph{Masks.} The forceps is grey, whereas the retina and the shadow on it
+are red. The forceps mask is therefore defined in HSV space as
+\begin{equation}
+  M_\text{F} = (S < 150) \wedge (V < 135).
+\end{equation}
+A shadow makes the retina darker but does not change its hue. The shadow mask
+is therefore based on the brightness ratio to a background image
+$V_\text{bg}$ without instruments:
+\begin{equation}
+  M_\text{S} = \Bigl(\frac{V}{V_\text{bg}} < 0.88\Bigr) \wedge (S \ge 150)
+  \wedge \neg M_\text{F}.
+\end{equation}
+$V_\text{bg}$ is either the median image of a video or is estimated live from
+a few seconds of video while the instruments move.
 
-\todo{Geometry: tips and junction.}
+\paragraph{Vessels.} Retinal vessels are the main source of error in the
+shadow mask, because they are dark red like a shadow on the retina
+(Figure~\ref{fig:vessels}a). A global threshold relative to the average retinal
+brightness therefore also marks the vessels, the darker rim and uneven
+background (Figure~\ref{fig:vessels}b). Together with the shadow, they form one
+large region that is not shaped like a tool. Two steps remove them:
+\begin{enumerate}
+  \item \emph{Ratio to the background.} The vessels are also contained in
+    $V_\text{bg}$, so they cancel out in $V / V_\text{bg}$, while the shadow
+    remains. A morphological opening removes thin residues. With a live
+    background, however, vessels next to the shadow can remain connected to it,
+    and the tip search then follows a vessel (Figure~\ref{fig:vessels}c).
+  \item \emph{Strip around the shaft.} A morphological opening removes all thin
+    structures and leaves the thick shaft. The longest and most elongated
+    component defines an axis, and only the part of the original mask within a
+    narrow strip around this axis is kept, including the thin jaws. This
+    removes the attached vessel, and both tips are found
+    (Figure~\ref{fig:vessels}d). If no such shaft exists, no shadow is reported.
+\end{enumerate}
+Table~\ref{tab:vessels} quantifies both steps on the 43 labelled frames. With
+the global threshold, no shadow is detected. With the static background, which
+is the median of the same video, step~1 is sufficient. With a live background,
+as used in operation, step~2 raises the share of shadow tips within
+\SI{10}{px} from 91\,\% to 95\,\%.
+
+\begin{figure}[!htb]
+  \centering
+  \includegraphics[width=\linewidth]{figures/vessels.pdf}
+  \caption{The shadow mask (orange) step by step, on a labelled frame with the
+    background learned as in live use. (a) Frame with the hand-labelled shadow
+    tips. (b) Global threshold: vessels and background leak in. (c) Step~1: a
+    vessel still sticks to the shadow, one detected tip is \SI{251}{px} off.
+    (d) Step~2: both tips within \SI{6}{px}.}
+  \label{fig:vessels}
+\end{figure}
+
+\begin{table}[t]
+  \centering
+  \caption{Shadow tips on the 43 labelled frames after each step of the shadow
+    mask.}
+  \label{tab:vessels}
+  \begin{tabular}{llrrr}
+    \toprule
+    Shadow mask & Background & Found & Median error & Within \SI{10}{px} \\
+    \midrule
+    Global threshold           & none    & 0\,\%     & --              & 0\,\%    \\
+    Step 1: ratio              & static  & 100\,\%   & \SI{3.8}{px}    & 98.8\,\% \\
+    Steps 1 + 2: strip         & static  & 100\,\%   & \SI{3.8}{px}    & 98.8\,\% \\
+    Step 1: ratio              & learned & 100\,\%   & \SI{4.0}{px}    & 90.7\,\% \\
+    Steps 1 + 2: strip         & learned & 97.7\,\%  & \SI{4.1}{px}    & 95.3\,\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Tips and junction.} The same geometric procedure is applied to both
+masks. The principal axis of the largest region gives the tool direction, and
+the end closer to the image centre is the tip. Along the axis, starting at the
+tip, the section in which the mask splits into two parts corresponds to the
+open jaws. The outer ends of these parts are the tips, and the point where the
+gap closes is the junction. Closed jaws do not split the mask; such frames are
+reported as invalid.
 
 \subsection{Learned Keypoint Detector}
 \label{sec:detection-learned}
 
-\todo{Model (ResNet34 U-Net heatmaps), labels, training, drop-in backend.}
+The classical detector relies on a fixed brightness ratio. It therefore misses
+faint shadows, which occur when the instrument is high above the retina and its
+shadow is blurred (Section~\ref{sec:eval-2d}). The learned detector also finds
+these shadows. It has the same interface, so either detector can be used in the
+pipeline.
+
+\paragraph{Model.} A U-Net with a ResNet34 encoder predicts one heatmap per
+keypoint: two tips and a junction for both the forceps and the shadow, and two
+additional channels for the rod (Section~\ref{sec:rod}). It is trained on
+Gaussian target heatmaps with a focal loss.
+
+\paragraph{Data.} Only 41 hand-labelled frames are available. The training set
+is therefore extended with pseudo-labels (junctions from the classical detector
+where its tips agree with the hand labels), with frames in which the model is
+uncertain but the classical detector confirms the result, and with
+augmentation: real shadows are moved next to the forceps tips, and the
+brightness of the optic disc is transferred onto training frames. In addition,
+uncertain frames from new videos are corrected by hand and added to the
+training set.
 
 % ---------------------------------------------------------------------------
 \section{3D Reconstruction}
@@ -211,11 +310,28 @@ all tips within 10\,px without any training data, so we replaced YOLO by it.
 \section{Visualization and Guidance}
 \label{sec:viz}
 
-\todo{Purpose, users and the questions the workstation answers.}
+The workstation shows the reconstructed tip positions to the surgeon
+(Figure~\ref{fig:viz-overview}). So far it has only been tested with the
+simulator; the long-term goal is its use in the operating room. Its central quantity is the
+\emph{clearance}, the distance of the nearer jaw tip to the retina. The display
+classifies it into three levels, \emph{Clear} ($\geq \SI{2}{mm}$), \emph{Near
+retina} and \emph{Critical} ($< \SI{0.5}{mm}$), and also shows which tip is
+closer and whether the distance is decreasing. A 3D view of the eye adds depth
+cues: the shadow of the instrument and a line from the tip to the retina.
 
-\todo{Alert logic: state model, thresholds, stabilisation.}
+Because the measurements are noisy and some frames have no reconstruction, the
+displayed level is stabilised: a more critical level appears immediately,
+whereas a less critical level appears only after a short delay. Missing
+measurements are never shown as safe.
 
-\todo{Dropout and stale-data handling; key design decisions (figures).}
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figures/viz_overview.jpg}
+  \caption{The workstation with the forceps close to the retina. Left: clearance
+    and level, depth of both tips and approach trend. Right: 3D view of the eye
+    with the instrument and its shadow.}
+  \label{fig:viz-overview}
+\end{figure}
 
 % ---------------------------------------------------------------------------
 \section{Evaluation}
@@ -229,7 +345,52 @@ all tips within 10\,px without any training data, so we replaced YOLO by it.
 \subsection{2D Detection Accuracy}
 \label{sec:eval-2d}
 
-\todo{Classical vs.\ learned: pixel error, runtime, failure cases.}
+Table~\ref{tab:detectors} compares both detectors on an Apple M3 Pro, the
+computer used in live operation. The test data are 800 frames of a forceps
+recording that was used neither to develop nor to train either detector. Both
+detectors find the forceps in almost every frame. The shadow, however, is found
+in 74\,\% of the frames by the classical detector and in 94\,\% by the learned
+detector. In return, the classical detector is twice as fast and needs no
+GPU.
+
+Figure~\ref{fig:detectors-distance} shows where the difference arises. The
+frames are grouped by the image distance between the forceps tips and the
+shadow tips, which grows with the height of the instrument above the retina.
+At small distances, both detectors find the shadow in most frames. At larger
+distances, the shadow becomes fainter and more blurred, and the classical
+detector misses it increasingly often: beyond \SI{320}{px} it finds the shadow
+in 22\,\% of the frames, the learned detector in all of them. In these frames
+the shadow stays below the fixed brightness ratio of the shadow mask
+(Section~\ref{sec:detection-classical}).
+
+\begin{figure}[!htb]
+  \centering
+  \includegraphics[width=\linewidth]{figures/detectors_distance.pdf}
+  \caption{(a) Share of frames in which the shadow is found, grouped by the
+    distance between forceps and shadow tips, on the unseen recording. The
+    distance is taken from the learned detector, or from the classical one where
+    only it finds the shadow. (b) Example with the instrument high above the
+    retina: the learned detector finds the faint shadow (lower markers), the
+    classical detector does not.}
+  \label{fig:detectors-distance}
+\end{figure}
+
+\begin{table}[!htb]
+  \centering
+  \caption{Classical vs.\ learned detector on an Apple M3 Pro, on 800 frames of
+    an unseen recording: frames in which forceps or shadow (both tips) is
+    found, and the time from the \SI{1080}{px} frame to the points.}
+  \label{tab:detectors}
+  \begin{tabular}{lrrr}
+    \toprule
+    Detector & Forceps found & Shadow found & Time per frame \\
+    \midrule
+    Classical (CPU) & 98\,\%  & 74\,\% & \SI{23}{ms}  \\
+    Learned (GPU)   & 100\,\% & 94\,\% & \SI{50}{ms}  \\
+    Learned (CPU)   & 100\,\% & 94\,\% & \SI{210}{ms} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
 \subsection{3D Accuracy}
 \label{sec:eval-3d}

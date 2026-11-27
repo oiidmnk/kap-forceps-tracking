@@ -1,0 +1,29 @@
+{
+  "classical (CPU)": {
+    "ms_per_frame": 23.489441534923028,
+    "forceps_median_px": 4.234297626224738,
+    "forceps_within_10px": 1.0,
+    "shadow_median_px": 4.081765367952938,
+    "shadow_within_10px": 0.9534883720930233,
+    "other_forceps_found": 0.98,
+    "other_both_found": 0.7375
+  },
+  "learned (GPU)": {
+    "ms_per_frame": 49.538906333248796,
+    "forceps_median_px": 3.4350484937511028,
+    "forceps_within_10px": 1.0,
+    "shadow_median_px": 3.209536952652393,
+    "shadow_within_10px": 0.9883720930232558,
+    "other_forceps_found": 1.0,
+    "other_both_found": 0.94375
+  },
+  "learned (CPU)": {
+    "ms_per_frame": 210.45351744193565
+  },
+  "n": {
+    "labelled": 43,
+    "other_video": "bober2.mp4",
+    "other_frames": 800,
+    "device": "Apple M3 Pro"
+  }
+}
