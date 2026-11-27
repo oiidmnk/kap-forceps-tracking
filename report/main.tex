@@ -16,6 +16,8 @@
 \usepackage{booktabs}
 \usepackage{siunitx}
 \usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{positioning, arrows.meta, calc}
 
 % Marks open items – remove all before submission
 \newcommand{\todo}[1]{\textcolor{TUMOrange}{\textbf{[TODO:} #1\textbf{]}}}
@@ -67,14 +69,56 @@ assistance and, in the future, to automate.
 \subsection{Retina Simulator and Footage}
 \label{sec:system-sim}
 
-\todo{Simulator, task levels, camera / capture, trajectory logs.}
+We use the Haag-Streit Eyesi vitreoretinal simulator. Its microscope image is
+captured at $1080 \times 1080$\,px and \SI{30}{fps}. Microscope zoom
+(\num{6.5}$\times$) and lens--cornea distance (\SI{6}{mm}) are fixed, since they
+determine the camera. We use two tasks: forceps training and grasping a rod.
+
+For evaluation, the simulator logs the poses of eye, forceps and light at
+\SI{\sim 30}{Hz}, in millimetres in the eye's frame. The log contains neither the
+jaw opening nor the camera.
 
 \subsection{Pipeline Architecture}
 \label{sec:system-pipeline}
 
-\todo{Services detector $\rightarrow$ orchestrator $\rightarrow$ stream
-  $\rightarrow$ viz; sources (file, RTSP, capture card); data flow and latency.
-  Architecture figure.}
+The system consists of four services (Figure~\ref{fig:pipeline}):
+\begin{description}
+  \item[Detector] reads frames from a capture card, a video file or a stream,
+    crops them to the eye circle and finds the tip and shadow points
+    (Section~\ref{sec:detection}). It is either the classical or the learned
+    detector and pushes its points at \SI{15}{Hz}.
+  \item[Orchestrator] holds the source, the eye circle and the calibration,
+    merges them with the points and forwards the result.
+  \item[Stream] computes the 3D positions (Section~\ref{sec:reconstruction})
+    and broadcasts them over a WebSocket.
+  \item[Viz] renders the scene and the distance to the retina in the browser
+    (Section~\ref{sec:viz}).
+\end{description}
+All services except the learned detector run in Docker; the learned detector
+runs natively to use the GPU.
+
+\begin{figure}[t]
+  \centering
+  \begin{tikzpicture}[
+      node distance=7mm,
+      box/.style={rectangle, rounded corners=2pt, fill=TUMBlau!10, draw=TUMBlau,
+        line width=0.6pt, text width=23mm, minimum height=16mm, align=center,
+        anchor=center, font=\small},
+      src/.style={box, fill=TUMGrau!10, draw=TUMGrau},
+      flow/.style={-{Latex[length=2mm]}, line width=0.8pt, draw=TUMBlauDunkel}]
+    \node[src] (src) {\textbf{Video}\strut\\[1pt]{\scriptsize capture card,}\\[-2pt]{\scriptsize file, stream}};
+    \node[box, right=of src] (det) {\textbf{Detector}\strut\\[1pt]{\scriptsize classical}\\[-2pt]{\scriptsize or learned}};
+    \node[box, right=of det] (orc) {\textbf{Orchestrator}\strut\\[1pt]{\scriptsize eye circle,}\\[-2pt]{\scriptsize calibration}};
+    \node[box, right=of orc] (str) {\textbf{Stream}\strut\\[1pt]{\scriptsize 3D}\\[-2pt]{\scriptsize reconstruction}};
+    \node[box, right=of str] (viz) {\textbf{Viz}\strut\\[1pt]{\scriptsize browser}\\[-2pt]{\scriptsize display}};
+    \draw[flow] (src) -- (det);
+    \draw[flow] (det) -- (orc);
+    \draw[flow] (orc) -- (str);
+    \draw[flow] (str) -- (viz);
+  \end{tikzpicture}
+  \caption{Data flow from the video to the display.}
+  \label{fig:pipeline}
+\end{figure}
 
 % ---------------------------------------------------------------------------
 \section{Detecting the Forceps and Its Shadow}
