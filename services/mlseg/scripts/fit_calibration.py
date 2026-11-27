@@ -239,6 +239,9 @@ if a.light_at_trocar:
     l_up, l_clock, l_depth, l_tilt, l_aim = float(best.x[0]), float(best.x[1]), DEPTH, 0.0, 0.0
 else:
     l_up, l_clock, l_depth, l_tilt, l_aim = light_entry(L, LIMBUS_UP)
+# the base's camera and trocar reference belong to its own footage (an explicit camera would override camera_distance)
+base = {k: v for k, v in base.items() if k not in ("camera_focal_px", "camera_pp_px", "camera_center_mm",
+                                                  "trocar_line_deg", "eye_roll_deg")}
 out = {**base, "light_rot_up": round(l_up, 5), "light_rot_clock": round(l_clock, 5), "light_depth_mm": round(l_depth * mm, 3),
        "light_aim_tilt": round(l_tilt, 5), "light_aim_clock": round(l_aim, 5),
        "forceps_rot_up": round(math.acos(-float(P3[2])) if CAM > 0 else math.asin(min(float(np.linalg.norm(xy)), LIMBUS)), 5),
