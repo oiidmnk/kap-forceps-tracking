@@ -1,0 +1,28 @@
+%%
+% Preview of a single section with the report's layout.
+% Build: cd report && tectonic section_preview.tex
+% Change \input and the section counter for another section.
+%%
+% The template targets pdfLaTeX; this shim lets tectonic (XeTeX) build it too.
+\providecommand{\DeclareUnicodeCharacter}[2]{}
+\documentclass[english]{tum-article}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage{xcolor}
+\usepackage{parskip}  % paragraphs separated by space, not indented
+\newcommand{\todo}[1]{\textcolor{TUMOrange}{\textbf{[TODO:} #1\textbf{]}}}
+
+\title{Real-Time Tracking of Micro-Forceps, Shadow and Rod in a Retina Simulator}
+\subtitle{Preview: Sections 5 and 8.3}
+\author{Luis Carilla}
+\affil{Technical University of Munich}
+
+\begin{document}
+\setcounter{section}{4}
+\input{sections/reconstruction}
+
+\setcounter{section}{7}
+\section{Evaluation}
+\setcounter{subsection}{2}
+\input{sections/eval_3d}
+\end{document}
