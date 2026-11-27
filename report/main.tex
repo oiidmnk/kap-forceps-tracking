@@ -124,13 +124,41 @@ runs natively to use the GPU.
 \section{Detecting the Forceps and Its Shadow}
 \label{sec:detection}
 
-\todo{Task definition: two jaw tips, two shadow tips, junction.}
+In every frame we look for five points: the left and right jaw tip of the
+forceps, the left and right tip of its shadow, and the junction where the jaws
+meet the shaft. Left and right refer to the image, and each shadow tip belongs to
+the jaw tip of the same side. The four tips are what the 3D reconstruction
+needs.
 
-\subsection{First Attempt: Segmentation on Synthetic Data}
+\subsection{First Attempt: YOLO}
 \label{sec:detection-yolo}
 
-\todo{YOLO segmentation trained on synthetic data (Jul--Aug); what worked,
-  why it was abandoned.}
+We first fine-tuned pretrained YOLO pose models, from YOLO11n-pose up to
+YOLO26x-pose, which detect the tips as keypoints. We
+trained them on three kinds of data: 106 hand-labelled frames of a camera
+recording of a physical eye model, synthetic images (forceps and shadows drawn
+onto fundus photographs), and later 28 labelled simulator frames. SAM3
+pre-labelled 237 further frames but missed the tips in about 9\,\% of them. The
+validation scores were high (mAP\textsubscript{50} up to 0.995), but on frames
+from the training videos.
+
+Figure~\ref{fig:yolo} evaluates every checkpoint we still have on the 43
+labelled simulator frames. The models trained on the eye model find nothing.
+Those trained on synthetic data place up to 74\,\% of the forceps tips within
+10\,px, but at most 40\,\% of the shadow tips; the largest ones (YOLO26x) hardly ever
+find the shadow. Even the model trained on simulator frames reaches only about 40\,\%.
+The classical detector (Section~\ref{sec:detection-classical}) places 99\,\% of
+all tips within 10\,px without any training data, so we replaced YOLO by it.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figures/yolo_vs_classical.pdf}
+  \caption{YOLO pose models vs.\ the classical detector on the 43 labelled
+    simulator frames: keypoints within 10\,px of the label (of 1080\,px). A
+    frame without a detection counts as a miss. Training data in the labels.
+    *Trained on 28 of these frames, evaluated on the other 15.}
+  \label{fig:yolo}
+\end{figure}
 
 \subsection{Classical Detector}
 \label{sec:detection-classical}
